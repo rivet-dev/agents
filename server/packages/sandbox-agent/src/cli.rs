@@ -495,13 +495,51 @@ fn run_server(cli: &CliConfig, server: &ServerArgs) -> Result<(), CliError> {
 
         let shutdown_state = state.clone();
         axum::serve(listener, router)
-            .with_graceful_shutdown(async move {
-                let _ = tokio::signal::ctrl_c().await;
-                shutdown_servers(&shutdown_state).await;
-            })
+            .with_graceful_shutdown(shutdown_signal(shutdown_state))
             .await
             .map_err(|err| CliError::Server(err.to_string()))
     })
+}
+
+/// Long-lived streams (SSE log follows, ACP event feeds) never complete on
+/// their own, so axum's graceful drain can block forever on them. Bound it:
+/// after this window, or a second termination signal, the process exits.
+const SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(3);
+
+async fn shutdown_signal(state: Arc<AppState>) {
+    wait_for_termination_signal().await;
+    tracing::info!("shutdown signal received; draining");
+
+    tokio::spawn(async {
+        tokio::select! {
+            _ = wait_for_termination_signal() => {}
+            _ = tokio::time::sleep(SHUTDOWN_DRAIN_TIMEOUT) => {}
+        }
+        std::process::exit(0);
+    });
+
+    shutdown_servers(&state).await;
+}
+
+#[cfg(unix)]
+async fn wait_for_termination_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut sigterm = match signal(SignalKind::terminate()) {
+        Ok(stream) => stream,
+        Err(_) => {
+            let _ = tokio::signal::ctrl_c().await;
+            return;
+        }
+    };
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        _ = sigterm.recv() => {}
+    }
+}
+
+#[cfg(not(unix))]
+async fn wait_for_termination_signal() {
+    let _ = tokio::signal::ctrl_c().await;
 }
 
 fn run_api(command: &ApiCommand, cli: &CliConfig) -> Result<(), CliError> {
