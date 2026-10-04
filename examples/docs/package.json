@@ -1,0 +1,31 @@
+{
+	"name": "@rivet-dev/agents-docs-examples",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"check-types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@daytonaio/sdk": "^0.216.0",
+		"@earendil-works/pi-ai": "1.0.0",
+		"@earendil-works/pi-coding-agent": "1.0.0",
+		"@linear/sdk": "^97.0.0",
+		"@octokit/rest": "^22.0.1",
+		"@octokit/webhooks-methods": "^6.0.0",
+		"@rivet-dev/pi": "workspace:*",
+		"@rivet-dev/sandbox-adapter": "workspace:*",
+		"@rivet-dev/workflows": "1.0.0",
+		"@rivetkit/react": "2.3.23",
+		"@slack/web-api": "^8.2.0",
+		"discord-interactions": "^4.4.0",
+		"e2b": "^2.51.0",
+		"hono": "^4.13.12",
+		"react": "^19.3.0",
+		"rivetkit": "2.3.23"
+	},
+	"devDependencies": {
+		"@types/node": "^24.0.0",
+		"@types/react": "^19.3.0",
+		"typescript": "^5.9.2"
+	}
+}

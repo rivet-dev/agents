@@ -1,0 +1,15 @@
+{
+  "adHocServices": {
+    "rivet-website": {
+      "name": "rivet-website",
+      "command": "cd /home/user/workspace/repos/website && ./node_modules/.bin/tsx scripts/assemble.ts && ./node_modules/.bin/tsx scripts/generate-markdown.ts && ./node_modules/.bin/astro dev --host 0.0.0.0 --port 4321",
+      "env": {},
+      "portals": [],
+      "health": null,
+      "review": true,
+      "agent": "off",
+      "cwd": "/home/user/workspace/repos/website/agents/docs/content/docs",
+      "port": 31227
+    }
+  }
+}

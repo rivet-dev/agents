@@ -1,0 +1,43 @@
+---
+title: "Agent-to-Agent Messages"
+description: "Let one agent hand work to another agent without waiting for it."
+---
+
+A tool can send another agent a message. Here a coder agent hands a finished branch to the reviewer for that repository and keeps working.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 600 250" role="img" aria-label="The coder agent&#x27;s request_review tool calls requestReview on the reviewer agent for the repository and returns right away. The reviewer schedules its own prompt, which runs as a follow-up if it is busy." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="agent-to-agent-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="50" width="150" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="310" y="50" width="170" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="310" y="170" width="170" height="48" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M171 78 L308 78" marker-end="url(#agent-to-agent-arrow)"/>
+    <path d="M365 107 L365 168" marker-end="url(#agent-to-agent-arrow)"/>
+    <path d="M425 169 L425 108" marker-end="url(#agent-to-agent-arrow)"/>
+  </g>
+  <text x="95" y="83" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Coder agent</text>
+  <text x="395" y="75" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Reviewer agent</text>
+  <text x="395" y="92" text-anchor="middle" font-size="12" fill="#56524a">key: repository</text>
+  <text x="395" y="199" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Schedule</text>
+  <text x="239.5" y="71" text-anchor="middle" font-size="12" fill="#56524a">requestReview</text>
+  <text x="239.5" y="94" text-anchor="middle" font-size="12" fill="#56524a">returns right away</text>
+  <text x="357" y="141.5" text-anchor="end" font-size="12" fill="#56524a">after(0)</text>
+  <text x="433" y="142.5" text-anchor="start" font-size="12" fill="#56524a">prompt</text>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/agent-to-agent/coder.ts" title="coder.ts" />
+<CodeSnippet file="examples/docs/agent-to-agent/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/agent-to-agent/client.ts" title="client.ts" />
+</CodeGroup>
+
+- The reviewer is keyed by repository, so every coder working on the same repository reaches the same reviewer, and its session remembers past reviews.
+- The `requestReview` action schedules the reviewer's `prompt` and returns, so the coder's tool doesn't wait for the review. The schedule is saved with the reviewer, so the review runs even if the coder's request goes away.
+- Passing `streamingBehavior: "followUp"` queues the request when the reviewer is busy with another review. Use it with `prompt`, not the `followUp` action, which only queues on an idle agent and never starts a run.
+- The reviewer runs on a different model family than the coder.
+
+To wait for the other agent's answer instead, see [Subagents](/agents/docs/subagents). See [Schedules](/actors/docs/schedule) for more on `c.schedule`.

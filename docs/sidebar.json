@@ -1,0 +1,174 @@
+{
+	"docs": [
+		{
+			"title": "General",
+			"pages": [
+				{
+					"title": "Overview",
+					"href": "/agents/docs",
+					"icon": "faSquareInfo"
+				},
+				{
+					"title": "Quickstart",
+					"href": "/agents/docs/quickstart",
+					"icon": "faForwardFast"
+				}
+			]
+		},
+		{
+			"title": "Agents",
+			"pages": [
+				{
+					"title": "Pi",
+					"href": "/agents/docs/pi",
+					"badge": "Beta",
+					"icon": {
+						"src": "/images/vendors/pi.svg"
+					}
+				}
+			]
+		},
+		{
+			"title": "Core",
+			"pages": [
+				{
+					"title": "Design Patterns",
+					"href": "/agents/docs/design-patterns",
+					"icon": "faDiagramProject"
+				},
+				{
+					"title": "LLM API Keys",
+					"href": "/agents/docs/api-keys",
+					"icon": "faKey"
+				},
+				{
+					"title": "Sandboxes",
+					"href": "/agents/docs/sandboxes",
+					"icon": "faHardDrive"
+				},
+				{
+					"title": "Custom Tools",
+					"href": "/agents/docs/custom-tools",
+					"icon": "faWrench"
+				},
+				{
+					"title": "Session Lifecycle",
+					"href": "/agents/docs/session-lifecycle",
+					"icon": "faArrowsRotate"
+				}
+			]
+		},
+		{
+			"title": "Concepts",
+			"pages": [
+				{
+					"title": "Agent",
+					"collapsible": true,
+					"icon": "faRobot",
+					"pages": [
+						{
+							"title": "Instructions",
+							"href": "/agents/docs/instructions"
+						},
+						{
+							"title": "User Subscriptions",
+							"href": "/agents/docs/user-subscriptions"
+						},
+						{
+							"title": "Observability",
+							"href": "/agents/docs/observability"
+						},
+						{
+							"title": "Architecture",
+							"href": "/agents/docs/architecture"
+						},
+						{
+							"title": "Security Model",
+							"href": "/agents/docs/security-model"
+						}
+					]
+				},
+				{
+					"title": "Tools",
+					"collapsible": true,
+					"icon": "faToolbox",
+					"pages": [
+						{
+							"title": "Built-in Tools",
+							"href": "/agents/docs/built-in-tools"
+						},
+						{
+							"title": "Agent-to-Agent Messages",
+							"href": "/agents/docs/agent-to-agent"
+						},
+						{
+							"title": "Scoped Access with JWTs",
+							"href": "/agents/docs/scoped-access"
+						},
+						{
+							"title": "Human in the Loop",
+							"href": "/agents/docs/human-in-the-loop"
+						}
+					]
+				},
+				{
+					"title": "Orchestrate",
+					"collapsible": true,
+					"icon": "faCircleNodes",
+					"pages": [
+						{
+							"title": "Subagents",
+							"href": "/agents/docs/subagents"
+						},
+						{
+							"title": "Workflows",
+							"href": "/agents/docs/workflows"
+						},
+						{
+							"title": "Schedules",
+							"href": "/agents/docs/schedules"
+						}
+					]
+				},
+				{
+					"title": "Clients",
+					"collapsible": true,
+					"icon": "faLaptopCode",
+					"pages": [
+						{
+							"title": "Client SDK",
+							"href": "/agents/docs/client-sdk"
+						},
+						{
+							"title": "React SDK",
+							"href": "/agents/docs/react-sdk"
+						}
+					]
+				},
+				{
+					"title": "Connectors",
+					"collapsible": true,
+					"icon": "faPlug",
+					"pages": [
+						{
+							"title": "Slack",
+							"href": "/agents/docs/connectors/slack"
+						},
+						{
+							"title": "Linear",
+							"href": "/agents/docs/connectors/linear"
+						},
+						{
+							"title": "GitHub",
+							"href": "/agents/docs/connectors/github"
+						},
+						{
+							"title": "Discord",
+							"href": "/agents/docs/connectors/discord"
+						}
+					]
+				}
+			]
+		}
+	]
+}

@@ -1,0 +1,77 @@
+---
+title: "API Keys"
+description: "Give agents model access with your own provider keys, from the environment or in code."
+---
+
+An agent calls the model from your worker, so its keys stay in your backend and never enter the sandbox. It looks for a key in this order:
+
+1. The `apiKeys` option passed to `pi()`.
+2. The `credentials` Actor, when your users [bring their own subscriptions](/agents/docs/user-subscriptions).
+3. The worker's environment.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 280" role="img" aria-label="In your backend, the agent looks for a model credential in order: first apiKeys, then the credentials Actor, then the environment. The agent sends model calls to the model provider with that key, and sends tool calls to the sandbox with no keys." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="credentials-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <text x="10" y="20" font-size="11" font-family="ui-monospace,monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">YOUR BACKEND</text>
+  <rect x="10" y="30" width="380" height="236" rx="10" fill="rgb(var(--site-paper-mid, 227 227 229))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6"/>
+
+  <g fill="rgb(var(--site-paper, 239 239 239))" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.3">
+    <rect x="30" y="56" width="160" height="44" rx="7"/>
+    <rect x="30" y="126" width="160" height="44" rx="7"/>
+    <rect x="30" y="196" width="160" height="44" rx="7"/>
+    <rect x="490" y="80" width="140" height="52" rx="7"/>
+  </g>
+  <g font-size="13" fill="rgb(var(--site-ink, 27 25 22))">
+    <text x="46" y="83"><tspan font-weight="700" fill="rgb(var(--runtime-highlight, 183 75 35))">1</tspan><tspan dx="10" font-family="ui-monospace,monospace">apiKeys</tspan></text>
+    <text x="46" y="153"><tspan font-weight="700" fill="rgb(var(--runtime-highlight, 183 75 35))">2</tspan><tspan dx="10">credentials Actor</tspan></text>
+    <text x="46" y="223"><tspan font-weight="700" fill="rgb(var(--runtime-highlight, 183 75 35))">3</tspan><tspan dx="10">Environment</tspan></text>
+  </g>
+
+  <rect x="250" y="116" width="120" height="64" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="490" y="164" width="140" height="52" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <g text-anchor="middle" font-size="14" font-weight="600" fill="rgb(var(--site-ink, 27 25 22))">
+    <text x="310" y="153">Agent</text>
+    <text x="560" y="111">Model provider</text>
+    <text x="560" y="195">Sandbox</text>
+  </g>
+
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" marker-end="url(#credentials-arrow)">
+    <line x1="191" y1="78" x2="247" y2="136"/>
+    <line x1="191" y1="148" x2="247" y2="148"/>
+    <line x1="191" y1="218" x2="247" y2="160"/>
+    <line x1="371" y1="138" x2="487" y2="108"/>
+    <line x1="371" y1="160" x2="487" y2="188"/>
+  </g>
+  <g text-anchor="middle" font-size="12" fill="rgb(var(--site-ink-soft, 86 82 74))">
+    <text x="440" y="108">model calls</text>
+    <text x="440" y="200">tool calls,</text>
+    <text x="440" y="214">no keys</text>
+  </g>
+</svg>
+</div>
+
+The agent never reads Pi's local `~/.pi/agent/auth.json` or `models.json`.
+
+## Environment variables
+
+Set the key for your model provider in the environment of the process that runs your Actors:
+
+```sh
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Pi reads the provider-named variable, such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, or `OPENROUTER_API_KEY`. See Pi's [provider list](https://github.com/earendil-works/pi) for the rest.
+
+## Keys in code
+
+Pass `apiKeys` to set keys by provider id in code, for example when they come from a secret manager or differ per deployment. The keys stay in the Actor's memory and win over every other source.
+
+<CodeSnippet file="examples/docs/credentials/api-keys.ts" title="server.ts" />
+
+## Custom providers
+
+To use a provider Pi does not know, register it with `providers`, in the shape of Pi's `models.json`, and give it a key the same way.
+
+**Next:** [Sandboxes](/agents/docs/sandboxes), where the agent's tool calls run.

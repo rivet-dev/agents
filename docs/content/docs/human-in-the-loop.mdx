@@ -1,0 +1,47 @@
+---
+title: "Human in the Loop"
+description: "Make a tool wait for a person's approval before it acts."
+---
+
+A tool can refuse to act until a person approves. The check is in the tool, so the model can't skip it: `deploy` only runs after someone approves that exact deploy.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 600 256" role="img" aria-label="The agent&#x27;s deploy tool calls consume on the approval Actor. Without an approval it ends the turn and the UI shows the request. Approve calls approve on the approval Actor and prompts the agent, which calls deploy again." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="human-in-the-loop-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="40" y="30" width="160" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="400" y="30" width="180" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="40" y="180" width="160" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M201 58 L398 58" marker-end="url(#human-in-the-loop-arrow)"/>
+    <path d="M95 87 L95 178" marker-end="url(#human-in-the-loop-arrow)"/>
+    <path d="M145 179 L145 88" marker-end="url(#human-in-the-loop-arrow)"/>
+    <path d="M201 208 L490 208 L490 88" marker-end="url(#human-in-the-loop-arrow)"/>
+  </g>
+  <text x="120" y="55" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent</text>
+  <text x="120" y="72" text-anchor="middle" font-size="12" fill="#56524a">deploy tool</text>
+  <text x="490" y="55" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">approval Actor</text>
+  <text x="490" y="72" text-anchor="middle" font-size="12" fill="#56524a">approved: true or false</text>
+  <text x="120" y="213" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Approval UI</text>
+  <g font-size="12" fill="#56524a">
+    <text x="300" y="50" text-anchor="middle">consume()</text>
+    <text x="87" y="137" text-anchor="end">waiting</text>
+    <text x="153" y="137" text-anchor="start">prompt</text>
+    <text x="345" y="200" text-anchor="middle">approve()</text>
+  </g>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/human-in-the-loop/deploy.ts" title="deploy.ts" />
+<CodeSnippet file="examples/docs/human-in-the-loop/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/human-in-the-loop/ApprovalDialog.tsx" title="ApprovalDialog.tsx" />
+</CodeGroup>
+
+- Each approval is an `approval` Actor keyed by the session and the version. Its `consume` action returns whether it was approved and resets it, so one approval allows one deploy.
+- Without an approval, the tool returns `terminate: true`, which ends the turn instead of letting the model try again. The agent can sleep while it waits.
+- The `ApprovalDialog` component shows the request from the `tool_execution_end` event. Approve calls `approve`, then prompts the agent, which calls `deploy` again. Passing `streamingBehavior: "followUp"` queues the answer if the agent is still running.
+- Protect the `approval` Actor with [authentication](/docs/authentication) so only approvers can call `approve`.
+
+See [React SDK](/agents/docs/react-sdk) for the rest of a chat UI.

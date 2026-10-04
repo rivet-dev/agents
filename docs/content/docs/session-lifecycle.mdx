@@ -1,0 +1,78 @@
+---
+title: "Session Lifecycle"
+description: "What a session is, the events one prompt produces, and how to steer or cancel a run."
+---
+
+A session is one agent's conversation. Each agent key has exactly one session, and the session:
+
+- Keeps the full history of messages and tool calls.
+- Runs one prompt at a time, calling the model and tools until the model is done.
+- Streams events to every connected client while it runs.
+- Summarizes older messages when the context fills up.
+- Survives sleep, crashes, and deploys. See [Architecture](/agents/docs/architecture).
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 132" role="img" aria-label="A client sends a prompt to the agent&#x27;s session. The agent calls the model, runs the tools it asks for in the sandbox, and repeats until the model stops calling tools. Events stream back to the client the whole time." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="session-events-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="20" width="120" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="250" y="20" width="150" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="500" y="20" width="120" height="56" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M141 36 L248 36" marker-end="url(#session-events-arrow)"/>
+    <path d="M249 60 L142 60" marker-end="url(#session-events-arrow)" stroke-dasharray="5 4"/>
+    <path d="M401 36 L498 36" marker-end="url(#session-events-arrow)"/>
+    <path d="M499 60 L402 60" marker-end="url(#session-events-arrow)"/>
+  </g>
+  <text x="80" y="53" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Client</text>
+  <text x="325" y="45" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent</text>
+  <text x="325" y="62" text-anchor="middle" font-size="12" fill="#56524a">calls the model</text>
+  <text x="560" y="45" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox</text>
+  <text x="560" y="62" text-anchor="middle" font-size="12" fill="#56524a">runs tools</text>
+  <text x="194.5" y="29" text-anchor="middle" font-size="12" fill="#56524a">prompt</text>
+  <text x="195.5" y="76" text-anchor="middle" font-size="12" fill="#56524a">events</text>
+  <text x="449.5" y="29" text-anchor="middle" font-size="12" fill="#56524a">tool call</text>
+  <text x="450.5" y="76" text-anchor="middle" font-size="12" fill="#56524a">result</text>
+  <text x="325" y="116" text-anchor="middle" font-size="12" fill="#56524a">repeats until the model stops calling tools</text>
+</svg>
+</div>
+
+This client connects to the [Quickstart](/agents/docs/quickstart) agent, sends one prompt, and prints the events it receives:
+
+<CodeSnippet file="examples/docs/session-lifecycle/client.ts" title="client.ts" />
+
+## Events
+
+Every event arrives as `event`, with a `type`:
+
+| Event Type | When it fires |
+| --- | --- |
+| `agent_start`, `agent_end` | A run starts or ends. Then `agent_settled` follows once the agent is fully idle, after any retry. |
+| `turn_start`, `turn_end` | A model response starts, or it and its tool calls are done. The `turn_end` event has the response's `usage`: tokens and cost. |
+| `message_update` | The model streams output. Its `assistantMessageEvent.type` is `text_delta`, `thinking_delta`, or a tool call update. |
+| `message_end` | A message is complete: your prompt, a model reply, or a tool result. |
+| `tool_execution_start`, `tool_execution_end` | A tool starts or finishes. On a failure, `isError` is true. |
+| `auto_retry_start`, `auto_retry_end` | A failed model call is retried. |
+| `compaction_start`, `compaction_end` | Older messages are summarized to free up context. |
+
+A client that connects mid-run only receives events from that point on, so read earlier messages with `getMessages`. To stop listening, call the function that `on` returns.
+
+## Steer, follow up, or cancel
+
+While a run is in progress:
+
+| Action | What it does |
+| --- | --- |
+| `steer(text)` | The agent reads the message after its current tool calls finish, before its next model call. |
+| `followUp(text)` | The agent reads the message once it has no tool calls left, and the run continues. On an idle agent it only queues. |
+| `abort()` | Cancels the run and stops any command still running in the sandbox. Daytona can't cancel a command, so it runs until it exits or times out. |
+
+Calling `prompt` while a run is in progress throws. To queue it instead, pass `streamingBehavior: "steer"` or `"followUp"`. On an idle agent, the prompt runs right away.
+
+## Compaction and errors
+
+- When the context fills up, the agent summarizes older messages and keeps going. Call `compact` to do it yourself. It cancels the run in progress first.
+- A failed model call is retried automatically. If it keeps failing, the run ends with an assistant message whose `stopReason` is `"error"`, and the session is kept.
+
+**Next:** [Client SDK](/agents/docs/client-sdk), how to call an agent from your backend or a browser.

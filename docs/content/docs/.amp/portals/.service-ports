@@ -1,0 +1,5 @@
+{
+  "servicePorts": {
+    "rivet-website": 31227
+  }
+}

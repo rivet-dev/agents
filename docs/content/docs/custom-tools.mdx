@@ -1,0 +1,55 @@
+---
+title: "Custom Tools"
+description: "Give an agent tools that run in your backend, with access to your APIs and secrets."
+---
+
+A custom tool is a function the model can call. It runs in the agent Actor on your worker, next to your server code, so it can use your APIs and secrets.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 660 282" role="img" aria-label="In your backend, the agent Actor calls the model provider and runs the get_order tool, which calls the orders API with a token from the worker&#x27;s environment." style="width:100%;min-width:520px;max-width:660px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="custom-tools-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="40" width="380" height="130" rx="10" style="fill:rgb(var(--site-paper-mid, 250 248 243));stroke:rgb(var(--site-pine, 46 64 52));stroke-width:1.4;stroke-dasharray:7 6"/>
+  <text x="20" y="30" font-size="11" font-family="ui-monospace, monospace" font-weight="600" letter-spacing="0.14em" style="fill:rgb(var(--site-pine, 46 64 52))">YOUR BACKEND</text>
+  <rect x="40" y="72" width="150" height="64" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="240" y="72" width="140" height="64" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="40" y="210" width="150" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="500" y="78" width="140" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M191 104 L238 104" marker-end="url(#custom-tools-arrow)"/>
+    <path d="M115 137 L115 208" marker-end="url(#custom-tools-arrow)"/>
+    <path d="M381 104 L498 104" marker-end="url(#custom-tools-arrow)"/>
+  </g>
+  <text x="115" y="109" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="310" y="101" text-anchor="middle" font-size="13" font-weight="600" fill="#1b1916" font-family="ui-monospace,monospace">get_order</text>
+  <text x="310" y="119" text-anchor="middle" font-size="12" fill="#56524a">custom tool</text>
+  <text x="115" y="241" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Model provider</text>
+  <text x="570" y="109" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Orders API</text>
+  <text x="450" y="96" text-anchor="middle" font-size="12" fill="#56524a">API token</text>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/custom-tools/get-order.ts" title="get-order.ts" />
+<CodeSnippet file="examples/docs/custom-tools/server.ts" title="server.ts" />
+</CodeGroup>
+
+The model reads the tool's `description` and calls it with arguments that match `parameters`. It reads `content` as the result, while `details` goes to clients for your UI. A thrown error, like the 404 in `fetchOrder`, becomes an error result: the model reads the message and can try something else. The `signal` argument aborts when the run is cancelled, so a Stop from the client also cancels the request.
+
+## Secrets
+
+The orders API token stays in your backend. The tool reads it from the worker's environment as `ORDERS_API_TOKEN`, and nothing else sees it:
+
+| | Sees the token |
+| --- | --- |
+| Your tool code | Yes, from `process.env` on the worker. |
+| The model | No. It sees the tool's name, description, parameters, and results. |
+| The session and connected clients | No. They store and receive tool arguments and results. |
+| The sandbox | No. Commands run with the sandbox's own environment. |
+
+Tool results and error messages are stored in the session and sent to every connected client, so keep secrets out of both. For model keys, see [LLM API Keys](/agents/docs/api-keys).
+
+Custom tools work without a sandbox too. This agent has one, so the model can also use the [built-in tools](/agents/docs/built-in-tools).
+
+**Next:** [Session Lifecycle](/agents/docs/session-lifecycle), what happens while the agent answers a prompt.
