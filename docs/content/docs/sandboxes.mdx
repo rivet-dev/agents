@@ -3,7 +3,7 @@ title: "Sandboxes"
 description: "Run an agent's file and shell tools in E2B, Daytona, or a sandbox provider you write."
 ---
 
-An agent's file and shell tools run in a sandbox, not on your worker. [`@rivet-dev/sandbox-adapter`](https://github.com/rivet-dev/rivet/tree/main/shared/typescript/sandbox-adapter) gives each Actor its own sandbox.
+An agent's file and shell tools run in a sandbox, not on your worker. [`@rivet-dev/sandbox-adapter`](https://github.com/rivet-dev/agents/tree/main/packages/sandbox-adapter) gives each Actor its own sandbox.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 676 190" role="img" aria-label="The agent Actor sends tool calls through the sandbox adapter, which creates and connects to one sandbox per Actor from a sandbox provider: E2B, Daytona, or your own provider." style="width:100%;min-width:520px;max-width:676px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -100,7 +100,7 @@ The working directory is the sandbox's own working directory. A stopped sandbox 
 
 ## Write your own provider
 
-Any sandbox can back an agent. Implement [`SandboxProvider`](https://github.com/rivet-dev/rivet/blob/main/shared/typescript/sandbox-adapter/src/index.ts) and pass it as `sandbox`. One provider object is shared by every Actor of a definition, so keep no per-Actor state in it; the Actor stores the sandbox id.
+Any sandbox can back an agent. Implement [`SandboxProvider`](https://github.com/rivet-dev/agents/blob/main/packages/sandbox-adapter/src/index.ts) and pass it as `sandbox`. One provider object is shared by every Actor of a definition, so keep no per-Actor state in it; the Actor stores the sandbox id.
 
 | Member | Description |
 | --- | --- |
@@ -110,6 +110,6 @@ Any sandbox can back an agent. Implement [`SandboxProvider`](https://github.com/
 | `suspend(c, id)` | Optional. Releases resources while the Actor sleeps. When omitted, the sandbox stops itself when idle or keeps running, depending on the provider. |
 | `destroy(c, id)` | Optional. Deletes the sandbox when the Actor is destroyed. When omitted, the sandbox is left in place. |
 
-The `Sandbox` that `connect` returns has a `cwd` and the operations the tools run: `exec`, `readFile`, `writeFile`, `mkdir`, `stat`, `readdir`, and `exists`. All paths are absolute paths inside the sandbox. See the [E2B provider](https://github.com/rivet-dev/rivet/blob/main/shared/typescript/sandbox-adapter/src/e2b.ts) for a complete example.
+The `Sandbox` that `connect` returns has a `cwd` and the operations the tools run: `exec`, `readFile`, `writeFile`, `mkdir`, `stat`, `readdir`, and `exists`. All paths are absolute paths inside the sandbox. See the [E2B provider](https://github.com/rivet-dev/agents/blob/main/packages/sandbox-adapter/src/e2b.ts) for a complete example.
 
 **Next:** [Custom Tools](/agents/docs/custom-tools), tools that run in your backend.
