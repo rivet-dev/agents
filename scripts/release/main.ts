@@ -190,6 +190,22 @@ async function validateReuseVersion(version: string): Promise<void> {
 	console.log(`✅ S3 artifacts exist (${files.Contents.length} files found)`);
 }
 
+/**
+ * Build and type-check the root workspace packages (for example @rivet-dev/pi).
+ * They import each other's build output, so the build runs first.
+ */
+async function checkRootPackages(opts: ReleaseOpts) {
+	console.log("Running root workspace build and type check...");
+	try {
+		await $({ stdio: "inherit", cwd: opts.repoRoot })`pnpm build`;
+		await $({ stdio: "inherit", cwd: opts.repoRoot })`pnpm check-types`;
+		console.log("✅ Root workspace type check passed");
+	} catch (err) {
+		console.error("❌ Root workspace type check failed");
+		throw err;
+	}
+}
+
 async function runLocalChecks(opts: ReleaseOpts) {
 	console.log("Running local checks...");
 
@@ -226,6 +242,8 @@ async function runLocalChecks(opts: ReleaseOpts) {
 		throw err;
 	}
 
+	await checkRootPackages(opts);
+
 	console.log("✅ All local checks passed");
 }
 
@@ -241,6 +259,8 @@ async function runCiChecks(opts: ReleaseOpts) {
 		console.error("❌ TypeScript type check failed");
 		throw err;
 	}
+
+	await checkRootPackages(opts);
 
 	console.log("✅ All CI checks passed");
 }
