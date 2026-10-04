@@ -1,6 +1,5 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
-import { $ } from "execa";
 import { glob } from "glob";
 import * as semver from "semver";
 import type { ReleaseOpts } from "./main";
@@ -93,7 +92,6 @@ export async function updateVersion(opts: ReleaseOpts) {
 	}
 
 	await fs.writeFile(cargoTomlPath, cargoContent);
-	await $({ cwd: opts.sandboxAgentRoot })`git add Cargo.toml`;
 
 	// 2. Discover and update every non-private package.json on the release line:
 	// Sandbox Agent SDKs and the root workspace packages.
@@ -132,7 +130,6 @@ export async function updateVersion(opts: ReleaseOpts) {
 			`"version": "${opts.version}"`,
 		);
 		await fs.writeFile(fullPath, updated);
-		await $({ cwd: opts.repoRoot })`git add ${relPath}`;
 	}
 
 	// 3. Update version references across docs, examples, and code
@@ -229,7 +226,6 @@ async function updateVersionReferences(
 	}
 
 	if (modifiedFiles.length > 0) {
-		await $({ cwd: opts.repoRoot })`git add -f ${modifiedFiles}`;
 		console.log(
 			`\nUpdated ${modifiedFiles.length} files with version references.`,
 		);
