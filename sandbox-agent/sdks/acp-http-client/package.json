@@ -1,6 +1,6 @@
 {
   "name": "acp-http-client",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Protocol-faithful ACP JSON-RPC over streamable HTTP client.",
   "license": "Apache-2.0",
   "repository": {

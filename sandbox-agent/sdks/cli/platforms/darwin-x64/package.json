@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/cli-darwin-x64",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "sandbox-agent CLI binary for macOS x64",
   "license": "Apache-2.0",
   "repository": {

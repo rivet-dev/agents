@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/cli-linux-arm64",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "sandbox-agent CLI binary for Linux arm64",
   "license": "Apache-2.0",
   "repository": {

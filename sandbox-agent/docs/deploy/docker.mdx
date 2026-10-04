@@ -15,11 +15,11 @@ Run the published full image with all supported agents pre-installed:
 docker run --rm -p 3000:3000 \
   -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   -e OPENAI_API_KEY="$OPENAI_API_KEY" \
-  rivetdev/sandbox-agent:0.4.2-full \
+  rivetdev/sandbox-agent:0.4.3-full \
   server --no-token --host 0.0.0.0 --port 3000
 ```
 
-The `0.4.2-full` tag pins the exact version. The moving `full` tag is also published for contributors who want the latest full image.
+The `0.4.3-full` tag pins the exact version. The moving `full` tag is also published for contributors who want the latest full image.
 
 If you also want the desktop API inside the container, install desktop dependencies before starting the server:
 
@@ -52,7 +52,7 @@ const docker = new Docker();
 const PORT = 3000;
 
 const container = await docker.createContainer({
-  Image: "rivetdev/sandbox-agent:0.4.2-full",
+  Image: "rivetdev/sandbox-agent:0.4.3-full",
   Cmd: ["server", "--no-token", "--host", "0.0.0.0", "--port", `${PORT}`],
   Env: [
     `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY}`,

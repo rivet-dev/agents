@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/gigacode",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Gigacode CLI (sandbox-agent with OpenCode attach by default)",
   "license": "Apache-2.0",
   "repository": {

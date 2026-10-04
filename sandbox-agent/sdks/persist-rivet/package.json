@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/persist-rivet",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Rivet Actor persistence driver for the Sandbox Agent TypeScript SDK (DEPRECATED)",
   "license": "Apache-2.0",
   "repository": {
