@@ -1,10 +1,10 @@
 # Contributing
 
-Documentation lives in `docs/` (Mintlify). Start with:
+Documentation lives in `docs/content/docs/`. Start with:
 
-- `docs/index.mdx` for the overview
-- `docs/quickstart.mdx` to run the daemon
-- `docs/http-api.mdx` and `docs/cli.mdx` for API references
+- `docs/content/docs/index.mdx` for the overview
+- `docs/content/docs/quickstart.mdx` to run the daemon
+- `docs/content/docs/api-reference/index.mdx` and `docs/content/docs/cli.mdx` for API references
 
 ## Development Setup
 

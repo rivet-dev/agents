@@ -1,0 +1,93 @@
+---
+title: "Create a long-lived managed process."
+description: "POST /v1/processes: request parameters and responses."
+---
+
+`POST /v1/processes`
+
+Spawns a new process with the given command and arguments. Supports both
+pipe-based and PTY (tty) modes. Returns the process descriptor on success.
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessCreateRequest"
+  }
+}
+```
+
+Related schemas: [ProcessCreateRequest](/sandbox-agent/docs/api-reference/schemas/processcreaterequest/).
+
+## Responses
+
+### 200
+
+Started process
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessInfo"
+  }
+}
+```
+
+Related schemas: [ProcessInfo](/sandbox-agent/docs/api-reference/schemas/processinfo/).
+
+### 400
+
+Invalid request
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Process limit or state conflict
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 501
+
+Process API unsupported on this platform
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

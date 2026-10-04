@@ -1,0 +1,19 @@
+---
+title: "McpOAuthConfigOrDisabled"
+description: "HTTP API schema for McpOAuthConfigOrDisabled."
+---
+
+```json
+{
+  "oneOf": [
+    {
+      "$ref": "#/components/schemas/McpOAuthConfig"
+    },
+    {
+      "type": "boolean"
+    }
+  ]
+}
+```
+
+Related schemas: [McpOAuthConfig](/sandbox-agent/docs/api-reference/schemas/mcpoauthconfig/).

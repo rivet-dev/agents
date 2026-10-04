@@ -1,0 +1,33 @@
+---
+title: "Session Restoration"
+description: "How the TypeScript SDK restores sessions after connection/runtime loss."
+---
+
+Sandbox Agent automatically restores stale sessions when live session state is no longer available.
+
+This is driven by the configured `SessionPersistDriver` (`inMemory`, IndexedDB, SQLite, Postgres, or custom).
+
+## How Auto-Restore Works
+
+When you call `session.prompt(...)` (or `resumeSession(...)`) and the saved session points to a stale connection, the SDK:
+
+1. Recreates a fresh session for the same local session id.
+2. Rebinds the local session to the new runtime session id.
+3. Replays recent persisted events into the next prompt as context.
+
+This happens automatically; you do not need to manually rebuild the session.
+
+## Replay Limits
+
+Replay payload size is capped by:
+
+- `replayMaxEvents` (default `50`)
+- `replayMaxChars` (default `12000`)
+
+These controls limit prompt growth during restore while preserving recent context.
+
+## Related Docs
+
+- [SDK Overview](/sandbox-agent/docs/sdk-overview)
+- [Persisting Sessions](/sandbox-agent/docs/session-persistence)
+- [Agent Sessions](/sandbox-agent/docs/agent-sessions)

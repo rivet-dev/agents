@@ -1,0 +1,102 @@
+---
+title: "get_v1_agent"
+description: "GET /v1/agents/{agent}: request parameters and responses."
+---
+
+`GET /v1/agents/{agent}`
+
+
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `agent` | path | Yes | string | Agent id |
+| `config` | query | No | boolean | When true, include version/path/configOptions (slower) |
+| `no_cache` | query | No | boolean | When true, bypass version cache |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "agent",
+    "in": "path",
+    "description": "Agent id",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "config",
+    "in": "query",
+    "description": "When true, include version/path/configOptions (slower)",
+    "required": false,
+    "schema": {
+      "type": "boolean",
+      "nullable": true
+    }
+  },
+  {
+    "name": "no_cache",
+    "in": "query",
+    "description": "When true, bypass version cache",
+    "required": false,
+    "schema": {
+      "type": "boolean",
+      "nullable": true
+    }
+  }
+]
+```
+
+## Responses
+
+### 200
+
+Agent info
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/AgentInfo"
+  }
+}
+```
+
+Related schemas: [AgentInfo](/sandbox-agent/docs/api-reference/schemas/agentinfo/).
+
+### 400
+
+Unknown agent
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 401
+
+Authentication required
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

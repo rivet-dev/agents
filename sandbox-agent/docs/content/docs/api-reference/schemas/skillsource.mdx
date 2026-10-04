@@ -1,0 +1,37 @@
+---
+title: "SkillSource"
+description: "HTTP API schema for SkillSource."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "type",
+    "source"
+  ],
+  "properties": {
+    "ref": {
+      "type": "string",
+      "nullable": true
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true
+    },
+    "source": {
+      "type": "string"
+    },
+    "subpath": {
+      "type": "string",
+      "nullable": true
+    },
+    "type": {
+      "type": "string"
+    }
+  }
+}
+```

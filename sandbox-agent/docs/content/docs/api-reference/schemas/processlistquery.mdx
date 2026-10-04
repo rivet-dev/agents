@@ -1,0 +1,22 @@
+---
+title: "ProcessListQuery"
+description: "HTTP API schema for ProcessListQuery."
+---
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "owner": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/ProcessOwner"
+        }
+      ],
+      "nullable": true
+    }
+  }
+}
+```
+
+Related schemas: [ProcessOwner](/sandbox-agent/docs/api-reference/schemas/processowner/).

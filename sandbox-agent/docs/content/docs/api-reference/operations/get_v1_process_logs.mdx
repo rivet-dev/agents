@@ -1,0 +1,135 @@
+---
+title: "Fetch process logs."
+description: "GET /v1/processes/{id}/logs: request parameters and responses."
+---
+
+`GET /v1/processes/{id}/logs`
+
+Returns buffered log entries for a process. Supports filtering by stream
+type, tail count, and sequence-based resumption. When `follow=true`,
+returns an SSE stream that replays buffered entries then streams live output.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | Yes | string | Process ID |
+| `stream` | query | No |  | stdout\|stderr\|combined\|pty |
+| `tail` | query | No | integer | Tail N entries |
+| `follow` | query | No | boolean | Follow via SSE |
+| `since` | query | No | integer | Only entries with sequence greater than this |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "id",
+    "in": "path",
+    "description": "Process ID",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "stream",
+    "in": "query",
+    "description": "stdout|stderr|combined|pty",
+    "required": false,
+    "schema": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/ProcessLogsStream"
+        }
+      ],
+      "nullable": true
+    }
+  },
+  {
+    "name": "tail",
+    "in": "query",
+    "description": "Tail N entries",
+    "required": false,
+    "schema": {
+      "type": "integer",
+      "nullable": true,
+      "minimum": 0
+    }
+  },
+  {
+    "name": "follow",
+    "in": "query",
+    "description": "Follow via SSE",
+    "required": false,
+    "schema": {
+      "type": "boolean",
+      "nullable": true
+    }
+  },
+  {
+    "name": "since",
+    "in": "query",
+    "description": "Only entries with sequence greater than this",
+    "required": false,
+    "schema": {
+      "type": "integer",
+      "format": "int64",
+      "nullable": true,
+      "minimum": 0
+    }
+  }
+]
+```
+
+Related schemas: [ProcessLogsStream](/sandbox-agent/docs/api-reference/schemas/processlogsstream/).
+
+## Responses
+
+### 200
+
+Process logs
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessLogsResponse"
+  }
+}
+```
+
+Related schemas: [ProcessLogsResponse](/sandbox-agent/docs/api-reference/schemas/processlogsresponse/).
+
+### 404
+
+Unknown process
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 501
+
+Process API unsupported on this platform
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

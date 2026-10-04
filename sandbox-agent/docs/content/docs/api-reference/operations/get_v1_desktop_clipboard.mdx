@@ -1,0 +1,80 @@
+---
+title: "Read the desktop clipboard."
+description: "GET /v1/desktop/clipboard: request parameters and responses."
+---
+
+`GET /v1/desktop/clipboard`
+
+Returns the current text content of the X11 clipboard.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `selection` | query | No | string |  |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "selection",
+    "in": "query",
+    "required": false,
+    "schema": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+]
+```
+
+## Responses
+
+### 200
+
+Clipboard contents
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopClipboardResponse"
+  }
+}
+```
+
+Related schemas: [DesktopClipboardResponse](/sandbox-agent/docs/api-reference/schemas/desktopclipboardresponse/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 500
+
+Clipboard read failed
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

@@ -1,0 +1,26 @@
+---
+title: "FsMoveRequest"
+description: "HTTP API schema for FsMoveRequest."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "from",
+    "to"
+  ],
+  "properties": {
+    "from": {
+      "type": "string"
+    },
+    "overwrite": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "to": {
+      "type": "string"
+    }
+  }
+}
+```

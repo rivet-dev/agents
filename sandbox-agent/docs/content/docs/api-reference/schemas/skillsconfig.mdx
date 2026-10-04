@@ -1,0 +1,23 @@
+---
+title: "SkillsConfig"
+description: "HTTP API schema for SkillsConfig."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "sources"
+  ],
+  "properties": {
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/SkillSource"
+      }
+    }
+  }
+}
+```
+
+Related schemas: [SkillSource](/sandbox-agent/docs/api-reference/schemas/skillsource/).

@@ -1,0 +1,59 @@
+---
+title: "Get desktop display information."
+description: "GET /v1/desktop/display/info: request parameters and responses."
+---
+
+`GET /v1/desktop/display/info`
+
+Performs a health-gated display query against the managed desktop and
+returns the current display identifier and resolution.
+
+## Responses
+
+### 200
+
+Desktop display information
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopDisplayInfoResponse"
+  }
+}
+```
+
+Related schemas: [DesktopDisplayInfoResponse](/sandbox-agent/docs/api-reference/schemas/desktopdisplayinforesponse/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 503
+
+Desktop runtime health or display query failed
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

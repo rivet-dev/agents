@@ -1,0 +1,34 @@
+---
+title: "AcpEnvelope"
+description: "HTTP API schema for AcpEnvelope."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "jsonrpc"
+  ],
+  "properties": {
+    "error": {
+      "nullable": true
+    },
+    "id": {
+      "nullable": true
+    },
+    "jsonrpc": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string",
+      "nullable": true
+    },
+    "params": {
+      "nullable": true
+    },
+    "result": {
+      "nullable": true
+    }
+  }
+}
+```

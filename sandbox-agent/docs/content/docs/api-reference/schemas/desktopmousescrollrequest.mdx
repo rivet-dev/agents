@@ -1,0 +1,34 @@
+---
+title: "DesktopMouseScrollRequest"
+description: "HTTP API schema for DesktopMouseScrollRequest."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "x",
+    "y"
+  ],
+  "properties": {
+    "deltaX": {
+      "type": "integer",
+      "format": "int32",
+      "nullable": true
+    },
+    "deltaY": {
+      "type": "integer",
+      "format": "int32",
+      "nullable": true
+    },
+    "x": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "y": {
+      "type": "integer",
+      "format": "int32"
+    }
+  }
+}
+```

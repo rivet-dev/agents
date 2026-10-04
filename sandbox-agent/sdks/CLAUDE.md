@@ -16,7 +16,7 @@
 - If the same UI pattern is shared between the Sandbox Agent Inspector and Foundry, prefer extracting it into `sdks/react` instead of maintaining parallel implementations.
 - Keep shared components unstyled by default: behavior in the package, styling in the consumer via `className`, slot-level `classNames`, render overrides, and `data-*` hooks.
 - Prefer extracting reusable pieces such as transcript, composer, and conversation surfaces. Keep Inspector-specific shells such as session selection, session headers, and control-plane actions in `frontend/packages/inspector/`.
-- Document all shared React components in `docs/react-components.mdx`, and keep that page aligned with the exported surface in `sdks/react/src/index.ts`.
+- Document all shared React components in `docs/content/docs/react-components.mdx`, and keep that page aligned with the exported surface in `sdks/react/src/index.ts`.
 
 ### TypeScript SDK Naming Conventions
 

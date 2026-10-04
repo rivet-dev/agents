@@ -1,0 +1,25 @@
+---
+title: "FsUploadBatchResponse"
+description: "HTTP API schema for FsUploadBatchResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "paths",
+    "truncated"
+  ],
+  "properties": {
+    "paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  }
+}
+```

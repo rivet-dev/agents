@@ -10,7 +10,7 @@
 
 ## Docs Terminology
 
-- Never mention "ACP" in user-facing docs (`docs/**/*.mdx`) except in docs that are specifically about ACP itself (e.g. `docs/acp-http-client.mdx`).
+- Never mention "ACP" in user-facing docs (`docs/content/docs/**/*.mdx`) except in docs that are specifically about ACP itself.
 - Never expose underlying protocol method names (e.g. `session/request_permission`, `session/create`, `_sandboxagent/session/detach`) in non-ACP docs. Describe the behavior in user-facing terms instead.
 - Do not describe the underlying protocol implementation in docs. Only document the SDK surface (methods, types, options). ACP protocol details belong exclusively in ACP-specific pages.
 - Do not use em dashes (`—`) in docs. Use commas, periods, or parentheses instead.
@@ -22,19 +22,21 @@
   - `server/packages/sandbox-agent/src/cli.rs`
 - Keep docs aligned to implemented endpoints/commands only (for example ACP under `/v1/acp`, not legacy session REST APIs).
 
-## Docs Styling
+## Website and Docs
 
-- Docs styling is owned by the shared **`@rivet-dev/docs-theme`** repo (`github.com/rivet-dev/docs-theme`), consumed via `github:rivet-dev/docs-theme#<tag>` in `frontend/packages/website`. To change any docs styling (palette, header, sidebar, code blocks, fonts), edit that repo and follow its CLAUDE.md release workflow — never restyle docs here. This site owns only docs content + `frontend/packages/website/docs.config.mjs` (sidebar icons via each item's `attrs['data-icon']`).
+- Author docs in `docs/content/docs/`; `docs/sidebar.json` owns the navigation. The Rivet website owns layout and styling.
+- Run `node scripts/generate-api-docs.mjs` when `docs/openapi.json` changes.
+- `.github/workflows/docs-sync.yml` publishes the docs bundle to `rivet-dev/website`. Never edit the vendored copy by hand.
 
 ## Change Tracking
 
 - If the user asks to "push" changes, treat that as permission to commit and push all current workspace changes, not a hand-picked subset, unless the user explicitly scopes the push.
 - Keep CLI subcommands and HTTP endpoints in sync.
-- Update `docs/cli.mdx` when CLI behavior changes.
+- Update `docs/content/docs/cli.mdx` when CLI behavior changes.
 - Regenerate `docs/openapi.json` when HTTP contracts change.
-- Keep `docs/inspector.mdx` and `docs/sdks/typescript.mdx` aligned with implementation.
+- Keep `docs/content/docs/inspector.mdx` and `docs/content/docs/sdks/typescript.mdx` aligned with implementation.
 - Append blockers/decisions to `research/acp/friction.md` during ACP work.
-- `docs/agent-capabilities.mdx` lists models/modes/thought levels per agent. Update it when adding a new agent or changing `fallback_config_options`. If its "Last updated" date is >2 weeks old, re-run `cd scripts/agent-configs && npx tsx dump.ts` and update the doc to match. Source data: `scripts/agent-configs/resources/*.json` and hardcoded entries in `server/packages/sandbox-agent/src/router/support.rs` (`fallback_config_options`).
+- `docs/content/docs/agent-capabilities.mdx` lists models/modes/thought levels per agent. Update it when adding a new agent or changing `fallback_config_options`. If its "Last updated" date is >2 weeks old, re-run `cd scripts/agent-configs && npx tsx dump.ts` and update the doc to match. Source data: `scripts/agent-configs/resources/*.json` and hardcoded entries in `server/packages/sandbox-agent/src/router/support.rs` (`fallback_config_options`).
 - Some agent models are gated by subscription (e.g. Claude `opus`). The live report only shows models available to the current credentials. The static doc and JSON resource files should list all known models regardless of subscription tier.
 
 ## Docker Test Image
@@ -45,10 +47,10 @@
 ## Common Software Sync
 
 - These three files must stay in sync:
-  - `docs/common-software.mdx` (user-facing documentation)
+  - `docs/content/docs/common-software.mdx` (user-facing documentation)
   - `docker/test-common-software/Dockerfile` (packages installed in the test image)
   - `server/packages/sandbox-agent/tests/common_software.rs` (test assertions)
-- When adding or removing software from `docs/common-software.mdx`, also add/remove the corresponding `apt-get install` line in the Dockerfile and add/remove the test in `common_software.rs`.
+- When adding or removing software from `docs/content/docs/common-software.mdx`, also add/remove the corresponding `apt-get install` line in the Dockerfile and add/remove the test in `common_software.rs`.
 - Run `cargo test -p sandbox-agent --test common_software` to verify.
 
 ## Install Version References
@@ -59,18 +61,17 @@
   - Release promotion policy: `latest` releases must still update `latest`; when a release is `latest`, Sandbox Agent must also be promoted to the matching minor channel `0.N.x`.
 - Keep every install-version reference below in sync whenever versions/channels change:
   - `README.md`
-  - `docs/acp-http-client.mdx`
-  - `docs/cli.mdx`
-  - `docs/quickstart.mdx`
-  - `docs/sdk-overview.mdx`
-  - `docs/react-components.mdx`
-  - `docs/session-persistence.mdx`
-  - `docs/deploy/local.mdx`
-  - `docs/deploy/cloudflare.mdx`
-  - `docs/deploy/vercel.mdx`
-  - `docs/deploy/daytona.mdx`
-  - `docs/deploy/e2b.mdx`
-  - `docs/deploy/docker.mdx`
+  - `docs/content/docs/cli.mdx`
+  - `docs/content/docs/quickstart.mdx`
+  - `docs/content/docs/sdk-overview.mdx`
+  - `docs/content/docs/react-components.mdx`
+  - `docs/content/docs/session-persistence.mdx`
+  - `docs/content/docs/deploy/local.mdx`
+  - `docs/content/docs/deploy/cloudflare.mdx`
+  - `docs/content/docs/deploy/vercel.mdx`
+  - `docs/content/docs/deploy/daytona.mdx`
+  - `docs/content/docs/deploy/e2b.mdx`
+  - `docs/content/docs/deploy/docker.mdx`
   - `frontend/packages/website/src/components/GetStarted.tsx`
   - `.claude/commands/post-release-testing.md`
   - `examples/cloudflare/Dockerfile`

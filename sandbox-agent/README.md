@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://sandboxagent.dev/docs">Documentation</a> — <a href="https://sandboxagent.dev/docs/api-reference">API Reference</a> — <a href="https://rivet.dev/discord">Discord</a>
+  <a href="https://rivet.dev/sandbox-agent/docs">Documentation</a> — <a href="https://rivet.dev/sandbox-agent/docs/api-reference">API Reference</a> — <a href="https://rivet.dev/discord">Discord</a>
 </p>
 
 <p align="center">
@@ -34,8 +34,8 @@ Sandbox Agent solves three problems:
 - **Universal Session Schema**: Standardized schema that normalizes all agent event formats for storage and replay
 - **Runs Inside Any Sandbox**: Lightweight static Rust binary. One curl command to install inside E2B, Daytona, Modal, Cloudflare Containers, Agent Computer, or Docker
 - **Server or SDK Mode**: Run as an HTTP server or embed with the TypeScript SDK
-- **OpenAPI Spec**: [Well documented](https://sandboxagent.dev/docs/api-reference) and easy to integrate from any language
-- **OpenCode SDK & UI Support** *(Experimental)*: [Connect OpenCode CLI, SDK, or web UI](https://sandboxagent.dev/docs/opencode-compatibility) to control agents through familiar OpenCode tooling
+- **OpenAPI Spec**: [Well documented](https://rivet.dev/sandbox-agent/docs/api-reference) and easy to integrate from any language
+- **OpenCode SDK & UI Support** *(Experimental)*: [Connect OpenCode CLI, SDK, or web UI](https://rivet.dev/sandbox-agent/docs/opencode-compatibility) to control agents through familiar OpenCode tooling
 
 ## Architecture
 
@@ -46,7 +46,7 @@ The Sandbox Agent acts as a universal adapter between your client application an
 - **Embedded Mode**: Runs agents locally as subprocesses
 - **Server Mode**: Runs as HTTP server from any sandbox provider
 
-[Architecture documentation](https://sandboxagent.dev/docs)
+[Architecture documentation](https://rivet.dev/sandbox-agent/docs)
 
 ## Components
 
@@ -127,7 +127,7 @@ for await (const event of client.streamEvents("demo", { offset: 0 })) {
 }
 ```
 
-[SDK documentation](https://sandboxagent.dev/docs/sdks/typescript) — [Managing Sessions](https://sandboxagent.dev/docs/manage-sessions)
+[SDK documentation](https://rivet.dev/sandbox-agent/docs/sdks/typescript) — [Managing Sessions](https://rivet.dev/sandbox-agent/docs/manage-sessions)
 
 ### HTTP Server
 
@@ -152,7 +152,7 @@ To disable auth locally:
 sandbox-agent server --no-token --host 127.0.0.1 --port 2468
 ```
 
-[Quickstart](https://sandboxagent.dev/docs/quickstart) — [Deployment guides](https://sandboxagent.dev/docs/deploy)
+[Quickstart](https://rivet.dev/sandbox-agent/docs/quickstart) — [Deployment guides](https://rivet.dev/sandbox-agent/docs/deploy)
 
 ### CLI
 
@@ -186,7 +186,7 @@ npx @sandbox-agent/cli@0.4.x --help
 bunx @sandbox-agent/cli@0.4.x --help
 ```
 
-[CLI documentation](https://sandboxagent.dev/docs/cli)
+[CLI documentation](https://rivet.dev/sandbox-agent/docs/cli)
 
 ### Inspector
 
@@ -194,11 +194,11 @@ Debug sessions and events with the built-in Inspector UI (e.g., `http://localhos
 
 ![Sandbox Agent Inspector](../.github/media/inspector.png)
 
-[Inspector documentation](https://sandboxagent.dev/docs/inspector)
+[Inspector documentation](https://rivet.dev/sandbox-agent/docs/inspector)
 
 ### OpenAPI Specification
 
-[Explore API](https://sandboxagent.dev/docs/api-reference) — [View Specification](https://github.com/rivet-dev/agents/blob/main/sandbox-agent/docs/openapi.json)
+[Explore API](https://rivet.dev/sandbox-agent/docs/api-reference) — [View Specification](https://github.com/rivet-dev/agents/blob/main/sandbox-agent/docs/openapi.json)
 
 ### Tip: Extract credentials
 
@@ -227,7 +227,7 @@ Claude Code, Codex, OpenCode, Cursor, Amp, and Pi. The SDK normalizes their APIs
 <details>
 <summary><strong>How is session data persisted?</strong></summary>
 
-This SDK does not handle persisting session data. Events stream in a universal JSON schema that you can persist anywhere. See [Managing Sessions](https://sandboxagent.dev/docs/manage-sessions) for patterns using Postgres or [Rivet Actors](https://rivet.dev).
+This SDK does not handle persisting session data. Events stream in a universal JSON schema that you can persist anywhere. See [Managing Sessions](https://rivet.dev/sandbox-agent/docs/manage-sessions) for patterns using Postgres or [Rivet Actors](https://rivet.dev).
 </details>
 
 <details>

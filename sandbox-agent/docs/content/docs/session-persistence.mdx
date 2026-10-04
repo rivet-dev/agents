@@ -1,0 +1,121 @@
+---
+title: "Persisting Sessions"
+description: "Choose and configure session persistence for the TypeScript SDK."
+icon: "database"
+---
+
+The TypeScript SDK uses a `SessionPersistDriver` to store session records and event history.
+If you do not provide one, the SDK uses in-memory storage.
+With persistence enabled, sessions can be restored after runtime/session loss. See [Session Restoration](/sandbox-agent/docs/session-restoration).
+
+Each driver stores:
+
+- `SessionRecord` (`id`, `agent`, `agentSessionId`, `lastConnectionId`, `createdAt`, optional `destroyedAt`, optional `sandboxId`, optional `sessionInit`, optional `configOptions`, optional `modes`)
+- `SessionEvent` (`id`, `eventIndex`, `sessionId`, `connectionId`, `sender`, `payload`, `createdAt`)
+
+## Persistence drivers
+
+### Rivet
+
+Recommended for sandbox orchestration with actor state. See [Multiplayer](/sandbox-agent/docs/multiplayer) for a full Rivet actor example with persistence in actor state.
+
+### IndexedDB (browser)
+
+Best for browser apps that should survive reloads. See the [Inspector source](https://github.com/rivet-dev/agents/tree/main/sandbox-agent/frontend/packages/inspector/src/persist-indexeddb.ts) for a complete IndexedDB driver you can copy into your project.
+
+### In-memory (built-in)
+
+Best for local dev and ephemeral workloads. No extra dependencies required.
+
+```ts
+import { InMemorySessionPersistDriver, SandboxAgent } from "sandbox-agent";
+
+const persist = new InMemorySessionPersistDriver({
+  maxSessions: 1024,
+  maxEventsPerSession: 500,
+});
+
+const sdk = await SandboxAgent.connect({
+  baseUrl: "http://127.0.0.1:2468",
+  persist,
+});
+```
+
+### SQLite
+
+Best for local/server Node apps that need durable storage without a DB server.
+
+```bash
+npm install better-sqlite3
+```
+
+```ts
+import { SandboxAgent } from "sandbox-agent";
+import { SQLiteSessionPersistDriver } from "./persist.ts";
+
+const persist = new SQLiteSessionPersistDriver({
+  filename: "./sandbox-agent.db",
+});
+
+const sdk = await SandboxAgent.connect({
+  baseUrl: "http://127.0.0.1:2468",
+  persist,
+});
+```
+
+See the [full SQLite example](https://github.com/rivet-dev/agents/tree/main/sandbox-agent/examples/persist-sqlite) for the complete driver implementation you can copy into your project.
+
+### Postgres
+
+Use when you already run Postgres and want shared relational storage.
+
+```bash
+npm install pg
+```
+
+```ts
+import { SandboxAgent } from "sandbox-agent";
+import { PostgresSessionPersistDriver } from "./persist.ts";
+
+const persist = new PostgresSessionPersistDriver({
+  connectionString: process.env.DATABASE_URL,
+  schema: "public",
+});
+
+const sdk = await SandboxAgent.connect({
+  baseUrl: "http://127.0.0.1:2468",
+  persist,
+});
+```
+
+See the [full Postgres example](https://github.com/rivet-dev/agents/tree/main/sandbox-agent/examples/persist-postgres) for the complete driver implementation you can copy into your project.
+
+### Custom driver
+
+Implement `SessionPersistDriver` for custom backends.
+
+```ts
+import type { SessionPersistDriver } from "sandbox-agent";
+
+class MyDriver implements SessionPersistDriver {
+  async getSession(id) { return undefined; }
+  async listSessions(request) { return { items: [] }; }
+  async updateSession(session) {}
+  async listEvents(request) { return { items: [] }; }
+  async insertEvent(sessionId, event) {}
+}
+```
+
+## Replay controls
+
+`SandboxAgent.connect(...)` supports:
+
+- `replayMaxEvents` (default `50`)
+- `replayMaxChars` (default `12000`)
+
+These cap replay size when restoring sessions.
+
+## Related docs
+
+- [SDK Overview](/sandbox-agent/docs/sdk-overview)
+- [Session Restoration](/sandbox-agent/docs/session-restoration)

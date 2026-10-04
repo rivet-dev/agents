@@ -1,0 +1,23 @@
+---
+title: "ProcessListResponse"
+description: "HTTP API schema for ProcessListResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "processes"
+  ],
+  "properties": {
+    "processes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/ProcessInfo"
+      }
+    }
+  }
+}
+```
+
+Related schemas: [ProcessInfo](/sandbox-agent/docs/api-reference/schemas/processinfo/).

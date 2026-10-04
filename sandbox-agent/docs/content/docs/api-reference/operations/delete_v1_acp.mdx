@@ -1,0 +1,36 @@
+---
+title: "delete_v1_acp"
+description: "DELETE /v1/acp/{server_id}: request parameters and responses."
+---
+
+`DELETE /v1/acp/{server_id}`
+
+
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `server_id` | path | Yes | string | Client-defined ACP server id |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "server_id",
+    "in": "path",
+    "description": "Client-defined ACP server id",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  }
+]
+```
+
+## Responses
+
+### 204
+
+ACP server closed

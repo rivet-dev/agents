@@ -1,0 +1,124 @@
+---
+title: "Capture a full desktop screenshot."
+description: "GET /v1/desktop/screenshot: request parameters and responses."
+---
+
+`GET /v1/desktop/screenshot`
+
+Performs a health-gated full-frame screenshot of the managed desktop and
+returns the requested image bytes.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `format` | query | No |  |  |
+| `quality` | query | No | integer |  |
+| `scale` | query | No | number |  |
+| `showCursor` | query | No | boolean |  |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "format",
+    "in": "query",
+    "required": false,
+    "schema": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/DesktopScreenshotFormat"
+        }
+      ],
+      "nullable": true
+    }
+  },
+  {
+    "name": "quality",
+    "in": "query",
+    "required": false,
+    "schema": {
+      "type": "integer",
+      "format": "int32",
+      "nullable": true,
+      "minimum": 0
+    }
+  },
+  {
+    "name": "scale",
+    "in": "query",
+    "required": false,
+    "schema": {
+      "type": "number",
+      "format": "float",
+      "nullable": true
+    }
+  },
+  {
+    "name": "showCursor",
+    "in": "query",
+    "required": false,
+    "schema": {
+      "type": "boolean",
+      "nullable": true
+    }
+  }
+]
+```
+
+Related schemas: [DesktopScreenshotFormat](/sandbox-agent/docs/api-reference/schemas/desktopscreenshotformat/).
+
+## Responses
+
+### 200
+
+Desktop screenshot as image bytes
+
+### 400
+
+Invalid screenshot query
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 502
+
+Desktop runtime health or screenshot capture failed
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

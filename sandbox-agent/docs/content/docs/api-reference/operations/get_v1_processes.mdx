@@ -1,0 +1,71 @@
+---
+title: "List all managed processes."
+description: "GET /v1/processes: request parameters and responses."
+---
+
+`GET /v1/processes`
+
+Returns a list of all processes (running and exited) currently tracked
+by the runtime, sorted by process ID.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `owner` | query | No |  |  |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "owner",
+    "in": "query",
+    "required": false,
+    "schema": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/ProcessOwner"
+        }
+      ],
+      "nullable": true
+    }
+  }
+]
+```
+
+Related schemas: [ProcessOwner](/sandbox-agent/docs/api-reference/schemas/processowner/).
+
+## Responses
+
+### 200
+
+List processes
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessListResponse"
+  }
+}
+```
+
+Related schemas: [ProcessListResponse](/sandbox-agent/docs/api-reference/schemas/processlistresponse/).
+
+### 501
+
+Process API unsupported on this platform
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

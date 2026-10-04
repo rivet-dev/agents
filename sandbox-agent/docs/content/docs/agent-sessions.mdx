@@ -1,0 +1,268 @@
+---
+title: "Agent Sessions"
+description: "Create sessions, prompt agents, and inspect event history."
+sidebarTitle: "Sessions"
+icon: "comments"
+---
+
+Sessions are the unit of interaction with an agent. Create one session per task, send prompts, and consume event history.
+
+For SDK-based flows, sessions can be restored after runtime/session loss when persistence is enabled.
+See [Session Restoration](/sandbox-agent/docs/session-restoration).
+
+## Create a session
+
+```ts
+import { SandboxAgent } from "sandbox-agent";
+
+const sdk = await SandboxAgent.connect({
+  baseUrl: "http://127.0.0.1:2468",
+});
+
+const session = await sdk.createSession({
+  agent: "codex",
+  cwd: "/",
+});
+
+console.log(session.id, session.agentSessionId);
+```
+
+## Send a prompt
+
+```ts
+const response = await session.prompt([
+  { type: "text", text: "Summarize the repository structure." },
+]);
+
+console.log(response.stopReason);
+```
+
+## Subscribe to live events
+
+```ts
+const unsubscribe = session.onEvent((event) => {
+  console.log(event.eventIndex, event.sender, event.payload);
+});
+
+await session.prompt([
+  { type: "text", text: "Explain the main entrypoints." },
+]);
+
+unsubscribe();
+```
+
+### Event types
+
+Each event's `payload` contains a session update. The `sessionUpdate` field identifies the type.
+
+<AccordionGroup>
+<Accordion title="agent_message_chunk">
+Streamed text or content from the agent's response.
+
+```json
+{
+  "sessionUpdate": "agent_message_chunk",
+  "content": { "type": "text", "text": "Here's how the repository is structured..." }
+}
+```
+</Accordion>
+
+<Accordion title="agent_thought_chunk">
+Internal reasoning from the agent (chain-of-thought / extended thinking).
+
+```json
+{
+  "sessionUpdate": "agent_thought_chunk",
+  "content": { "type": "text", "text": "I should start by looking at the project structure..." }
+}
+```
+</Accordion>
+
+<Accordion title="user_message_chunk">
+Echo of the user's prompt being processed.
+
+```json
+{
+  "sessionUpdate": "user_message_chunk",
+  "content": { "type": "text", "text": "Summarize the repository structure." }
+}
+```
+</Accordion>
+
+<Accordion title="tool_call">
+The agent invoked a tool (file edit, terminal command, etc.).
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "tc_abc123",
+  "title": "Read file",
+  "status": "in_progress",
+  "rawInput": { "path": "/src/index.ts" }
+}
+```
+</Accordion>
+
+<Accordion title="tool_call_update">
+Progress or result update for an in-progress tool call.
+
+```json
+{
+  "sessionUpdate": "tool_call_update",
+  "toolCallId": "tc_abc123",
+  "status": "completed",
+  "content": [{ "type": "text", "text": "import express from 'express';\n..." }]
+}
+```
+</Accordion>
+
+<Accordion title="plan">
+The agent's execution plan for the current task.
+
+```json
+{
+  "sessionUpdate": "plan",
+  "entries": [
+    { "content": "Read the project structure", "status": "completed" },
+    { "content": "Identify main entrypoints", "status": "in_progress" },
+    { "content": "Write summary", "status": "pending" }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="usage_update">
+Token usage metrics for the current turn.
+
+```json
+{
+  "sessionUpdate": "usage_update"
+}
+```
+</Accordion>
+
+<Accordion title="session_info_update">
+Session metadata changed (e.g. agent-generated title).
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "title": "Repository structure analysis"
+}
+```
+</Accordion>
+</AccordionGroup>
+
+## Fetch persisted event history
+
+```ts
+const page = await sdk.getEvents({
+  sessionId: session.id,
+  limit: 50,
+});
+
+for (const event of page.items) {
+  console.log(event.id, event.createdAt, event.sender);
+}
+```
+
+## List and load sessions
+
+```ts
+const sessions = await sdk.listSessions({ limit: 20 });
+
+for (const item of sessions.items) {
+  console.log(item.id, item.agent, item.createdAt);
+}
+
+if (sessions.items.length > 0) {
+  const loaded = await sdk.resumeSession(sessions.items[0]!.id);
+  await loaded.prompt([{ type: "text", text: "Continue." }]);
+}
+```
+
+## Configure model, mode, and thought level
+
+Set the model, mode, or thought level on a session at creation time or after:
+
+```ts
+// At creation time
+const session = await sdk.createSession({
+  agent: "codex",
+  model: "gpt-5.3-codex",
+  mode: "auto",
+  thoughtLevel: "high",
+});
+```
+
+```ts
+// After creation
+await session.setModel("gpt-5.2-codex");
+await session.setMode("full-access");
+await session.setThoughtLevel("medium");
+```
+
+Query available modes:
+
+```ts
+const modes = await session.getModes();
+console.log(modes?.currentModeId, modes?.availableModes);
+```
+
+### Advanced config options
+
+For config options beyond model, mode, and thought level, use `getConfigOptions` to discover what the agent supports and `setConfigOption` to set any option by ID:
+
+```ts
+const options = await session.getConfigOptions();
+for (const opt of options) {
+  console.log(opt.id, opt.category, opt.type);
+}
+```
+
+```ts
+await session.setConfigOption("some-agent-option", "value");
+```
+
+## Handle permission requests
+
+For agents that request tool-use permissions, register a permission listener and reply with `once`, `always`, or `reject`:
+
+```ts
+const session = await sdk.createSession({
+  agent: "claude",
+  mode: "default",
+});
+
+session.onPermissionRequest((request) => {
+  console.log(request.toolCall.title, request.availableReplies);
+  void session.respondPermission(request.id, "once");
+});
+
+await session.prompt([
+  { type: "text", text: "Create ./permission-example.txt with the text hello." },
+]);
+```
+
+
+### Auto-approving permissions
+
+To auto-approve all permission requests, respond with `"once"` or `"always"` in your listener:
+
+```ts
+session.onPermissionRequest((request) => {
+  void session.respondPermission(request.id, "always");
+});
+```
+
+See `examples/permissions/src/index.ts` for a complete permissions example that works with Claude and Codex.
+
+<Info>
+Some agents like Claude allow configuring permission behavior through modes (e.g. `bypassPermissions`, `acceptEdits`). We recommend leaving the mode as `default` and handling permission decisions explicitly in `onPermissionRequest` instead.
+</Info>
+
+## Destroy a session
+
+```ts
+await sdk.destroySession(session.id);
+```

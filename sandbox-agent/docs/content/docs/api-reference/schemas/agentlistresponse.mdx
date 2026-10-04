@@ -1,0 +1,23 @@
+---
+title: "AgentListResponse"
+description: "HTTP API schema for AgentListResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "agents"
+  ],
+  "properties": {
+    "agents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/AgentInfo"
+      }
+    }
+  }
+}
+```
+
+Related schemas: [AgentInfo](/sandbox-agent/docs/api-reference/schemas/agentinfo/).

@@ -1,0 +1,86 @@
+---
+title: "AgentCapabilities"
+description: "HTTP API schema for AgentCapabilities."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "planMode",
+    "permissions",
+    "questions",
+    "toolCalls",
+    "toolResults",
+    "textMessages",
+    "images",
+    "fileAttachments",
+    "sessionLifecycle",
+    "errorEvents",
+    "reasoning",
+    "status",
+    "commandExecution",
+    "fileChanges",
+    "mcpTools",
+    "streamingDeltas",
+    "itemStarted",
+    "sharedProcess"
+  ],
+  "properties": {
+    "commandExecution": {
+      "type": "boolean"
+    },
+    "errorEvents": {
+      "type": "boolean"
+    },
+    "fileAttachments": {
+      "type": "boolean"
+    },
+    "fileChanges": {
+      "type": "boolean"
+    },
+    "images": {
+      "type": "boolean"
+    },
+    "itemStarted": {
+      "type": "boolean"
+    },
+    "mcpTools": {
+      "type": "boolean"
+    },
+    "permissions": {
+      "type": "boolean"
+    },
+    "planMode": {
+      "type": "boolean"
+    },
+    "questions": {
+      "type": "boolean"
+    },
+    "reasoning": {
+      "type": "boolean"
+    },
+    "sessionLifecycle": {
+      "type": "boolean"
+    },
+    "sharedProcess": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "boolean"
+    },
+    "streamingDeltas": {
+      "type": "boolean"
+    },
+    "textMessages": {
+      "type": "boolean"
+    },
+    "toolCalls": {
+      "type": "boolean"
+    },
+    "toolResults": {
+      "type": "boolean"
+    }
+  }
+}
+```

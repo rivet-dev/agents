@@ -1,0 +1,48 @@
+---
+title: "post_v1_fs_mkdir"
+description: "POST /v1/fs/mkdir: request parameters and responses."
+---
+
+`POST /v1/fs/mkdir`
+
+
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `path` | query | Yes | string | Directory path |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "path",
+    "in": "query",
+    "description": "Directory path",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  }
+]
+```
+
+## Responses
+
+### 200
+
+Directory created
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/FsActionResponse"
+  }
+}
+```
+
+Related schemas: [FsActionResponse](/sandbox-agent/docs/api-reference/schemas/fsactionresponse/).

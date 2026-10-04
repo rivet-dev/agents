@@ -48,7 +48,7 @@
 - Every `#[utoipa::path(...)]` handler needs a summary line + description lines in its doc comment.
 - Every `responses(...)` entry must include `description`.
 - Regenerate `docs/openapi.json` after endpoint contract changes.
-- Keep CLI and HTTP endpoint behavior aligned (`docs/cli.mdx`).
+- Keep CLI and HTTP endpoint behavior aligned (`docs/content/docs/cli.mdx`).
 
 ## ACP Protocol Compliance
 

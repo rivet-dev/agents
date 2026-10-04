@@ -4,10 +4,10 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 
-const DOCS_ROOT = path.resolve(__dirname, "..", "..", "docs");
+const DOCS_ROOT = path.resolve(__dirname, "..", "..", "docs", "content", "docs");
 const OUTPUT_ROOT = path.resolve(__dirname, "dist");
 const TEMPLATE_PATH = path.resolve(__dirname, "template", "SKILL.md");
-const DOCS_BASE_URL = "https://sandboxagent.dev/docs";
+const DOCS_BASE_URL = "https://rivet.dev/sandbox-agent/docs";
 
 async function main() {
   if (!fs.existsSync(DOCS_ROOT)) {
@@ -40,7 +40,7 @@ async function main() {
       title,
       description,
       canonicalUrl,
-      sourcePath: `docs/${relPath}`,
+      sourcePath: `sandbox-agent/docs/content/docs/${relPath}`,
       body: markdown,
     });
 
@@ -57,7 +57,7 @@ async function main() {
 
   const quickstart = references.find((ref) => ref.slug === "quickstart");
   if (!quickstart) {
-    throw new Error("Quickstart doc not found. Expected docs/quickstart.mdx");
+    throw new Error("Quickstart doc not found. Expected docs/content/docs/quickstart.mdx");
   }
 
   const quickstartPath = path.join(DOCS_ROOT, "quickstart.mdx");

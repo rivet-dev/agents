@@ -1,0 +1,245 @@
+---
+title: "React Components"
+description: "Drop-in React components for Sandbox Agent frontends."
+icon: "react"
+---
+
+`@sandbox-agent/react` exposes small React components built on top of the `sandbox-agent` SDK.
+
+Current exports:
+
+- `AgentConversation` for a combined transcript + composer surface
+- `ProcessTerminal` for attaching to a running tty process
+- `AgentTranscript` for rendering session/message timelines without bundling any styles
+- `ChatComposer` for a reusable prompt input/send surface
+- `useTranscriptVirtualizer` for wiring large transcript lists to a scroll container
+
+## Install
+
+```bash
+npm install @sandbox-agent/react@0.4.x
+```
+
+## Full example
+
+This example connects to a running Sandbox Agent server, starts a tty shell, renders `ProcessTerminal`, and cleans up the process when the component unmounts.
+
+```tsx TerminalPane.tsx expandable highlight={5,32-36,71}
+"use client";
+
+import { useEffect, useState } from "react";
+import { SandboxAgent } from "sandbox-agent";
+import { ProcessTerminal } from "@sandbox-agent/react";
+
+export default function TerminalPane() {
+  const [client, setClient] = useState<SandboxAgent | null>(null);
+  const [processId, setProcessId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let sdk: SandboxAgent | null = null;
+    let createdProcessId: string | null = null;
+
+    const cleanup = async () => {
+      if (!sdk || !createdProcessId) {
+        return;
+      }
+
+      await sdk.killProcess(createdProcessId, { waitMs: 1_000 }).catch(() => {});
+      await sdk.deleteProcess(createdProcessId).catch(() => {});
+    };
+
+    const start = async () => {
+      try {
+        sdk = await SandboxAgent.connect({
+          baseUrl: "http://127.0.0.1:2468",
+        });
+
+        const process = await sdk.createProcess({
+          command: "sh",
+          interactive: true,
+          tty: true,
+        });
+
+        if (cancelled) {
+          createdProcessId = process.id;
+          await cleanup();
+          await sdk.dispose();
+          return;
+        }
+
+        createdProcessId = process.id;
+        setClient(sdk);
+        setProcessId(process.id);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to start terminal.";
+        setError(message);
+      }
+    };
+
+    void start();
+
+    return () => {
+      cancelled = true;
+      void cleanup();
+      void sdk?.dispose();
+    };
+  }, []);
+
+  if (error) {
+    return <div>{error}</div>;
+  }
+
+  if (!client || !processId) {
+    return <div>Starting terminal...</div>;
+  }
+
+  return <ProcessTerminal client={client} processId={processId} height={480} />;
+}
+```
+
+## Component
+
+`ProcessTerminal` attaches to a running tty process.
+
+- `client`: a `SandboxAgent` client
+- `processId`: the process to attach to
+- `height`, `style`, `terminalStyle`: optional layout overrides
+- `onExit`, `onError`: optional lifecycle callbacks
+
+See [Processes](/sandbox-agent/docs/processes) for the lower-level terminal APIs.
+
+## Headless transcript
+
+`AgentTranscript` is intentionally unstyled. It follows the common headless React pattern used by libraries like Radix, Headless UI, and React Aria: behavior lives in the component, while styling stays in your app through `className`, slot-level `classNames`, and `data-*` state attributes on the rendered DOM.
+
+```tsx TranscriptPane.tsx
+import {
+  AgentTranscript,
+  type AgentTranscriptClassNames,
+  type TranscriptEntry,
+} from "@sandbox-agent/react";
+
+const transcriptClasses: Partial<AgentTranscriptClassNames> = {
+  root: "transcript",
+  message: "transcript-message",
+  messageContent: "transcript-message-content",
+  toolGroupContainer: "transcript-tools",
+  toolGroupHeader: "transcript-tools-header",
+  toolItem: "transcript-tool-item",
+  toolItemHeader: "transcript-tool-item-header",
+  toolItemBody: "transcript-tool-item-body",
+  divider: "transcript-divider",
+  dividerText: "transcript-divider-text",
+  error: "transcript-error",
+};
+
+export function TranscriptPane({ entries }: { entries: TranscriptEntry[] }) {
+  return (
+    <AgentTranscript
+      entries={entries}
+      classNames={transcriptClasses}
+      renderMessageText={(entry) => <div>{entry.text}</div>}
+      renderInlinePendingIndicator={() => <span>...</span>}
+      renderToolGroupIcon={() => <span>Events</span>}
+      renderChevron={(expanded) => <span>{expanded ? "Hide" : "Show"}</span>}
+    />
+  );
+}
+```
+
+```css
+.transcript {
+  display: grid;
+  gap: 12px;
+}
+
+.transcript [data-slot="message"][data-variant="user"] .transcript-message-content {
+  background: #161616;
+  color: white;
+}
+
+.transcript [data-slot="message"][data-variant="assistant"] .transcript-message-content {
+  background: #f4f4f0;
+  color: #161616;
+}
+
+.transcript [data-slot="tool-item"][data-failed="true"] {
+  border-color: #d33;
+}
+
+.transcript [data-slot="tool-item-header"][data-expanded="true"] {
+  background: rgba(0, 0, 0, 0.06);
+}
+```
+
+`AgentTranscript` accepts `TranscriptEntry[]`, which matches the Inspector timeline shape:
+
+- `message` entries render user/assistant text
+- `tool` entries render expandable tool input/output sections
+- `reasoning` entries render expandable reasoning blocks
+- `meta` entries render status rows or expandable metadata details
+
+Useful props:
+
+- `className`: root class hook
+- `classNames`: slot-level class hooks for styling from outside the package
+- `scrollRef` + `virtualize`: opt into TanStack Virtual against an external scroll container
+- `renderMessageText`: custom text or markdown renderer
+- `renderToolItemIcon`, `renderToolGroupIcon`, `renderChevron`, `renderEventLinkContent`: presentation overrides
+- `renderInlinePendingIndicator`, `renderThinkingState`: loading/thinking UI overrides
+- `isDividerEntry`, `canOpenEvent`, `getToolGroupSummary`: behavior overrides for grouping and labels
+
+## Transcript virtualization hook
+
+`useTranscriptVirtualizer` exposes the same TanStack Virtual behavior used by `AgentTranscript` when `virtualize` is enabled.
+
+- Pass the grouped transcript rows you want to virtualize
+- Pass a `scrollRef` that points at the actual scrollable element
+- Use it when you need transcript-aware virtualization outside the stock `AgentTranscript` renderer
+
+## Composer and conversation
+
+`ChatComposer` is the headless message input. `AgentConversation` composes `AgentTranscript` and `ChatComposer` so apps can reuse the transcript/composer pairing without pulling in Inspector session chrome.
+
+```tsx ConversationPane.tsx
+import { AgentConversation, type TranscriptEntry } from "@sandbox-agent/react";
+
+export function ConversationPane({
+  entries,
+  message,
+  onMessageChange,
+  onSubmit,
+}: {
+  entries: TranscriptEntry[];
+  message: string;
+  onMessageChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <AgentConversation
+      entries={entries}
+      emptyState={<div>Start the conversation.</div>}
+      transcriptProps={{
+        renderMessageText: (entry) => <div>{entry.text}</div>,
+      }}
+      composerProps={{
+        message,
+        onMessageChange,
+        onSubmit,
+        placeholder: "Send a message...",
+      }}
+    />
+  );
+}
+```
+
+Useful `ChatComposer` props:
+
+- `className` and `classNames` for external styling
+- `inputRef` to manage focus or autoresize from the consumer
+- `textareaProps` for lower-level textarea behavior
+- `allowEmptySubmit` when the submit action is valid without draft text, such as a stop button
+
+Use `transcriptProps` and `composerProps` when you want the shared composition but still need custom rendering or behavior. Use `transcriptClassNames` and `composerClassNames` when you want styling hooks for each subcomponent.

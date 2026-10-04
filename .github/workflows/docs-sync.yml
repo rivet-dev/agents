@@ -9,7 +9,12 @@ name: Sync docs
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "examples/**", ".github/workflows/docs-sync.yml"]
+    paths:
+      - "docs/**"
+      - "examples/**"
+      - "sandbox-agent/docs/**"
+      - "sandbox-agent/scripts/generate-api-docs.mjs"
+      - ".github/workflows/docs-sync.yml"
   workflow_dispatch:
 
 jobs:
@@ -22,3 +27,17 @@ jobs:
           product: agents
           token: ${{ secrets.RIVET_WEBSITE_TOKEN }}
           extra-paths: examples
+
+  sync-sandbox-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node sandbox-agent/scripts/generate-api-docs.mjs
+      - uses: rivet-dev/website/.github/actions/sync-docs@main
+        with:
+          product: sandbox-agent
+          source: sandbox-agent/docs
+          token: ${{ secrets.RIVET_WEBSITE_TOKEN }}

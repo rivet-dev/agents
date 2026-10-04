@@ -1,0 +1,71 @@
+---
+title: "DesktopStatusResponse"
+description: "HTTP API schema for DesktopStatusResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "state"
+  ],
+  "properties": {
+    "display": {
+      "type": "string",
+      "nullable": true
+    },
+    "installCommand": {
+      "type": "string",
+      "nullable": true
+    },
+    "lastError": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/DesktopErrorInfo"
+        }
+      ],
+      "nullable": true
+    },
+    "missingDependencies": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "processes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/DesktopProcessInfo"
+      }
+    },
+    "resolution": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/DesktopResolution"
+        }
+      ],
+      "nullable": true
+    },
+    "runtimeLogPath": {
+      "type": "string",
+      "nullable": true
+    },
+    "startedAt": {
+      "type": "string",
+      "nullable": true
+    },
+    "state": {
+      "$ref": "#/components/schemas/DesktopState"
+    },
+    "windows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/DesktopWindowInfo"
+      },
+      "description": "Current visible windows (included when the desktop is active)."
+    }
+  }
+}
+```
+
+Related schemas: [DesktopErrorInfo](/sandbox-agent/docs/api-reference/schemas/desktoperrorinfo/), [DesktopProcessInfo](/sandbox-agent/docs/api-reference/schemas/desktopprocessinfo/), [DesktopResolution](/sandbox-agent/docs/api-reference/schemas/desktopresolution/), [DesktopState](/sandbox-agent/docs/api-reference/schemas/desktopstate/), [DesktopWindowInfo](/sandbox-agent/docs/api-reference/schemas/desktopwindowinfo/).

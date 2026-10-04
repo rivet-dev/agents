@@ -1,0 +1,28 @@
+---
+title: "DesktopKeyboardPressRequest"
+description: "HTTP API schema for DesktopKeyboardPressRequest."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "key"
+  ],
+  "properties": {
+    "key": {
+      "type": "string"
+    },
+    "modifiers": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/DesktopKeyModifiers"
+        }
+      ],
+      "nullable": true
+    }
+  }
+}
+```
+
+Related schemas: [DesktopKeyModifiers](/sandbox-agent/docs/api-reference/schemas/desktopkeymodifiers/).

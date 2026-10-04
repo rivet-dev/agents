@@ -1,0 +1,37 @@
+---
+title: "ProcessLogsQuery"
+description: "HTTP API schema for ProcessLogsQuery."
+---
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "follow": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "since": {
+      "type": "integer",
+      "format": "int64",
+      "nullable": true,
+      "minimum": 0
+    },
+    "stream": {
+      "allOf": [
+        {
+          "$ref": "#/components/schemas/ProcessLogsStream"
+        }
+      ],
+      "nullable": true
+    },
+    "tail": {
+      "type": "integer",
+      "nullable": true,
+      "minimum": 0
+    }
+  }
+}
+```
+
+Related schemas: [ProcessLogsStream](/sandbox-agent/docs/api-reference/schemas/processlogsstream/).

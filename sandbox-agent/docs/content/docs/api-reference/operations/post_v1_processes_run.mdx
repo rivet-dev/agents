@@ -1,0 +1,77 @@
+---
+title: "Run a one-shot command."
+description: "POST /v1/processes/run: request parameters and responses."
+---
+
+`POST /v1/processes/run`
+
+Executes a command to completion and returns its stdout, stderr, exit code,
+and duration. Supports configurable timeout and output size limits.
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessRunRequest"
+  }
+}
+```
+
+Related schemas: [ProcessRunRequest](/sandbox-agent/docs/api-reference/schemas/processrunrequest/).
+
+## Responses
+
+### 200
+
+One-off command result
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessRunResponse"
+  }
+}
+```
+
+Related schemas: [ProcessRunResponse](/sandbox-agent/docs/api-reference/schemas/processrunresponse/).
+
+### 400
+
+Invalid request
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 501
+
+Process API unsupported on this platform
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

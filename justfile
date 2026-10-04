@@ -4,4 +4,4 @@
 # scripts/release/main.ts for the phases.
 [group('release')]
 release *ARGS:
-	cd scripts/release && pnpm exec tsx ./main.ts --phase setup-local {{ ARGS }}
+	pnpm exec tsx ./scripts/release/main.ts {{ ARGS }}

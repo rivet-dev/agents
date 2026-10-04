@@ -7,7 +7,15 @@ import { $ } from "execa";
 import * as semver from "semver";
 import { buildJsArtifacts } from "./build-artifacts";
 import { tagDocker } from "./docker";
-import { createAndPushTag, createGitHubRelease, validateGit } from "./git";
+import {
+	commitAndPush,
+	configureVcs,
+	createAndPushTag,
+	createGitHubRelease,
+	getCurrentBookmark,
+	getCurrentRevision,
+	validateGit,
+} from "./git";
 import { promoteArtifacts } from "./promote-artifacts";
 import { publishCrates, publishNpmCli, publishNpmLibraries } from "./sdk";
 import { updateVersion } from "./update_version";
@@ -368,6 +376,12 @@ const PHASE_MAP: Record<Phase, Step[]> = {
 };
 
 async function main() {
+	if (await configureVcs(REPO_ROOT)) {
+		const { stdout } = await $({ cwd: REPO_ROOT })`jj git root`;
+		// Git metadata and gh must use this workspace's backing repository,
+		// while revision and bookmark selection use jj explicitly.
+		process.env.GIT_DIR = stdout.trim();
+	}
 	// Setup commander
 	program
 		.name("release")
@@ -401,9 +415,7 @@ async function main() {
 
 	// Parse requested steps
 	if (!opts.phase && !opts.onlySteps) {
-		throw new Error(
-			"Must provide either --phase or --only-steps. Run with --help for more information.",
-		);
+		opts.phase = "setup-local";
 	}
 
 	if (opts.phase && opts.onlySteps) {
@@ -481,8 +493,7 @@ async function main() {
 		commit = opts.overrideCommit;
 	} else {
 		// Read commit
-		const result = await $`git rev-parse HEAD`;
-		commit = result.stdout.trim();
+		commit = await getCurrentRevision(REPO_ROOT);
 	}
 
 	const releaseOpts: ReleaseOpts = {
@@ -520,8 +531,7 @@ async function main() {
 		}
 
 		// Get current branch
-		const branchResult = await $`git rev-parse --abbrev-ref HEAD`;
-		const branch = branchResult.stdout.trim();
+		const branch = await getCurrentBookmark(REPO_ROOT);
 		console.log(`  Branch: ${branch}`);
 
 		// Get and display recent versions
@@ -577,31 +587,18 @@ async function main() {
 	if (shouldRunStep("git-commit")) {
 		assert(opts.validateGit, "cannot commit without git validation");
 		console.log("==> Committing Changes");
-		await $({ stdio: "inherit", cwd: releaseOpts.repoRoot })`git add .`;
-		await $({
-			stdio: "inherit",
-			shell: true,
-		})`git commit --allow-empty -m "chore(release): update version to ${releaseOpts.version}"`;
+		await commitAndPush(releaseOpts, false);
 	}
 
 	if (shouldRunStep("git-push")) {
 		assert(opts.validateGit, "cannot push without git validation");
 		console.log("==> Pushing Commits");
-		const branchResult = await $`git rev-parse --abbrev-ref HEAD`;
-		const branch = branchResult.stdout.trim();
-		if (branch === "main") {
-			// Push on main
-			await $({ stdio: "inherit" })`git push`;
-		} else {
-			// Modify current branch
-			await $({ stdio: "inherit" })`gt submit --force --no-edit --publish`;
-		}
+		await commitAndPush(releaseOpts, true);
 	}
 
 	if (shouldRunStep("trigger-workflow")) {
 		console.log("==> Triggering Workflow");
-		const branchResult = await $`git rev-parse --abbrev-ref HEAD`;
-		const branch = branchResult.stdout.trim();
+		const branch = await getCurrentBookmark(REPO_ROOT);
 		const latestFlag = releaseOpts.latest ? "true" : "false";
 
 		// Build workflow command

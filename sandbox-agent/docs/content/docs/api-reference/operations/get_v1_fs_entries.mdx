@@ -1,0 +1,52 @@
+---
+title: "get_v1_fs_entries"
+description: "GET /v1/fs/entries: request parameters and responses."
+---
+
+`GET /v1/fs/entries`
+
+
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `path` | query | No | string | Directory path |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "path",
+    "in": "query",
+    "description": "Directory path",
+    "required": false,
+    "schema": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+]
+```
+
+## Responses
+
+### 200
+
+Directory entries
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "type": "array",
+    "items": {
+      "$ref": "#/components/schemas/FsEntry"
+    }
+  }
+}
+```
+
+Related schemas: [FsEntry](/sandbox-agent/docs/api-reference/schemas/fsentry/).

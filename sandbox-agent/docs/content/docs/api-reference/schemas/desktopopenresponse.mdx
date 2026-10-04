@@ -1,0 +1,24 @@
+---
+title: "DesktopOpenResponse"
+description: "HTTP API schema for DesktopOpenResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "processId"
+  ],
+  "properties": {
+    "pid": {
+      "type": "integer",
+      "format": "int32",
+      "nullable": true,
+      "minimum": 0
+    },
+    "processId": {
+      "type": "string"
+    }
+  }
+}
+```

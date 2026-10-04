@@ -1,0 +1,530 @@
+{
+  "docs": [
+    {
+      "title": "Overview",
+      "href": "/sandbox-agent/docs"
+    },
+    {
+      "title": "Getting started",
+      "pages": [
+        {
+          "title": "Quickstart",
+          "href": "/sandbox-agent/docs/quickstart"
+        },
+        {
+          "title": "SDK Overview",
+          "href": "/sandbox-agent/docs/sdk-overview"
+        },
+        {
+          "title": "LLM Credentials",
+          "href": "/sandbox-agent/docs/llm-credentials"
+        },
+        {
+          "title": "React Components",
+          "href": "/sandbox-agent/docs/react-components"
+        },
+        {
+          "title": "Deploy",
+          "pages": [
+            {
+              "title": "Local",
+              "href": "/sandbox-agent/docs/deploy/local"
+            },
+            {
+              "title": "E2B",
+              "href": "/sandbox-agent/docs/deploy/e2b"
+            },
+            {
+              "title": "Daytona",
+              "href": "/sandbox-agent/docs/deploy/daytona"
+            },
+            {
+              "title": "Agent Computer",
+              "href": "/sandbox-agent/docs/deploy/agentcomputer"
+            },
+            {
+              "title": "Vercel",
+              "href": "/sandbox-agent/docs/deploy/vercel"
+            },
+            {
+              "title": "Cloudflare",
+              "href": "/sandbox-agent/docs/deploy/cloudflare"
+            },
+            {
+              "title": "Docker",
+              "href": "/sandbox-agent/docs/deploy/docker"
+            },
+            {
+              "title": "Modal",
+              "href": "/sandbox-agent/docs/deploy/modal"
+            },
+            {
+              "title": "BoxLite",
+              "href": "/sandbox-agent/docs/deploy/boxlite"
+            },
+            {
+              "title": "ComputeSDK",
+              "href": "/sandbox-agent/docs/deploy/computesdk"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Agent",
+      "pages": [
+        {
+          "title": "Agent Sessions",
+          "href": "/sandbox-agent/docs/agent-sessions"
+        },
+        {
+          "title": "Session Persistence",
+          "href": "/sandbox-agent/docs/session-persistence"
+        },
+        {
+          "title": "Multiplayer",
+          "href": "/sandbox-agent/docs/multiplayer"
+        },
+        {
+          "title": "Orchestration Architecture",
+          "href": "/sandbox-agent/docs/orchestration-architecture"
+        },
+        {
+          "title": "Agents",
+          "pages": [
+            {
+              "title": "Claude",
+              "href": "/sandbox-agent/docs/agents/claude"
+            },
+            {
+              "title": "Codex",
+              "href": "/sandbox-agent/docs/agents/codex"
+            },
+            {
+              "title": "OpenCode",
+              "href": "/sandbox-agent/docs/agents/opencode"
+            },
+            {
+              "title": "Cursor",
+              "href": "/sandbox-agent/docs/agents/cursor"
+            },
+            {
+              "title": "Amp",
+              "href": "/sandbox-agent/docs/agents/amp"
+            },
+            {
+              "title": "Pi",
+              "href": "/sandbox-agent/docs/agents/pi"
+            }
+          ]
+        },
+        {
+          "title": "Attachments",
+          "href": "/sandbox-agent/docs/attachments"
+        },
+        {
+          "title": "Skills",
+          "href": "/sandbox-agent/docs/skills-config"
+        },
+        {
+          "title": "MCP",
+          "href": "/sandbox-agent/docs/mcp-config"
+        },
+        {
+          "title": "Custom Tools",
+          "href": "/sandbox-agent/docs/custom-tools"
+        }
+      ]
+    },
+    {
+      "title": "System",
+      "pages": [
+        {
+          "title": "File System",
+          "href": "/sandbox-agent/docs/file-system"
+        },
+        {
+          "title": "Processes",
+          "href": "/sandbox-agent/docs/processes"
+        },
+        {
+          "title": "Computer Use",
+          "href": "/sandbox-agent/docs/computer-use"
+        },
+        {
+          "title": "Common Software",
+          "href": "/sandbox-agent/docs/common-software"
+        }
+      ]
+    },
+    {
+      "title": "Reference",
+      "pages": [
+        {
+          "title": "Troubleshooting",
+          "href": "/sandbox-agent/docs/troubleshooting"
+        },
+        {
+          "title": "Architecture",
+          "href": "/sandbox-agent/docs/architecture"
+        },
+        {
+          "title": "CLI Reference",
+          "href": "/sandbox-agent/docs/cli"
+        },
+        {
+          "title": "Inspector",
+          "href": "/sandbox-agent/docs/inspector"
+        },
+        {
+          "title": "OpenCode Compatibility",
+          "href": "/sandbox-agent/docs/opencode-compatibility"
+        },
+        {
+          "title": "More",
+          "pages": [
+            {
+              "title": "Daemon",
+              "href": "/sandbox-agent/docs/daemon"
+            },
+            {
+              "title": "CORS Configuration",
+              "href": "/sandbox-agent/docs/cors"
+            },
+            {
+              "title": "Session Restoration",
+              "href": "/sandbox-agent/docs/session-restoration"
+            },
+            {
+              "title": "Telemetry",
+              "href": "/sandbox-agent/docs/telemetry"
+            },
+            {
+              "title": "AI",
+              "pages": [
+                {
+                  "title": "skill.md",
+                  "href": "/sandbox-agent/docs/ai/skill"
+                },
+                {
+                  "title": "llms.txt",
+                  "href": "/sandbox-agent/docs/ai/llms-txt"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Manage Sessions",
+          "href": "/sandbox-agent/docs/manage-sessions"
+        },
+        {
+          "title": "Observability",
+          "href": "/sandbox-agent/docs/observability"
+        },
+        {
+          "title": "Security",
+          "href": "/sandbox-agent/docs/security"
+        }
+      ]
+    },
+    {
+      "title": "HTTP API",
+      "pages": [
+        {
+          "title": "Overview",
+          "href": "/sandbox-agent/docs/api-reference"
+        },
+        {
+          "title": "v1",
+          "pages": [
+            {
+              "title": "get_v1_acp_servers",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_acp_servers"
+            },
+            {
+              "title": "get_v1_acp",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_acp"
+            },
+            {
+              "title": "post_v1_acp",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_acp"
+            },
+            {
+              "title": "delete_v1_acp",
+              "href": "/sandbox-agent/docs/api-reference/operations/delete_v1_acp"
+            },
+            {
+              "title": "get_v1_agents",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_agents"
+            },
+            {
+              "title": "get_v1_agent",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_agent"
+            },
+            {
+              "title": "post_v1_agent_install",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_agent_install"
+            },
+            {
+              "title": "get_v1_config_mcp",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_config_mcp"
+            },
+            {
+              "title": "put_v1_config_mcp",
+              "href": "/sandbox-agent/docs/api-reference/operations/put_v1_config_mcp"
+            },
+            {
+              "title": "delete_v1_config_mcp",
+              "href": "/sandbox-agent/docs/api-reference/operations/delete_v1_config_mcp"
+            },
+            {
+              "title": "get_v1_config_skills",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_config_skills"
+            },
+            {
+              "title": "put_v1_config_skills",
+              "href": "/sandbox-agent/docs/api-reference/operations/put_v1_config_skills"
+            },
+            {
+              "title": "delete_v1_config_skills",
+              "href": "/sandbox-agent/docs/api-reference/operations/delete_v1_config_skills"
+            },
+            {
+              "title": "Read the desktop clipboard.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_clipboard"
+            },
+            {
+              "title": "Write to the desktop clipboard.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_clipboard"
+            },
+            {
+              "title": "Get desktop display information.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_display_info"
+            },
+            {
+              "title": "Press and hold a desktop keyboard key.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_keyboard_down"
+            },
+            {
+              "title": "Press a desktop keyboard shortcut.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_keyboard_press"
+            },
+            {
+              "title": "Type desktop keyboard text.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_keyboard_type"
+            },
+            {
+              "title": "Release a desktop keyboard key.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_keyboard_up"
+            },
+            {
+              "title": "Launch a desktop application.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_launch"
+            },
+            {
+              "title": "Click on the desktop.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_click"
+            },
+            {
+              "title": "Press and hold a desktop mouse button.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_down"
+            },
+            {
+              "title": "Drag the desktop mouse.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_drag"
+            },
+            {
+              "title": "Move the desktop mouse.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_move"
+            },
+            {
+              "title": "Get the current desktop mouse position.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_mouse_position"
+            },
+            {
+              "title": "Scroll the desktop mouse wheel.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_scroll"
+            },
+            {
+              "title": "Release a desktop mouse button.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_up"
+            },
+            {
+              "title": "Open a file or URL with the default handler.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_open"
+            },
+            {
+              "title": "Start desktop recording.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_recording_start"
+            },
+            {
+              "title": "Stop desktop recording.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_recording_stop"
+            },
+            {
+              "title": "List desktop recordings.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_recordings"
+            },
+            {
+              "title": "Get desktop recording metadata.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_recording"
+            },
+            {
+              "title": "Delete a desktop recording.",
+              "href": "/sandbox-agent/docs/api-reference/operations/delete_v1_desktop_recording"
+            },
+            {
+              "title": "Download a desktop recording.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_recording_download"
+            },
+            {
+              "title": "Capture a full desktop screenshot.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_screenshot"
+            },
+            {
+              "title": "Capture a desktop screenshot region.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_screenshot_region"
+            },
+            {
+              "title": "Start the private desktop runtime.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_start"
+            },
+            {
+              "title": "Get desktop runtime status.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_status"
+            },
+            {
+              "title": "Stop the private desktop runtime.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_stop"
+            },
+            {
+              "title": "Open a desktop WebRTC signaling session.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_stream_ws"
+            },
+            {
+              "title": "Start desktop streaming.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_stream_start"
+            },
+            {
+              "title": "Get desktop stream status.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_stream_status"
+            },
+            {
+              "title": "Stop desktop streaming.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_stream_stop"
+            },
+            {
+              "title": "List visible desktop windows.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_windows"
+            },
+            {
+              "title": "Get the currently focused desktop window.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_desktop_windows_focused"
+            },
+            {
+              "title": "Focus a desktop window.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_window_focus"
+            },
+            {
+              "title": "Move a desktop window.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_window_move"
+            },
+            {
+              "title": "Resize a desktop window.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_desktop_window_resize"
+            },
+            {
+              "title": "get_v1_fs_entries",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_fs_entries"
+            },
+            {
+              "title": "delete_v1_fs_entry",
+              "href": "/sandbox-agent/docs/api-reference/operations/delete_v1_fs_entry"
+            },
+            {
+              "title": "get_v1_fs_file",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_fs_file"
+            },
+            {
+              "title": "put_v1_fs_file",
+              "href": "/sandbox-agent/docs/api-reference/operations/put_v1_fs_file"
+            },
+            {
+              "title": "post_v1_fs_mkdir",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_fs_mkdir"
+            },
+            {
+              "title": "post_v1_fs_move",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_fs_move"
+            },
+            {
+              "title": "get_v1_fs_stat",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_fs_stat"
+            },
+            {
+              "title": "post_v1_fs_upload_batch",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_fs_upload_batch"
+            },
+            {
+              "title": "get_v1_health",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_health"
+            },
+            {
+              "title": "List all managed processes.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_processes"
+            },
+            {
+              "title": "Create a long-lived managed process.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_processes"
+            },
+            {
+              "title": "Get process runtime configuration.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_processes_config"
+            },
+            {
+              "title": "Update process runtime configuration.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_processes_config"
+            },
+            {
+              "title": "Run a one-shot command.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_processes_run"
+            },
+            {
+              "title": "Get a single process by ID.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_process"
+            },
+            {
+              "title": "Delete a process record.",
+              "href": "/sandbox-agent/docs/api-reference/operations/delete_v1_process"
+            },
+            {
+              "title": "Write input to a process.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_process_input"
+            },
+            {
+              "title": "Send SIGKILL to a process.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_process_kill"
+            },
+            {
+              "title": "Fetch process logs.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_process_logs"
+            },
+            {
+              "title": "Send SIGTERM to a process.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_process_stop"
+            },
+            {
+              "title": "Resize a process terminal.",
+              "href": "/sandbox-agent/docs/api-reference/operations/post_v1_process_terminal_resize"
+            },
+            {
+              "title": "Open an interactive WebSocket terminal session.",
+              "href": "/sandbox-agent/docs/api-reference/operations/get_v1_process_terminal_ws"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

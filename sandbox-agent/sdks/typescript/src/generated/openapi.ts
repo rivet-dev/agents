@@ -3,6 +3,7 @@
  * Do not make direct changes to the file.
  */
 
+
 export interface paths {
   "/v1/acp": {
     get: operations["get_v1_acp_servers"];
@@ -753,23 +754,7 @@ export interface components {
       width: number;
     };
     /** @enum {string} */
-    ErrorType:
-      | "invalid_request"
-      | "conflict"
-      | "unsupported_agent"
-      | "agent_not_installed"
-      | "install_failed"
-      | "agent_process_exited"
-      | "token_invalid"
-      | "permission_denied"
-      | "not_acceptable"
-      | "unsupported_media_type"
-      | "not_found"
-      | "session_not_found"
-      | "session_already_exists"
-      | "mode_not_supported"
-      | "stream_error"
-      | "timeout";
+    ErrorType: "invalid_request" | "conflict" | "unsupported_agent" | "agent_not_installed" | "install_failed" | "agent_process_exited" | "token_invalid" | "permission_denied" | "not_acceptable" | "unsupported_media_type" | "not_found" | "session_not_found" | "session_already_exists" | "mode_not_supported" | "stream_error" | "timeout";
     FsActionResponse: {
       path: string;
     };
@@ -828,37 +813,35 @@ export interface components {
       directory: string;
       mcpName: string;
     };
-    McpServerConfig:
-      | {
-          args?: string[];
-          command: string;
-          cwd?: string | null;
-          enabled?: boolean | null;
-          env?: {
-            [key: string]: string;
-          } | null;
-          /** Format: int64 */
-          timeoutMs?: number | null;
-          /** @enum {string} */
-          type: "local";
-        }
-      | {
-          bearerTokenEnvVar?: string | null;
-          enabled?: boolean | null;
-          envHeaders?: {
-            [key: string]: string;
-          } | null;
-          headers?: {
-            [key: string]: string;
-          } | null;
-          oauth?: Record<string, unknown> | null | null;
-          /** Format: int64 */
-          timeoutMs?: number | null;
-          transport?: string | null;
-          /** @enum {string} */
-          type: "remote";
-          url: string;
-        };
+    McpServerConfig: ({
+      args?: string[];
+      command: string;
+      cwd?: string | null;
+      enabled?: boolean | null;
+      env?: {
+        [key: string]: string;
+      } | null;
+      /** Format: int64 */
+      timeoutMs?: number | null;
+      /** @enum {string} */
+      type: "local";
+    }) | ({
+      bearerTokenEnvVar?: string | null;
+      enabled?: boolean | null;
+      envHeaders?: {
+        [key: string]: string;
+      } | null;
+      headers?: {
+        [key: string]: string;
+      } | null;
+      oauth?: Record<string, unknown> | null | null;
+      /** Format: int64 */
+      timeoutMs?: number | null;
+      transport?: string | null;
+      /** @enum {string} */
+      type: "remote";
+      url: string;
+    });
     ProblemDetails: {
       detail?: string | null;
       instance?: string | null;
@@ -1027,6 +1010,7 @@ export type $defs = Record<string, never>;
 export type external = Record<string, never>;
 
 export interface operations {
+
   get_v1_acp_servers: {
     responses: {
       /** @description Active ACP server instances */
