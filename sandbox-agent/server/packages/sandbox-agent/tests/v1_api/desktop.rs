@@ -12,16 +12,29 @@ fn png_dimensions(bytes: &[u8]) -> (u32, u32) {
     (width, height)
 }
 
-async fn recv_ws_message(
+async fn recv_ws_event(
     ws: &mut tokio_tungstenite::WebSocketStream<
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
-) -> Message {
-    tokio::time::timeout(Duration::from_secs(5), ws.next())
-        .await
-        .expect("timed out waiting for websocket frame")
-        .expect("websocket stream ended")
-        .expect("websocket frame")
+    event: &str,
+) -> Value {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let message = ws
+                .next()
+                .await
+                .expect("websocket stream ended")
+                .expect("websocket frame");
+            if let Message::Text(text) = message {
+                let value: Value = serde_json::from_str(&text).expect("signaling JSON");
+                if value["event"] == event {
+                    return value["payload"].clone();
+                }
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for signaling event")
 }
 
 #[tokio::test]
@@ -432,38 +445,41 @@ async fn v1_desktop_lifecycle_and_actions_work_with_real_runtime() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(parse_json(&body)["active"], true);
 
-    let (mut ws, _) = connect_async(test_app.app.ws_url("/v1/desktop/stream/ws"))
+    let (mut ws, _) = connect_async(test_app.app.ws_url("/v1/desktop/stream/signaling"))
         .await
-        .expect("connect desktop stream websocket");
+        .expect("connect desktop stream signaling");
 
-    let ready = recv_ws_message(&mut ws).await;
-    match ready {
-        Message::Text(text) => {
-            let value: Value = serde_json::from_str(&text).expect("desktop stream ready frame");
-            assert_eq!(value["type"], "ready");
-            assert_eq!(value["width"], 1440);
-            assert_eq!(value["height"], 900);
-        }
-        other => panic!("expected text ready frame, got {other:?}"),
+    let ready = recv_ws_event(&mut ws, "system/init").await;
+    assert_eq!(ready["screen_size"]["width"], 1440);
+    assert_eq!(ready["screen_size"]["height"], 900);
+
+    // Follow the SDK's Neko signaling handshake. Media travels over WebRTC,
+    // not as JPEG frames or mouse commands on the signaling WebSocket.
+    for message in [
+        json!({ "event": "control/request", "payload": {} }),
+        json!({ "event": "signal/request", "payload": { "video": {}, "audio": {} } }),
+    ] {
+        ws.send(Message::Text(message.to_string().into()))
+            .await
+            .expect("send desktop signaling request");
     }
+    let offer = recv_ws_event(&mut ws, "signal/provide").await;
+    let sdp = offer["sdp"].as_str().expect("WebRTC SDP offer");
+    assert!(sdp.starts_with("v=0"));
+    assert!(sdp.contains("m=video"));
 
-    let frame = recv_ws_message(&mut ws).await;
-    match frame {
-        Message::Binary(bytes) => assert!(bytes.starts_with(&[0xff, 0xd8, 0xff])),
-        other => panic!("expected binary jpeg frame, got {other:?}"),
-    }
-
-    ws.send(Message::Text(
-        json!({
-            "type": "moveMouse",
-            "x": 320,
-            "y": 330
-        })
-        .to_string()
-        .into(),
-    ))
-    .await
-    .expect("send desktop stream mouse move");
+    let (status, _, body) = send_request(
+        &test_app.app,
+        Method::POST,
+        "/v1/desktop/mouse/move",
+        Some(json!({ "x": 320, "y": 330 })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let mouse = parse_json(&body);
+    assert_eq!(mouse["x"], 320);
+    assert_eq!(mouse["y"], 330);
     let _ = ws.close(None).await;
 
     let (status, _, body) = send_request(
