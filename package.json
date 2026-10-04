@@ -5,8 +5,13 @@
 	"packageManager": "pnpm@9.15.0",
 	"scripts": {
 		"prepare": "git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true",
+		"build": "pnpm -r --filter './packages/*' build",
+		"check-types": "pnpm -r --if-present check-types",
+		"test": "pnpm -r --filter './packages/*' --if-present test",
 		"lint": "pnpm biome check .",
-		"fmt": "pnpm biome check --write --diagnostic-level=error ."
+		"fmt": "pnpm biome check --write --diagnostic-level=error .",
+		"check-boundaries": "node scripts/check-boundaries.mjs",
+		"test:packed": "node scripts/test-packed.mjs"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.10",

@@ -122,6 +122,8 @@ async function crateVersionExists(
 interface NpmPackageInfo {
 	name: string;
 	dir: string;
+	/** pnpm workspace root that owns the package. Builds run from here. */
+	workspaceRoot: string;
 	hasBuildScript: boolean;
 	localDeps: string[];
 }
@@ -150,6 +152,7 @@ async function discoverNpmPackages(
 			packages.push({
 				name: pkg.name,
 				dir: dirname(fullPath),
+				workspaceRoot: root,
 				hasBuildScript: !!pkg.scripts?.build,
 				localDeps,
 			});
@@ -281,18 +284,26 @@ export async function publishCrates(opts: ReleaseOpts) {
  */
 export async function publishNpmLibraries(opts: ReleaseOpts) {
 	console.log("==> Discovering library packages");
-	const all = await discoverNpmPackages(opts.sandboxAgentRoot, [
+	const sandboxAgentSdks = await discoverNpmPackages(opts.sandboxAgentRoot, [
 		"sdks/*/package.json",
 	]);
 
 	// Exclude CLI and gigacode directories (handled by publishNpmCli)
-	const libraries = all.filter((p) => {
+	const sandboxAgentLibraries = sandboxAgentSdks.filter((p) => {
 		const rel = relative(opts.sandboxAgentRoot, p.dir);
 		return (
 			!(rel === "sdks/cli" || rel.startsWith("sdks/cli/")) &&
 			!(rel === "sdks/gigacode" || rel.startsWith("sdks/gigacode/"))
 		);
 	});
+
+	// Root workspace packages (for example @rivet-dev/pi) ship on the same
+	// version line.
+	const rootLibraries = await discoverNpmPackages(opts.repoRoot, [
+		"packages/*/package.json",
+	]);
+
+	const libraries = [...sandboxAgentLibraries, ...rootLibraries];
 
 	const sorted = topoSort(libraries);
 
@@ -319,7 +330,7 @@ export async function publishNpmLibraries(opts: ReleaseOpts) {
 			console.log(`==> Building ${pkg.name}`);
 			await $({
 				stdio: "inherit",
-				cwd: opts.sandboxAgentRoot,
+				cwd: pkg.workspaceRoot,
 			})`pnpm --filter ${pkg.name} build`;
 		}
 

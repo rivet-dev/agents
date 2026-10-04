@@ -96,16 +96,20 @@ export async function updateVersion(opts: ReleaseOpts) {
 	await fs.writeFile(cargoTomlPath, cargoContent);
 	await $({ cwd: opts.sandboxAgentRoot })`git add Cargo.toml`;
 
-	// 2. Discover and update all non-private SDK package.json versions
-	const packageJsonPaths = await glob("sdks/**/package.json", {
-		cwd: opts.sandboxAgentRoot,
-		ignore: ["**/node_modules/**"],
-	});
+	// 2. Discover and update every non-private package.json on the release line:
+	// Sandbox Agent SDKs and the root workspace packages.
+	const packageJsonPaths = await glob(
+		["sandbox-agent/sdks/**/package.json", "packages/*/package.json"],
+		{
+			cwd: opts.repoRoot,
+			ignore: ["**/node_modules/**"],
+		},
+	);
 
 	// Filter to non-private packages only
 	const toUpdate: string[] = [];
-	for (const relPath of packageJsonPaths) {
-		const fullPath = join(opts.sandboxAgentRoot, relPath);
+	for (const relPath of packageJsonPaths.sort()) {
+		const fullPath = join(opts.repoRoot, relPath);
 		const content = await fs.readFile(fullPath, "utf-8");
 		const pkg = JSON.parse(content);
 		if (pkg.private) continue;
@@ -113,12 +117,12 @@ export async function updateVersion(opts: ReleaseOpts) {
 	}
 
 	console.log(
-		`Discovered ${toUpdate.length} SDK package.json files to version-bump:`,
+		`Discovered ${toUpdate.length} package.json files to version-bump:`,
 	);
 	for (const relPath of toUpdate) console.log(`  - ${relPath}`);
 
 	for (const relPath of toUpdate) {
-		const fullPath = join(opts.sandboxAgentRoot, relPath);
+		const fullPath = join(opts.repoRoot, relPath);
 		const content = await fs.readFile(fullPath, "utf-8");
 
 		const versionPattern = /"version": ".*"/;
@@ -129,7 +133,7 @@ export async function updateVersion(opts: ReleaseOpts) {
 			`"version": "${opts.version}"`,
 		);
 		await fs.writeFile(fullPath, updated);
-		await $({ cwd: opts.sandboxAgentRoot })`git add ${relPath}`;
+		await $({ cwd: opts.repoRoot })`git add ${relPath}`;
 	}
 
 	// 3. Update version references across docs, examples, and code

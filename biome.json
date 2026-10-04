@@ -21,6 +21,9 @@
 		"useEditorconfig": true,
 		"includes": ["**", "!examples/docs/**"]
 	},
+	"assist": {
+		"includes": ["**", "!examples/docs/**"]
+	},
 	"linter": {
 		"enabled": true,
 		"rules": {

@@ -71,3 +71,27 @@ jobs:
           cargo test -p sandbox-agent --lib
       - name: Run SDK tests
         run: pnpm --dir sandbox-agent/sdks/typescript test
+
+  # Root workspace packages (@rivet-dev/pi, @rivet-dev/sandbox-adapter) and the
+  # docs snippets in examples/docs.
+  packages:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm check-types
+      - run: pnpm test
+      - run: pnpm check-boundaries
+      - run: pnpm lint
+      - run: npm pack --dry-run
+        working-directory: packages/sandbox-adapter
+      - run: npm pack --dry-run
+        working-directory: packages/pi
+      - run: pnpm test:packed
