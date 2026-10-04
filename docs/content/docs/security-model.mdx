@@ -1,0 +1,74 @@
+---
+title: "Security Model"
+description: "What reaches the sandbox, where secrets live, and who can connect to an agent."
+---
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 644 272" role="img" aria-label="Authenticated clients call the agent Actor in your trusted backend. The Actor holds the agent loop and model keys, stores the session in SQLite, and calls the model provider. It sends tool calls to an untrusted sandbox with a shell and files, and no secrets cross into the sandbox." style="width:100%;min-width:520px;max-width:644px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="security-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <g font-size="11" font-family="ui-monospace,monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">
+    <text x="20" y="26">CLIENTS</text>
+    <text x="180" y="26">YOUR BACKEND · TRUSTED</text>
+    <text x="470" y="26">SANDBOX · UNTRUSTED</text>
+  </g>
+  <g fill="rgb(var(--site-paper-mid, 227 227 229))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6">
+    <rect x="180" y="40" width="210" height="216" rx="10"/>
+    <rect x="470" y="40" width="154" height="104" rx="10"/>
+  </g>
+  <g fill="#ffffff" stroke="#1b1916" stroke-width="1.4">
+    <rect x="20" y="64" width="110" height="60" rx="7"/>
+    <rect x="470" y="184" width="154" height="52" rx="7"/>
+  </g>
+  <rect x="198" y="64" width="174" height="60" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="198" y="176" width="174" height="60" rx="7" fill="#fddcbb" stroke="#f0923b" stroke-width="2"/>
+  <rect x="484" y="64" width="126" height="60" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <line x1="132" y1="94" x2="196" y2="94" marker-start="url(#security-arrow)" marker-end="url(#security-arrow)"/>
+    <line x1="372" y1="94" x2="482" y2="94" marker-end="url(#security-arrow)"/>
+    <line x1="285" y1="124" x2="285" y2="174" marker-end="url(#security-arrow)"/>
+    <path d="M372 112 H410 Q420 112 420 122 V200 Q420 210 430 210 H468" marker-end="url(#security-arrow)"/>
+  </g>
+  <g text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">
+    <text x="75" y="91">Clients</text>
+    <text x="285" y="91">Agent Actor</text>
+    <text x="285" y="203">SQLite</text>
+    <text x="547" y="91">Shell + files</text>
+    <text x="547" y="215">Model provider</text>
+  </g>
+  <g text-anchor="middle" font-size="12" fill="#56524a">
+    <text x="75" y="109">authenticated</text>
+    <text x="285" y="109">agent loop + keys</text>
+    <text x="285" y="221">session</text>
+    <text x="547" y="109">own environment</text>
+  </g>
+  <g font-size="11" fill="#56524a">
+    <text x="430" y="74" text-anchor="middle">tool calls</text>
+    <text x="430" y="87" text-anchor="middle">no secrets</text>
+    <text x="428" y="170">model calls</text>
+  </g>
+</svg>
+</div>
+
+The agent loop runs in an Actor on your backend, and the commands the model chooses run in a sandbox. Everything that needs a secret stays in your backend.
+
+## What reaches the sandbox
+
+- Only tool calls: commands to run, and files to read or write. Each agent has its own sandbox.
+- Not your worker's environment. Commands run with the sandbox's own environment.
+- File tools reject paths outside the working directory. Shell commands can reach anything inside the sandbox, so the sandbox itself is the boundary.
+- Without a sandbox, the agent has no file or shell tools. They never fall back to running on your worker.
+
+## Where secrets live
+
+- Model keys, sandbox provider keys, and the secrets your [custom tools](/agents/docs/custom-tools) use stay on your worker. The model and the sandbox never see them.
+- [User subscription](/agents/docs/user-subscriptions) logins stay in your `credentials` Actor. The agent never receives a refresh token.
+- The session stores every message and tool result, and connected clients receive them, so keep secrets out of tool results and error messages.
+- [Traces](/agents/docs/observability) never record prompt text, tool arguments, or tool results.
+
+## Who can connect
+
+- Anyone who can connect to an agent can prompt it and read its whole session. Add [authentication](/docs/authentication) and check that the caller may use the agent's key. Keys aren't secret.
+- Protect the `credentials` Actor the same way, because its actions return provider tokens.
+- Give a browser a short-lived token for one agent instead of your Rivet credentials. See [Client SDK](/agents/docs/client-sdk#browsers).

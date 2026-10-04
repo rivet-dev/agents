@@ -1,0 +1,107 @@
+---
+title: "Discord"
+description: "Talk to an agent with a slash command in Discord."
+---
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 220" role="img" aria-label="Discord sends a webhook to the /discord/interactions route. The route calls receive on the agent for the conversation and returns. The agent schedules its reply, runs the prompt, and posts the answer back to Discord." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="connector-discord-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="50" width="130" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="230" y="50" width="160" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="470" y="50" width="150" height="52" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M151 76 L228 76" marker-end="url(#connector-discord-arrow)"/>
+    <path d="M391 76 L468 76" marker-end="url(#connector-discord-arrow)"/>
+    <path d="M545 103 L545 170 L85 170 L85 104" marker-end="url(#connector-discord-arrow)"/>
+  </g>
+  <text x="85" y="81" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Discord</text>
+  <text x="310" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Route</text>
+  <text x="310" y="90" text-anchor="middle" font-size="12" fill="#56524a">/discord/interactions</text>
+  <text x="545" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="545" y="90" text-anchor="middle" font-size="12" fill="#56524a">receive, reply</text>
+  <text x="189.5" y="69" text-anchor="middle" font-size="12" fill="#56524a">webhook</text>
+  <text x="429.5" y="69" text-anchor="middle" font-size="12" fill="#56524a">receive()</text>
+  <text x="330" y="190" text-anchor="middle" font-size="12" fill="#56524a">edit the deferred reply</text>
+</svg>
+</div>
+
+## Quickstart
+
+<Steps>
+
+<Step title="Create a Discord application">
+
+In the [Discord Developer Portal](https://discord.com/developers/applications), create an application. Copy its application ID and public key, and create a bot token.
+
+</Step>
+
+<Step title="Register the command">
+
+Register an `/ask` command with a `prompt` option:
+
+```sh
+curl -X PUT "https://discord.com/api/v10/applications/$DISCORD_APPLICATION_ID/commands" \
+  -H "Authorization: Bot $DISCORD_BOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[{"name":"ask","description":"Ask the agent","options":[{"type":3,"name":"prompt","description":"What to ask","required":true}]}]'
+```
+
+Install the application to your server with the `applications.commands` scope.
+
+</Step>
+
+<Step title="Add the route">
+
+```sh
+npm add @rivet-dev/pi rivetkit hono discord-interactions
+```
+
+<CodeGroup workspace>
+<CodeSnippet file="examples/docs/connectors/discord/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/connectors/discord/discord.ts" title="discord.ts" />
+</CodeGroup>
+
+Run the server with any runtime that serves a fetch handler, for example `npx srvx --import tsx server.ts`. See [HTTP Server](/actors/docs/http-server).
+
+</Step>
+
+<Step title="Set the environment">
+
+```sh
+DISCORD_PUBLIC_KEY=...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+</Step>
+
+<Step title="Set the interactions endpoint">
+
+Under **General Information**, set the interactions endpoint URL to `https://<your-worker>/discord/interactions`. Discord sends a ping, which the route answers. Run `/ask` in a channel.
+
+</Step>
+
+</Steps>
+
+## How it works
+
+- The route verifies Discord's Ed25519 signature against the raw body with the application's public key.
+- Each Discord channel gets its own agent. Every `/ask` in the channel continues the same session.
+- Discord expects a response within three seconds and an agent run takes longer, so the route hands the command to the agent's `receive` action and defers the reply. The `receive` action adds the message to the agent's queue and schedules `drain`, which prompts the agent with the oldest message and edits the deferred message. Interaction tokens stay valid for 15 minutes, and a message holds up to 2,000 characters. A message that arrives while the agent is answering waits in the queue. The queue is saved with the agent, so replies still run if the request that delivered a message goes away.
+
+## Configure
+
+| Variable | Purpose |
+| --- | --- |
+| `DISCORD_PUBLIC_KEY` | **Required.** Verifies that requests come from Discord. |
+| `DISCORD_APPLICATION_ID` | Registers the command. Not needed by the server. |
+| `DISCORD_BOT_TOKEN` | Registers the command. Not needed by the server. |
+| `ANTHROPIC_API_KEY` | **Required.** The agent's model key. For another provider, change `model` and set its key instead, such as `OPENAI_API_KEY` or `OPENROUTER_API_KEY`. See [LLM API Keys](/agents/docs/api-keys). |
+
+## Supported events
+
+| Discord interaction | Webhook path | What the route does |
+| --- | --- | --- |
+| `PING` | `/discord/interactions` | Answers Discord's endpoint check. |
+| [Application command](https://discord.com/developers/docs/interactions/application-commands) `/ask` | `/discord/interactions` | Hands the command to the channel's agent and defers. The agent edits the reply. |

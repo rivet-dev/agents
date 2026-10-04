@@ -1,0 +1,39 @@
+---
+title: "Subagents"
+description: "Let an agent hand a focused task to a specialist agent with its own tools."
+---
+
+A subagent is a specialist that a lead agent hands one focused task to. It has its own tools, starts with a fresh context, and only its answer comes back to the lead. A tool on the lead calls it by key, like any other Actor.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 580 200" role="img" aria-label="The support agent&#x27;s ask_specialist tool sends a question to either the orders specialist, which has the get_order tool, or the engineering specialist, which has a sandbox. The specialist&#x27;s answer comes back as the tool result." style="width:100%;min-width:520px;max-width:580px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="subagents-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="72" width="170" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="340" y="30" width="220" height="48" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="340" y="122" width="220" height="48" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M191 100 L270 100 L270 54 L338 54" marker-end="url(#subagents-arrow)"/>
+    <path d="M270 100 L270 146 L338 146" marker-end="url(#subagents-arrow)"/>
+  </g>
+  <text x="105" y="97" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Support agent</text>
+  <text x="105" y="114" text-anchor="middle" font-size="12" fill="#56524a">ask_specialist tool</text>
+  <text x="450" y="51" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Orders specialist</text>
+  <text x="450" y="68" text-anchor="middle" font-size="12" fill="#56524a">get_order tool</text>
+  <text x="450" y="143" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Engineering specialist</text>
+  <text x="450" y="160" text-anchor="middle" font-size="12" fill="#56524a">sandbox</text>
+  <text x="230" y="92" text-anchor="middle" font-size="12" fill="#56524a">question</text>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/subagents/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/subagents/specialists.ts" title="specialists.ts" />
+<CodeSnippet file="examples/docs/subagents/client.ts" title="client.ts" />
+</CodeGroup>
+
+- The model picks the specialist and writes the question. The question has to carry everything the specialist needs, because the specialist can't see the lead's conversation.
+- Each specialist has only the tools for its job: `orders` has `get_order`, and `engineering` has a sandbox to read and run code. The support agent has neither.
+- Specialists are keyed by the lead's session id, so a follow-up question on the same ticket continues the same specialist session.
+- The tool waits for the answer and returns it as the tool result. To hand work off without waiting, see [Agent-to-Agent Messages](/agents/docs/agent-to-agent).

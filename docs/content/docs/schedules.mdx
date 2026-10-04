@@ -1,0 +1,39 @@
+---
+title: "Schedules"
+description: "Wake agents on a schedule to run work while nobody is watching."
+---
+
+Actor schedules wake an agent to run a prompt on a timer.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 170" role="img" aria-label="An Actor cron schedule wakes the agent every day at 9:00 and calls prompt. The agent runs the test suite in its sandbox." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="schedules-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="50" width="150" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="250" y="50" width="150" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="480" y="50" width="140" height="56" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M171 78 L248 78" marker-end="url(#schedules-arrow)"/>
+    <path d="M401 78 L478 78" marker-end="url(#schedules-arrow)"/>
+  </g>
+  <text x="95" y="75" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Cron</text>
+  <text x="95" y="92" text-anchor="middle" font-size="12" fill="#56524a">0 9 * * *</text>
+  <text x="325" y="83" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="550" y="83" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox</text>
+  <text x="209.5" y="71" text-anchor="middle" font-size="12" fill="#56524a">prompt</text>
+  <text x="439.5" y="71" text-anchor="middle" font-size="12" fill="#56524a">tool calls</text>
+  <text x="325" y="132" text-anchor="middle" font-size="12" fill="#56524a">sleeps between runs</text>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/schedules/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/schedules/client.ts" title="client.ts" />
+</CodeGroup>
+
+- The cron calls the agent's `prompt` action every day at 9:00 UTC. The `onCreate` hook sets it once, when the agent is first created.
+- For a single run later, use `c.schedule.after(ms, "prompt", text)` or `c.schedule.at(time, "prompt", text)`.
+- The agent sleeps between runs, and its sandbox is suspended while it sleeps.
+
+See [Schedules](/actors/docs/schedule) for cron expressions, time zones, and history.

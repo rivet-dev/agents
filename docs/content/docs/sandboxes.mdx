@@ -1,0 +1,115 @@
+---
+title: "Sandboxes"
+description: "Run an agent's file and shell tools in E2B, Daytona, or a sandbox provider you write."
+---
+
+An agent's file and shell tools run in a sandbox, not on your worker. [`@rivet-dev/sandbox-adapter`](https://github.com/rivet-dev/rivet/tree/main/shared/typescript/sandbox-adapter) gives each Actor its own sandbox.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 676 190" role="img" aria-label="The agent Actor sends tool calls through the sandbox adapter, which creates and connects to one sandbox per Actor from a sandbox provider: E2B, Daytona, or your own provider." style="width:100%;min-width:520px;max-width:676px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="sandboxes-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="484" y="30" width="172" height="140" rx="10" style="fill:rgb(var(--site-paper-mid, 250 248 243));stroke:rgb(var(--site-pine, 46 64 52));stroke-width:1.4;stroke-dasharray:7 6"/>
+  <text x="484" y="20" font-size="11" font-family="ui-monospace, monospace" font-weight="600" letter-spacing="0.14em" style="fill:rgb(var(--site-pine, 46 64 52))">SANDBOX PROVIDERS</text>
+  <rect x="20" y="72" width="140" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="260" y="72" width="160" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="500" y="46" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <rect x="500" y="110" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M161 100 L258 100" marker-end="url(#sandboxes-arrow)"/>
+    <path d="M421 100 L482 100" marker-end="url(#sandboxes-arrow)"/>
+  </g>
+  <text x="90" y="105" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="340" y="97" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox adapter</text>
+  <text x="340" y="114" text-anchor="middle" font-size="12" fill="#56524a">SandboxProvider</text>
+  <text x="570" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">E2B</text>
+  <text x="570" y="137" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Daytona</text>
+  <text x="209.5" y="91" text-anchor="middle" font-size="12" fill="#56524a">tool calls</text>
+</svg>
+</div>
+
+## Quickstart
+
+<Steps>
+
+<Step title="Install the adapter">
+
+```sh
+npm add @rivet-dev/sandbox-adapter e2b
+```
+
+</Step>
+
+<Step title="Pass a provider">
+
+<CodeSnippet file="examples/docs/quickstart/server.ts" title="server.ts" />
+
+</Step>
+
+</Steps>
+
+Without a sandbox, Pi's built-in file and shell tools are turned off and the agent only has the `customTools` you pass.
+
+## Providers
+
+| Provider | SDK | While the Actor sleeps | When the Actor is destroyed |
+| --- | --- | --- | --- |
+| [E2B](https://e2b.dev) | `e2b` | Paused | Deleted |
+| [Daytona](https://daytona.io) | `@daytonaio/sdk` | Stopped | Deleted |
+
+Provider credentials stay on your worker and never enter the sandbox.
+
+### E2B
+
+```sh
+npm add e2b
+```
+
+<CodeSnippet file="examples/docs/sandboxes/e2b.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `template` | Template name or id. Defaults to `base`. |
+| `create` | Options for E2B's `Sandbox.create`. The API key defaults to `E2B_API_KEY`. |
+| `cwd` | Working directory inside the sandbox. Defaults to `/home/user`. |
+
+E2B ends a sandbox when its timeout runs out, so the provider creates sandboxes that pause on timeout and resume on the next call.
+
+### Daytona
+
+```sh
+npm add @daytonaio/sdk
+```
+
+<CodeSnippet file="examples/docs/sandboxes/daytona.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `client` | A Daytona client. Defaults to `new Daytona()`, which reads `DAYTONA_API_KEY`. |
+| `create` | Options for Daytona's `create`. |
+
+The working directory is the sandbox's own working directory. A stopped sandbox is started again when the Actor wakes.
+
+## How the sandbox is managed
+
+- The sandbox is created the first time the agent needs it.
+- On wake, the Actor reconnects to the same sandbox. If it no longer exists, a new one is created and the old files are lost.
+- An existing Actor cannot switch to a different provider.
+- Commands run with the sandbox's environment, not your worker's. File tools reject paths outside the working directory, but shell commands can reach anything inside the sandbox.
+
+## Write your own provider
+
+Any sandbox can back an agent. Implement [`SandboxProvider`](https://github.com/rivet-dev/rivet/blob/main/shared/typescript/sandbox-adapter/src/index.ts) and pass it as `sandbox`. One provider object is shared by every Actor of a definition, so keep no per-Actor state in it; the Actor stores the sandbox id.
+
+| Member | Description |
+| --- | --- |
+| `name` | Stored next to the sandbox id, so a changed provider is detected on wake. |
+| `create(c)` | Provisions a new sandbox and returns its id. |
+| `connect(c, id)` | Connects to an existing sandbox and returns a `Sandbox`. Returns `undefined` when the sandbox no longer exists. |
+| `suspend(c, id)` | Optional. Releases resources while the Actor sleeps. When omitted, the sandbox stops itself when idle or keeps running, depending on the provider. |
+| `destroy(c, id)` | Optional. Deletes the sandbox when the Actor is destroyed. When omitted, the sandbox is left in place. |
+
+The `Sandbox` that `connect` returns has a `cwd` and the operations the tools run: `exec`, `readFile`, `writeFile`, `mkdir`, `stat`, `readdir`, and `exists`. All paths are absolute paths inside the sandbox. See the [E2B provider](https://github.com/rivet-dev/rivet/blob/main/shared/typescript/sandbox-adapter/src/e2b.ts) for a complete example.
+
+**Next:** [Custom Tools](/agents/docs/custom-tools), tools that run in your backend.

@@ -1,0 +1,50 @@
+---
+title: "Workflows"
+description: "Run agents as steps in durable, multi-step workflows."
+---
+
+Run an agent as a workflow step to get retries and durable waits between steps.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 250" role="img" aria-label="A workflow runs the first-run step, sleeps ten minutes, then runs the second-run step. Each step aborts and then prompts the same fixer agent." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="workflows-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <g fill="rgb(var(--site-paper-mid, 227 227 229))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6">
+    <rect x="10" y="30" width="620" height="92" rx="10"/>
+  </g>
+  <rect x="30" y="50" width="160" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="240" y="50" width="160" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="450" y="50" width="160" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="240" y="176" width="160" height="52" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M191 76 L238 76" marker-end="url(#workflows-arrow)"/>
+    <path d="M401 76 L448 76" marker-end="url(#workflows-arrow)"/>
+    <path d="M110 103 L110 202 L238 202" marker-end="url(#workflows-arrow)"/>
+    <path d="M530 103 L530 202 L402 202" marker-end="url(#workflows-arrow)"/>
+  </g>
+  <text x="10" y="18" font-size="11" font-family="ui-monospace,monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">WORKFLOW</text>
+  <text x="110" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916" font-family="ui-monospace,monospace">first-run</text>
+  <text x="110" y="90" text-anchor="middle" font-size="12" fill="#56524a">step</text>
+  <text x="320" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">sleep</text>
+  <text x="320" y="90" text-anchor="middle" font-size="12" fill="#56524a">10 minutes</text>
+  <text x="530" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916" font-family="ui-monospace,monospace">second-run</text>
+  <text x="530" y="90" text-anchor="middle" font-size="12" fill="#56524a">step</text>
+  <text x="320" y="207" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Fixer agent</text>
+  <text x="118" y="160" text-anchor="start" font-size="12" fill="#56524a">abort, prompt</text>
+  <text x="522" y="160" text-anchor="end" font-size="12" fill="#56524a">abort, prompt</text>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/workflows/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/workflows/client.ts" title="client.ts" />
+</CodeGroup>
+
+- Steps time out after 30 seconds by default, so `timeout` gives each prompt up to ten minutes.
+- A step that throws is retried up to three times, while a timeout fails the step right away. Each attempt calls `abort` first, so a retry stops any run the previous attempt left going before prompting again.
+- The `ctx.sleep` call waits ten minutes with nothing running. The workflow resumes on time, even after a crash or deploy.
+- Both steps use the same agent key, so the second prompt continues the first conversation.
+- Use a workflow when the work has fixed steps, waits, or retries. Use a single agent session when the agent should decide the steps itself.
+
+See [Workflows](/workflows/docs) for steps, sleeps, and retries.

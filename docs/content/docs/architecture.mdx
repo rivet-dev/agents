@@ -1,0 +1,91 @@
+---
+title: "Architecture"
+description: "The states an agent moves through, and what survives sleep, crashes, and deploys."
+---
+
+## States
+
+An agent is idle until a prompt starts a run, and goes back to idle when the run ends or is cancelled. When the context fills up during a run, the agent compacts it and keeps going.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 300" role="img" aria-label="Agent states: a prompt moves Idle to Running, and the run ending or being cancelled moves it back. Running moves to Compacting when the context is full and back when compaction is done. Idle moves to Sleeping when idle, and the next action wakes it back to Idle. Running sends tool calls to the sandbox." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="arch-states-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <g fill="rgb(var(--site-paper-mid, 227 227 229))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6">
+    <rect x="16" y="40" width="390" height="244" rx="10"/>
+  </g>
+  <rect x="40" y="70" width="130" height="48" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="262" y="70" width="130" height="48" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="262" y="206" width="130" height="48" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="40" y="206" width="130" height="48" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2" opacity="0.45"/>
+  <rect x="490" y="70" width="130" height="48" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M171 84 L260 84" marker-end="url(#arch-states-arrow)"/>
+    <path d="M261 104 L172 104" marker-end="url(#arch-states-arrow)"/>
+    <path d="M309 119 L309 204" marker-end="url(#arch-states-arrow)"/>
+    <path d="M345 205 L345 120" marker-end="url(#arch-states-arrow)"/>
+    <path d="M87 119 L87 204" marker-end="url(#arch-states-arrow)"/>
+    <path d="M123 205 L123 120" marker-end="url(#arch-states-arrow)"/>
+    <path d="M393 94 L488 94" marker-end="url(#arch-states-arrow)"/>
+  </g>
+  <text x="16" y="28" font-size="11" font-family="ui-monospace,monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">AGENT</text>
+  <text x="105" y="99" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Idle</text>
+  <text x="327" y="99" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Running</text>
+  <text x="327" y="235" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Compacting</text>
+  <text x="105" y="235" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sleeping</text>
+  <text x="555" y="99" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox</text>
+  <text x="215.5" y="77" text-anchor="middle" font-size="12" fill="#56524a">prompt</text>
+  <text x="216.5" y="120" text-anchor="middle" font-size="12" fill="#56524a">done, abort</text>
+  <text x="301" y="165.5" text-anchor="end" font-size="12" fill="#56524a">context full</text>
+  <text x="353" y="166.5" text-anchor="start" font-size="12" fill="#56524a">done</text>
+  <text x="79" y="165.5" text-anchor="end" font-size="12" fill="#56524a">idle</text>
+  <text x="131" y="166.5" text-anchor="start" font-size="12" fill="#56524a">next action</text>
+  <text x="448" y="87" text-anchor="middle" font-size="12" fill="#56524a">tool calls</text>
+</svg>
+</div>
+
+## Sleep
+
+An idle agent sleeps and frees its memory. The next action on its key wakes it: the agent reloads its session and reconnects to the same sandbox, so clients don't do anything different. While the agent sleeps, its sandbox is suspended.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 280" role="img" aria-label="The agent loop runs in memory and saves each step to the Actor&#x27;s SQLite database, which also holds the sandbox id. On wake, the loop is restored from SQLite and reconnects to the same sandbox. Sleep, a crash, or a deploy clears memory, and SQLite is kept." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="arch-durability-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <g fill="rgb(var(--site-paper-mid, 227 227 229))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6">
+    <rect x="70" y="40" width="310" height="210" rx="10"/>
+  </g>
+  <rect x="150" y="66" width="170" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="150" y="172" width="170" height="56" rx="7" fill="#fddcbb" stroke="#f0923b" stroke-width="2"/>
+  <rect x="480" y="66" width="140" height="56" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M205 123 L205 170" marker-end="url(#arch-durability-arrow)"/>
+    <path d="M265 171 L265 124" marker-end="url(#arch-durability-arrow)"/>
+    <path d="M321 94 L478 94" marker-end="url(#arch-durability-arrow)"/>
+  </g>
+  <text x="70" y="28" font-size="11" font-family="ui-monospace,monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">AGENT ACTOR</text>
+  <text x="235" y="91" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent loop</text>
+  <text x="235" y="108" text-anchor="middle" font-size="12" fill="#56524a">in memory</text>
+  <text x="235" y="197" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">SQLite</text>
+  <text x="235" y="214" text-anchor="middle" font-size="12" fill="#56524a">session, sandbox id</text>
+  <text x="550" y="99" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox</text>
+  <text x="197" y="150.5" text-anchor="end" font-size="12" fill="#56524a">save each step</text>
+  <text x="273" y="151.5" text-anchor="start" font-size="12" fill="#56524a">restore on wake</text>
+  <text x="434" y="87" text-anchor="middle" font-size="12" fill="#56524a">tool calls</text>
+  <text x="434" y="110" text-anchor="middle" font-size="12" fill="#56524a">reconnect by id</text>
+  <text x="70" y="272" text-anchor="start" font-size="12" fill="#56524a">Sleep, a crash, or a deploy clears memory. SQLite is kept.</text>
+</svg>
+</div>
+
+## What survives
+
+| | Session | Sandbox |
+| --- | --- | --- |
+| Sleep | Every message so far. | Reconnected on wake. |
+| Crash | Every message written before the crash. | Reconnected on wake. |
+| Deploy | Every message so far. Old Actors get up to 30 minutes to finish before the agent wakes on the new code. See [Versions](/docs/versions). | Reconnected on wake. |
+| Destroy | Deleted. | Deleted. |
+
+A model chosen with `setModel` is restored too, if it's still allowed. If the sandbox no longer exists when the agent wakes, a new one is created and the old files are lost.

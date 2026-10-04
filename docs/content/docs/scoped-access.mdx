@@ -1,0 +1,49 @@
+---
+title: "Scoped Access with JWTs"
+description: "Let a tool publish a result and share it through a link that reaches one Actor and expires."
+---
+
+A tool can publish its work to an Actor and hand out a short-lived token for it. Whoever opens the link can read that one Actor, and nothing else.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 600 270" role="img" aria-label="The agent&#x27;s share_report tool creates a report Actor and issues a token for it. The link with the token reaches a browser, which can read that report and is rejected by every other Actor." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="scoped-access-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="40" width="160" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="400" y="40" width="180" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="20" y="180" width="160" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="400" y="180" width="180" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M181 68 L398 68" marker-end="url(#scoped-access-arrow)"/>
+    <path d="M100 97 L100 178" marker-end="url(#scoped-access-arrow)"/>
+    <path d="M181 192 L398 88" marker-end="url(#scoped-access-arrow)"/>
+    <path d="M181 218 L398 218" marker-end="url(#scoped-access-arrow)" stroke-dasharray="5 4"/>
+  </g>
+  <text x="100" y="65" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent</text>
+  <text x="100" y="82" text-anchor="middle" font-size="12" fill="#56524a">share_report tool</text>
+  <text x="490" y="65" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">report Actor</text>
+  <text x="490" y="82" text-anchor="middle" font-size="12" fill="#56524a">one per report</text>
+  <text x="100" y="205" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Browser</text>
+  <text x="100" y="222" text-anchor="middle" font-size="12" fill="#56524a">viewer.ts</text>
+  <text x="490" y="213" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Other Actors</text>
+  <text x="289.5" y="61" text-anchor="middle" font-size="12" fill="#56524a">create, issueToken</text>
+  <text x="108" y="141.5" text-anchor="start" font-size="12" fill="#56524a">link with token</text>
+  <text x="296" y="128" text-anchor="end" font-size="12" fill="#56524a">read()</text>
+  <text x="289.5" y="234" text-anchor="middle" font-size="12" fill="#56524a">rejected</text>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/scoped-access/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/scoped-access/report.ts" title="report.ts" />
+<CodeSnippet file="examples/docs/scoped-access/viewer.ts" title="viewer.ts" />
+</CodeGroup>
+
+- The `share_report` tool creates a `report` Actor for each report, with the report as its input. A token can call every action on its Actor, so `report` only has `read`.
+- The tool runs in your backend, where its client has your Rivet token. Its `issueToken` call mints a token for this one report that expires after an hour.
+- The token goes in the URL fragment, which browsers don't send to your server.
+- The viewer in `viewer.ts` runs in the browser and connects with the token. A request to any other Actor is rejected before it reaches your code.
+- The link is part of the tool result, so the model and connected clients see it, and the agent can pass it on.
+
+Tokens can't be revoked, so keep them short. See [JWTs](/docs/jwt) for permissions and expiration.

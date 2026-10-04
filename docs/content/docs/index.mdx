@@ -1,0 +1,119 @@
+---
+title: "Agents"
+description: "Run a coding agent as a durable Rivet Actor, with its tools in a separate sandbox."
+---
+
+Each agent on Rivet is one [Rivet Actor](/actors/docs). You define the agent once, and every key you call it with gets its own Actor, session, and sandbox.
+
+<svg viewBox="0 0 472 330" role="img" aria-label="Your backend runs three agents. Each agent sends its tool calls to its own sandbox, which holds the shell and files." style="width:100%;max-width:472px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="overview-harness-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <g font-size="11" font-family="ui-monospace,monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">
+    <text x="20" y="26">YOUR BACKEND</text>
+    <text x="280" y="26">SANDBOXES</text>
+  </g>
+  <rect x="20" y="40" width="180" height="276" rx="10" fill="rgb(var(--site-paper-mid, 227 227 229))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6"/>
+  <g fill="rgb(var(--site-paper-mid, 227 227 229))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6">
+    <rect x="280" y="54" width="172" height="72" rx="10"/>
+    <rect x="280" y="142" width="172" height="72" rx="10"/>
+    <rect x="280" y="230" width="172" height="72" rx="10"/>
+  </g>
+  <g fill="#c7e4fb" stroke="#3d9df3" stroke-width="2">
+    <rect x="45" y="62" width="130" height="56" rx="7"/>
+    <rect x="45" y="150" width="130" height="56" rx="7"/>
+    <rect x="45" y="238" width="130" height="56" rx="7"/>
+  </g>
+  <g fill="#fecaca" stroke="#ef4444" stroke-width="2">
+    <rect x="292" y="66" width="148" height="48" rx="7"/>
+    <rect x="292" y="154" width="148" height="48" rx="7"/>
+    <rect x="292" y="242" width="148" height="48" rx="7"/>
+  </g>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" marker-end="url(#overview-harness-arrow)">
+    <line x1="176" y1="90" x2="290" y2="90"/>
+    <line x1="176" y1="178" x2="290" y2="178"/>
+    <line x1="176" y1="266" x2="290" y2="266"/>
+  </g>
+  <text x="240" y="81" text-anchor="middle" font-size="11" fill="rgb(var(--site-ink-soft, 86 82 74))">tool calls</text>
+  <g text-anchor="middle" font-size="14" font-weight="600" fill="rgb(var(--site-ink, 27 25 22))">
+    <text x="110" y="95">Agent</text>
+    <text x="366" y="95">Shell + files</text>
+    <text x="110" y="183">Agent</text>
+    <text x="366" y="183">Shell + files</text>
+    <text x="110" y="271">Agent</text>
+    <text x="366" y="271">Shell + files</text>
+  </g>
+</svg>
+
+- **The agent loop runs in the Actor.** Model calls, retries, and the conversation run in your backend, next to your application code, where you control credentials, permissions, and logging.
+- **Tools run in a separate sandbox.** File and shell tools call into a sandbox such as E2B or Daytona. Nothing the agent runs executes on your worker, and your provider keys never enter the sandbox.
+- **Agents are durable.** The Actor saves the session to its SQLite database and restores it when it wakes, so an idle agent can sleep, and a crash or deploy does not lose the conversation.
+
+<CardGroup>
+  <Card title="Quickstart" href="/agents/docs/quickstart">
+    Run your first agent, with its tools in a sandbox.
+  </Card>
+  <Card title="Pi" href="/agents/docs/pi">
+    Run the Pi coding agent as a durable Actor.
+  </Card>
+</CardGroup>
+
+## Why Rivet
+
+### Stateful agents on any infrastructure
+
+- **A live process per agent.** Each agent is an Actor with its own memory and SQLite database. It keeps the session loaded between prompts and runs one prompt at a time, so two servers never race on the same agent. Nothing is rebuilt from a database or replayed from an event log on each request.
+- **No cloud lock-in.** Rivet is open source under Apache 2.0. Use [Rivet Cloud](https://dashboard.rivet.dev), [bring your own compute](/docs/deploy/self-host/workers), or [self-host](/docs/deploy/self-host/control-plane) everything. Workers run on Kubernetes, AWS ECS, Railway, Render, Vercel, Google Cloud Run, AWS Lambda, or any VM.
+
+### Any harness, any model
+
+- **Bring your harness.** Rivet runs existing agent harnesses, starting with Pi, instead of asking you to rewrite your agent for a new framework.
+- **Bring your model and keys.** Use any provider the harness supports, [your own API keys](/agents/docs/api-keys), or [your users' own subscriptions](/agents/docs/user-subscriptions).
+
+### Built for scale and realtime
+
+- **Lightweight.** A running Actor adds about 72 KB of memory on top of the agent's session, and a sleeping agent uses none. Give every user, task, or thread its own agent.
+- **Wakes in milliseconds.** A sleeping agent wakes on its next prompt in about 12 ms, instead of the seconds it takes to boot a container.
+- **Realtime and multiplayer.** Clients connect over WebSockets and stream events as the agent works. Many users can watch and steer the same session.
+- **One primitive for your backend.** Agents are Actors, like the rest of your Rivet app, so they call other agents and Actors directly and use the same schedules, queues, and workflows.
+- **Swappable sandboxes.** A sandbox crash does not lose the session, and a tool call adds about 10 ms in the same datacenter.
+
+## Core
+
+<CardGroup>
+  <Card title="Design Patterns" href="/agents/docs/design-patterns">
+    Keys, subagents, agent-to-agent messages, workflows, schedules, and shared credentials.
+  </Card>
+  <Card title="LLM API Keys" href="/agents/docs/api-keys">
+    Give agents model access with your own provider keys.
+  </Card>
+  <Card title="Sandboxes" href="/agents/docs/sandboxes">
+    Run an agent's file and shell tools in E2B, Daytona, or your own provider.
+  </Card>
+  <Card title="Custom Tools" href="/agents/docs/custom-tools">
+    Give an agent tools that run in your backend, with your APIs and secrets.
+  </Card>
+  <Card title="Session Lifecycle" href="/agents/docs/session-lifecycle">
+    The events one prompt produces, and how to steer or cancel a run.
+  </Card>
+</CardGroup>
+
+## Concepts
+
+<CardGroup>
+  <Card title="Instructions" href="/agents/docs/instructions">
+    Set an agent's system prompt and project rules, and add context to a single prompt.
+  </Card>
+  <Card title="User Subscriptions" href="/agents/docs/user-subscriptions">
+    Let your users run agents on their own Claude or ChatGPT subscription.
+  </Card>
+  <Card title="Observability" href="/agents/docs/observability">
+    Trace every agent run with OpenTelemetry.
+  </Card>
+  <Card title="Architecture" href="/agents/docs/architecture">
+    The states an agent moves through, and what survives sleep, crashes, and deploys.
+  </Card>
+  <Card title="Security Model" href="/agents/docs/security-model">
+    What reaches the sandbox, where secrets live, and who can connect to an agent.
+  </Card>
+</CardGroup>

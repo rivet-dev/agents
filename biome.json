@@ -2,6 +2,8 @@
 	"$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
 	"files": {
 		"includes": [
+			"packages/**/*.ts",
+			"examples/**/*.{ts,tsx}",
 			"scripts/**/*.{ts,mjs}",
 			"!/**/node_modules",
 			"!!sandbox-agent"
@@ -16,7 +18,8 @@
 	},
 	"formatter": {
 		"enabled": true,
-		"useEditorconfig": true
+		"useEditorconfig": true,
+		"includes": ["**", "!examples/docs/**"]
 	},
 	"linter": {
 		"enabled": true,

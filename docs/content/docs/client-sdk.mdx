@@ -1,0 +1,75 @@
+---
+title: "Client SDK"
+description: "Call an agent from your backend, scripts, or any JavaScript runtime, and stream its events."
+---
+
+Call an agent from your backend, a script, or any JavaScript runtime with `rivetkit/client`.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 300" role="img" aria-label="client.ts calls actions on the agent and receives its events over a connection. A browser fetches a short-lived token from token.ts, then connects to the agent with it." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="client-sdk-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="40" width="150" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="20" y="200" width="150" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="250" y="200" width="150" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="470" y="110" width="150" height="60" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M171 58 L440 58 L440 122 L468 122" marker-end="url(#client-sdk-arrow)"/>
+    <path d="M469 140 L420 140 L420 76 L172 76" marker-end="url(#client-sdk-arrow)" stroke-dasharray="5 4"/>
+    <path d="M171 226 L248 226" marker-end="url(#client-sdk-arrow)"/>
+    <path d="M95 199 L95 158 L468 158" marker-end="url(#client-sdk-arrow)"/>
+  </g>
+  <text x="95" y="63" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">client.ts</text>
+  <text x="95" y="80" text-anchor="middle" font-size="12" fill="#56524a">your backend</text>
+  <text x="95" y="223" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Browser</text>
+  <text x="95" y="240" text-anchor="middle" font-size="12" fill="#56524a">browser.ts</text>
+  <text x="325" y="223" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">token.ts</text>
+  <text x="325" y="240" text-anchor="middle" font-size="12" fill="#56524a">issueToken</text>
+  <text x="545" y="145" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="300" y="51" text-anchor="middle" font-size="12" fill="#56524a">actions</text>
+  <text x="300" y="92" text-anchor="middle" font-size="12" fill="#56524a">events</text>
+  <text x="209.5" y="219" text-anchor="middle" font-size="12" fill="#56524a">fetch token</text>
+  <text x="300" y="151" text-anchor="middle" font-size="12" fill="#56524a">connect with token</text>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/client-sdk/client.ts" title="client.ts" />
+<CodeSnippet file="examples/docs/client-sdk/server.ts" title="server.ts" />
+</CodeGroup>
+
+## Handles and connections
+
+- With no options, `createClient()` reads `RIVET_ENDPOINT`, `RIVET_NAMESPACE`, and `RIVET_TOKEN` from the environment, and defaults to a local Rivet at `localhost:6420`.
+- The `getOrCreate` method returns a handle to the agent with that key, and creates the agent on first use. Actions called on the handle, like `getMessages`, are single requests.
+- Calling `connect()` opens a live connection that receives the session's events. Actions called before it opens wait until it does.
+- A dropped connection reconnects on its own. The `onStatusChange` callback reports `connecting`, `connected`, and `disconnected`, and `idle` after `dispose()` closes the connection for good.
+
+## Events
+
+A listener added with `on("event", ...)` receives every event of the session as the agent works. See [Session Lifecycle](/agents/docs/session-lifecycle#events) for the event types.
+
+## Results and errors
+
+- The `prompt` action resolves when the run ends. Read the reply with `getLastAssistantText` or `getMessages`.
+- The `prompt` action rejects with an `ActorError` when the action itself fails. For example, another prompt is already running (pass `streamingBehavior` to queue it instead), the model has no credential (`model_unavailable`), or the run passes the ten-minute action timeout (`action_timed_out`).
+- A model error doesn't reject. The run ends with an assistant message whose `stopReason` is `"error"`, and `errorMessage` explains why.
+
+## Browsers
+
+A browser shouldn't hold your Rivet credentials. Your backend checks who the user is, then mints a short-lived token that reaches only their agent.
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/client-sdk/browser.ts" title="browser.ts" />
+<CodeSnippet file="examples/docs/client-sdk/token.ts" title="token.ts" />
+</CodeGroup>
+
+- In `token.ts`, your backend resolves the user's agent and calls `issueToken`, which returns a token for that one agent that expires in 15 minutes.
+- In `browser.ts`, the client connects with `getForId`, and `getToken` fetches a new token whenever the old one expires, so the connection stays up.
+
+See [JWTs](/docs/jwt) and [Authentication](/docs/authentication).
+
+The same actions work over HTTP. See the curl tab in the [Quickstart](/agents/docs/quickstart).
+
+See the [client documentation](/actors/docs/crash-course#client-documentation) in the Actors docs for everything `rivetkit/client` can do.

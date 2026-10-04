@@ -1,8 +1,11 @@
 # Root workspace. Sandbox Agent keeps its own pnpm workspace in sandbox-agent/
 # because its Dockerfiles build from that directory as the context root.
 packages:
+  - packages/*
+  - examples/*
   - scripts/release
 
 onlyBuiltDependencies:
   - '@biomejs/biome'
+  - esbuild
   - lefthook

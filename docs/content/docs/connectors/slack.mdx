@@ -1,0 +1,95 @@
+---
+title: "Slack"
+description: "Talk to an agent by mentioning it in a Slack channel or thread."
+---
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 220" role="img" aria-label="Slack sends a webhook to the /slack/events route. The route calls receive on the agent for the conversation and returns. The agent schedules its reply, runs the prompt, and posts the answer back to Slack." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="connector-slack-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="50" width="130" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="230" y="50" width="160" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="470" y="50" width="150" height="52" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M151 76 L228 76" marker-end="url(#connector-slack-arrow)"/>
+    <path d="M391 76 L468 76" marker-end="url(#connector-slack-arrow)"/>
+    <path d="M545 103 L545 170 L85 170 L85 104" marker-end="url(#connector-slack-arrow)"/>
+  </g>
+  <text x="85" y="81" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Slack</text>
+  <text x="310" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Route</text>
+  <text x="310" y="90" text-anchor="middle" font-size="12" fill="#56524a">/slack/events</text>
+  <text x="545" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="545" y="90" text-anchor="middle" font-size="12" fill="#56524a">receive, reply</text>
+  <text x="189.5" y="69" text-anchor="middle" font-size="12" fill="#56524a">webhook</text>
+  <text x="429.5" y="69" text-anchor="middle" font-size="12" fill="#56524a">receive()</text>
+  <text x="330" y="190" text-anchor="middle" font-size="12" fill="#56524a">chat.postMessage</text>
+</svg>
+</div>
+
+## Quickstart
+
+<Steps>
+
+<Step title="Create a Slack app">
+
+In [Slack's app settings](https://api.slack.com/apps), create an app, add the `app_mentions:read` and `chat:write` bot token scopes, and install it to your workspace. Copy the bot token and the signing secret.
+
+</Step>
+
+<Step title="Add the route">
+
+```sh
+npm add @rivet-dev/pi rivetkit hono @slack/web-api
+```
+
+<CodeGroup workspace>
+<CodeSnippet file="examples/docs/connectors/slack/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/connectors/slack/slack.ts" title="slack.ts" />
+</CodeGroup>
+
+Run the server with any runtime that serves a fetch handler, for example `npx srvx --import tsx server.ts`. See [HTTP Server](/actors/docs/http-server).
+
+</Step>
+
+<Step title="Set the environment">
+
+```sh
+SLACK_SIGNING_SECRET=...
+SLACK_BOT_TOKEN=xoxb-...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+</Step>
+
+<Step title="Subscribe to mentions">
+
+Under **Event Subscriptions**, set the request URL to `https://<your-worker>/slack/events` and subscribe to the `app_mention` bot event. Slack sends a challenge, which the route answers. Mention the app in a channel to start a conversation.
+
+</Step>
+
+</Steps>
+
+## How it works
+
+- The route verifies Slack's signature against the raw body and rejects requests older than five minutes.
+- Each Slack thread gets its own agent, keyed by team, channel, and thread. Mentioning the app again in the thread continues the same session.
+- Slack expects a response within three seconds and an agent run takes longer, so the route only hands the message to the agent's `receive` action and returns. The `receive` action adds the message to the agent's queue and schedules `drain`, which prompts the agent with the oldest message and posts the answer in the thread with the Slack Web API. A message that arrives while the agent is answering waits in the queue. The queue is saved with the agent, so replies still run if the request that delivered a message goes away.
+- Slack retries events it thinks timed out. The route ignores retries, because the first delivery is already being answered.
+
+## Configure
+
+| Variable | Purpose |
+| --- | --- |
+| `SLACK_SIGNING_SECRET` | **Required.** Verifies that requests come from Slack. |
+| `SLACK_BOT_TOKEN` | **Required.** Posts replies with the Slack Web API. |
+| `ANTHROPIC_API_KEY` | **Required.** The agent's model key. For another provider, change `model` and set its key instead, such as `OPENAI_API_KEY` or `OPENROUTER_API_KEY`. See [LLM API Keys](/agents/docs/api-keys). |
+
+## Supported events
+
+| Slack surface | Webhook path | What the route does |
+| --- | --- | --- |
+| [Event Subscriptions](https://docs.slack.dev/apis/events-api/), `app_mention` | `/slack/events` | Hands the message to the thread's agent, which replies in the thread. |
+| URL verification | `/slack/events` | Answers Slack's challenge. |
+
+To answer direct messages too, subscribe to `message.im`, add the `im:history` scope, and handle `message` events the same way.

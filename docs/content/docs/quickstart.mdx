@@ -1,0 +1,115 @@
+---
+title: "Quickstart"
+description: "Run your first agent: Pi in a Rivet Actor, with its tools in a sandbox."
+---
+
+import { Hosting } from "@/components/docs/Hosting";
+
+An agent is a Rivet Actor in your backend. Its file and shell tools run in a sandbox, and clients prompt it like any other Actor.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 620 236" role="img" aria-label="The client sends a prompt to the agent Actor. The agent sends model calls to the model provider and tool calls to its sandbox." style="width:100%;min-width:520px;max-width:620px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="quickstart-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="60" width="120" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="230" y="60" width="150" height="52" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="470" y="60" width="130" height="52" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <rect x="230" y="164" width="150" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M141 86 L228 86" marker-end="url(#quickstart-arrow)"/>
+    <path d="M381 86 L468 86" marker-end="url(#quickstart-arrow)"/>
+    <path d="M305 113 L305 162" marker-end="url(#quickstart-arrow)"/>
+  </g>
+  <text x="80" y="83" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Client</text>
+  <text x="80" y="100" text-anchor="middle" font-size="12" fill="#56524a">client.ts</text>
+  <text x="305" y="83" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="305" y="100" text-anchor="middle" font-size="12" fill="#56524a">server.ts</text>
+  <text x="535" y="91" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox</text>
+  <text x="305" y="195" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Model provider</text>
+  <text x="184.5" y="79" text-anchor="middle" font-size="12" fill="#56524a">prompt</text>
+  <text x="424.5" y="79" text-anchor="middle" font-size="12" fill="#56524a">tool calls</text>
+  <text x="313" y="141.5" text-anchor="start" font-size="12" fill="#56524a">model calls</text>
+</svg>
+</div>
+
+<Steps>
+
+<Step title="Install">
+
+```sh
+npm add @rivet-dev/pi rivetkit
+```
+
+</Step>
+
+<Step title="Define the Actor">
+
+<CodeSnippet file="examples/docs/pi/server.ts" title="server.ts" />
+
+Set `ANTHROPIC_API_KEY`. For another provider, change `model` and set its key instead, such as `OPENAI_API_KEY`, `XAI_API_KEY`, or `OPENROUTER_API_KEY`. See [LLM API Keys](/agents/docs/api-keys).
+
+</Step>
+
+<Step title="Add a sandbox">
+
+Pi's file and shell tools run in a sandbox. Without one they are disabled.
+
+```sh
+# E2B
+npm add @rivet-dev/sandbox-adapter e2b
+
+# Daytona
+npm add @rivet-dev/sandbox-adapter @daytonaio/sdk
+```
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/quickstart/server.ts" title="e2b.ts" />
+<CodeSnippet file="examples/docs/sandboxes/daytona.ts" title="daytona.ts" />
+</CodeGroup>
+
+Set `E2B_API_KEY` for [E2B](https://e2b.dev) or `DAYTONA_API_KEY` for [Daytona](https://daytona.io). To write your own provider, see [Sandboxes](/agents/docs/sandboxes).
+
+</Step>
+
+<Step title="Send a prompt">
+
+<Tabs>
+<Tab title="TypeScript">
+
+<CodeSnippet file="examples/docs/quickstart/client.ts" title="client.ts" />
+
+</Tab>
+<Tab title="curl">
+
+```sh
+URL="http://localhost:6420/gateway/agent/action"
+AGENT="rvt-namespace=default&rvt-method=getOrCreate&rvt-key=user-123&rvt-pool=default"
+
+curl -X POST "$URL/prompt?$AGENT" \
+  -H "Content-Type: application/json" \
+  -d '{"args": ["Write a Python script that prints the first 20 prime numbers, run it, and show me the output."]}'
+
+curl -X POST "$URL/getLastAssistantText?$AGENT" \
+  -H "Content-Type: application/json" \
+  -d '{"args": []}'
+```
+
+Each action is a `POST` to the gateway with its arguments in `args`. See [Call Action](/docs/api/gateway/call-action).
+
+</Tab>
+</Tabs>
+
+The `prompt` action waits for Pi to finish, then `getLastAssistantText` reads the full reply.
+
+</Step>
+
+<Step title="Deploy">
+
+<Hosting />
+
+</Step>
+
+</Steps>
+
+**Next:** [Design Patterns](/agents/docs/design-patterns), how to structure an app with many agents.

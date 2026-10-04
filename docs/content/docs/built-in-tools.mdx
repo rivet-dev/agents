@@ -1,0 +1,46 @@
+---
+title: "Built-in Tools"
+description: "Pi's file and shell tools for agents with a sandbox, where they run, and how to limit them."
+---
+
+Built-in tools are Pi's own [coding tools](https://github.com/earendil-works/pi/tree/main/packages/coding-agent), with the same names, parameters, and output as in Pi. They run in the agent's sandbox instead of on your worker.
+
+| Tool | What it does |
+| --- | --- |
+| `read`, `write`, `edit` | Read, create, and change files. |
+| `grep`, `find`, `ls` | Search files and list directories. |
+| `bash` | Run a shell command. |
+
+A sandbox is optional. Without one, the agent has no built-in tools and only uses the [custom tools](/agents/docs/custom-tools) you pass. Pi's tools run with the permissions of the process they run in, which is your worker, so they're only turned on when a [sandbox](/agents/docs/sandboxes) gives them somewhere else to run.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 640 200" role="img" aria-label="client.ts calls executeBash on the reviewer agent to check out the branch. The reviewer&#x27;s read and search tools run in its sandbox. bash, edit, and write are excluded." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="built-in-tools-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="60" width="110" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="230" y="60" width="150" height="52" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="510" y="60" width="110" height="52" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M131 86 L228 86" marker-end="url(#built-in-tools-arrow)"/>
+    <path d="M381 86 L508 86" marker-end="url(#built-in-tools-arrow)"/>
+  </g>
+  <text x="75" y="91" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">client.ts</text>
+  <text x="305" y="91" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Reviewer agent</text>
+  <text x="565" y="91" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox</text>
+  <text x="179.5" y="79" text-anchor="middle" font-size="12" fill="#56524a">executeBash</text>
+  <text x="444.5" y="79" text-anchor="middle" font-size="12" fill="#56524a">read, grep, find, ls</text>
+  <text x="305" y="134" text-anchor="middle" font-size="12" fill="#56524a">bash, edit, write excluded</text>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/built-in-tools/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/built-in-tools/client.ts" title="client.ts" />
+</CodeGroup>
+
+- The `excludeTools` option turns tools off by name, so this reviewer can read and search files but can't run commands or change them. The `tools` option does the opposite and enables only the tools you list.
+- The `executeBash` action runs a command in the agent's sandbox from your backend, without the model. It works even though the reviewer can't run `bash` itself. Its `excludeFromContext` option keeps the output out of the conversation.
+- File tools only reach paths inside the sandbox's working directory. The `bash` tool accepts a timeout, and long output is truncated before it reaches the model.
+
+To give an agent your own tools, see [Custom Tools](/agents/docs/custom-tools).

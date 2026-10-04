@@ -1,0 +1,56 @@
+---
+title: "User Subscriptions"
+description: "Let your users run agents on their own Claude or ChatGPT subscription."
+---
+
+Your users can run the agent on their own Claude or ChatGPT subscription, or their own API key, instead of yours.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 660 250" role="img" aria-label="Your app saves each user&#x27;s login in their credentials Actor. The agent reads and refreshes the credential there, then calls the model provider with the user&#x27;s own login." style="width:100%;min-width:520px;max-width:660px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="user-subscriptions-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="36" width="150" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="250" y="36" width="170" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="250" y="166" width="170" height="52" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="510" y="166" width="130" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M171 62 L248 62" marker-end="url(#user-subscriptions-arrow)"/>
+    <path d="M335 165 L335 90" marker-end="url(#user-subscriptions-arrow)"/>
+    <path d="M421 192 L508 192" marker-end="url(#user-subscriptions-arrow)"/>
+  </g>
+  <text x="95" y="59" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Your app</text>
+  <text x="95" y="76" text-anchor="middle" font-size="12" fill="#56524a">login flow</text>
+  <text x="335" y="59" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">credentials Actor</text>
+  <text x="335" y="76" text-anchor="middle" font-size="12" fill="#56524a">one per user</text>
+  <text x="335" y="197" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="575" y="197" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Model provider</text>
+  <text x="209.5" y="55" text-anchor="middle" font-size="12" fill="#56524a">save</text>
+  <text x="343" y="131.5" text-anchor="start" font-size="12" fill="#56524a">read, refresh</text>
+  <text x="464.5" y="185" text-anchor="middle" font-size="12" fill="#56524a">user&#x27;s login</text>
+</svg>
+</div>
+
+Store each user's logins in a `credentials` Actor and pass it to `pi({ credentials })`. The agent checks it after `apiKeys` and before the environment, as described in [LLM API Keys](/agents/docs/api-keys). Your application owns login, storage, and refresh:
+
+- The `list` action returns the providers the user has a credential for, without the secrets.
+- The `read` action returns a provider's credential. A subscription login never includes its refresh token.
+- The `refresh` action returns a refreshed credential. Pi calls it when a subscription token expires within five minutes, so the result must stay valid for longer than that.
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/user-subscriptions/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/user-subscriptions/credentials.ts" title="credentials.ts" />
+<CodeSnippet file="examples/docs/user-subscriptions/client.ts" title="client.ts" />
+</CodeGroup>
+
+The agent Actor never receives a refresh token and never writes credentials back. Errors from the `credentials` Actor reject the model call that needed the credential, so keep secrets out of their messages.
+
+See the [complete example](https://github.com/rivet-dev/rivet/tree/main/examples/pi-credentials), including a script that runs Pi's headless login in the terminal. Your app needs its own login flow, such as a settings page, that saves the result with the `credentials` Actor's `save` action.
+
+## Share credentials across a team
+
+The `credentials` option picks a `credentials` Actor from the agent's key. The example uses the first key part as the user id, so each user has their own logins. To share one set of logins and API keys across a team or organization, start agent keys with the tenant id, such as `["acme", "user-123"]`. Each tenant then has one `credentials` Actor, and an agent only reads its own tenant's credentials. See [Credentials Shared per Tenant](/agents/docs/design-patterns#credentials-shared-per-tenant).
+
+<Warning>
+Protect the `credentials` Actor with [authentication](/docs/authentication), because its actions return provider tokens.
+</Warning>

@@ -1,0 +1,40 @@
+---
+title: "Observability"
+description: "Trace every agent run with OpenTelemetry."
+---
+
+Each Pi run is traced as an `invoke_agent pi` span, a child of the `prompt` action span that started it, with [OpenTelemetry GenAI attributes](https://opentelemetry.io/docs/specs/semconv/gen-ai/). To export it, [set up OpenTelemetry for your Actors](/docs/tracing).
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 600 200" role="img" aria-label="Each prompt action span contains an invoke_agent pi span with GenAI attributes. Both are exported to your OpenTelemetry backend." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="observability-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <g fill="rgb(var(--site-paper-mid, 227 227 229))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6">
+    <rect x="20" y="40" width="300" height="140" rx="10"/>
+  </g>
+  <rect x="44" y="84" width="252" height="60" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="420" y="84" width="160" height="60" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M321 114 L418 114" marker-end="url(#observability-arrow)"/>
+  </g>
+  <text x="20" y="28" font-size="11" font-family="ui-monospace,monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">PROMPT ACTION SPAN</text>
+  <text x="170" y="111" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916" font-family="ui-monospace,monospace">invoke_agent pi</text>
+  <text x="170" y="128" text-anchor="middle" font-size="12" fill="#56524a">GenAI attributes</text>
+  <text x="500" y="111" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">OpenTelemetry</text>
+  <text x="500" y="128" text-anchor="middle" font-size="12" fill="#56524a">your backend</text>
+  <text x="370" y="107" text-anchor="middle" font-size="12" fill="#56524a">export</text>
+</svg>
+</div>
+
+| Attribute | Value |
+| --- | --- |
+| `gen_ai.operation.name` | `invoke_agent` |
+| `gen_ai.agent.name` | `pi` |
+| `gen_ai.conversation.id` | The Pi session id. |
+| `gen_ai.request.model` | The model id. |
+| `rivet.actor.id` | The Actor's id. |
+
+A failed run sets the span status to error, with `error.type` set to `model_error` when the model returns an error or `run_error` when the run throws. Prompt text, tool arguments, and tool results are never recorded.
+
+A prompt queued with `streamingBehavior` joins the run in progress, so it doesn't get a span of its own.
