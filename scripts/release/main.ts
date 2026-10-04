@@ -2,13 +2,13 @@
 
 import * as path from "node:path";
 import * as url from "node:url";
-import { $ } from "execa";
 import { program } from "commander";
+import { $ } from "execa";
 import * as semver from "semver";
 import { buildJsArtifacts } from "./build-artifacts";
-import { promoteArtifacts } from "./promote-artifacts";
 import { tagDocker } from "./docker";
 import { createAndPushTag, createGitHubRelease, validateGit } from "./git";
+import { promoteArtifacts } from "./promote-artifacts";
 import { publishCrates, publishNpmCli, publishNpmLibraries } from "./sdk";
 import { updateVersion } from "./update_version";
 import {
@@ -45,7 +45,7 @@ async function getAllGitVersions(): Promise<string[]> {
 		// Use --force to overwrite local tags that conflict with remote
 		try {
 			await $`git fetch --tags --force --quiet`;
-		} catch (fetchError) {
+		} catch (_fetchError) {
 			console.warn(
 				"Warning: Could not fetch remote tags, using local tags only",
 			);
@@ -125,7 +125,7 @@ async function validateReuseVersion(version: string): Promise<void> {
 		const fullCommit = result.stdout.trim();
 		shortCommit = fullCommit.slice(0, 7);
 		console.log(`✅ Found ${ref} (commit ${shortCommit})`);
-	} catch (error) {
+	} catch (_error) {
 		throw new Error(
 			`${version} does not exist in git. Make sure ${ref} exists in the repository.`,
 		);
@@ -141,7 +141,7 @@ async function validateReuseVersion(version: string): Promise<void> {
 			stdio: "inherit",
 		})`docker manifest inspect rivetdev/sandbox-agent:${shortCommit}-arm64`;
 		console.log("✅ Docker images exist");
-	} catch (error) {
+	} catch (_error) {
 		console.log(
 			`⚠️ Docker images for ${shortCommit} not found - skipping Docker validation`,
 		);
@@ -475,7 +475,7 @@ async function main() {
 		reuseEngineVersion: opts.reuseEngineVersion,
 	};
 
-	if (releaseOpts.commit.length == 40) {
+	if (releaseOpts.commit.length === 40) {
 		releaseOpts.commit = releaseOpts.commit.slice(0, 7);
 	}
 

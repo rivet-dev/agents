@@ -76,11 +76,9 @@ export async function updateVersion(opts: ReleaseOpts) {
 	// lines with both `version = "..."` and `path = "..."` (internal path deps)
 	const internalCratePattern =
 		/^(\S+)\s*=\s*\{[^}]*version\s*=\s*"[^"]+"\s*,[^}]*path\s*=/gm;
-	let match;
-	const internalCrates: string[] = [];
-	while ((match = internalCratePattern.exec(cargoContent)) !== null) {
-		internalCrates.push(match[1]);
-	}
+	const internalCrates = [...cargoContent.matchAll(internalCratePattern)].map(
+		(match) => match[1],
+	);
 
 	console.log(
 		`Discovered ${internalCrates.length} internal crates to version-bump:`,
@@ -140,15 +138,10 @@ export async function updateVersion(opts: ReleaseOpts) {
 
 async function updateVersionReferences(
 	opts: ReleaseOpts,
-	oldVersion: string,
+	_oldVersion: string,
 	oldMinorChannel: string,
 ) {
 	const newMinorChannel = opts.minorVersionChannel;
-
-	// Find old Docker image tags by scanning for rivetdev/sandbox-agent:<version>-full patterns
-	// The old version might be a different patch or RC, so we match any version-full tag
-	const oldDockerTagPattern =
-		/rivetdev\/sandbox-agent:([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.]+)?)-full/;
 
 	console.log(`\nUpdating version references:`);
 	console.log(`  Old minor channel: ${oldMinorChannel}`);
@@ -214,17 +207,14 @@ async function updateVersionReferences(
 
 		// Replace Docker image tags (rivetdev/sandbox-agent:<anything>-full -> rivetdev/sandbox-agent:<version>-full)
 		content = content.replaceAll(
-			new RegExp(
-				`rivetdev/sandbox-agent:[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-zA-Z0-9.]+)?-full`,
-				"g",
-			),
+			/rivetdev\/sandbox-agent:[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.]+)?-full/g,
 			`rivetdev/sandbox-agent:${opts.version}-full`,
 		);
 
 		// Replace standalone version-full references in prose (e.g. "The `0.3.2-full` tag pins...")
 		// Match backtick-wrapped version-full patterns
 		content = content.replaceAll(
-			new RegExp("`[0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-zA-Z0-9.]+)?-full`", "g"),
+			/`[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.]+)?-full`/g,
 			`\`${opts.version}-full\``,
 		);
 
