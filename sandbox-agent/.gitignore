@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+target/
+
+# Package manager
+package-lock.json
+yarn.lock
+
+# Cache
+.cache/
+.astro/
+*.tsbuildinfo
+.turbo/
+**/.turbo/
+.pnpm-store/
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Rust
+Cargo.lock
+**/*.rs.bk
+
+# Agent runtime directories
+.agents/
+.claude/
+.opencode/
+
+# Example temp files
+.tmp-upload/
+*.db
+.foundry/
+
+# CLI binaries (downloaded during npm publish)
+sdks/cli/platforms/*/bin/
+
+# Foundry desktop app build artifacts
+foundry/packages/desktop/frontend-dist/
+foundry/packages/desktop/src-tauri/sidecars/
+.context/

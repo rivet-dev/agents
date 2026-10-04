@@ -1,27 +1,16 @@
 {
-  "name": "sandbox-agent-workspace",
-  "private": true,
-  "license": "Apache-2.0",
-  "packageManager": "pnpm@9.15.0",
-  "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev --parallel",
-    "generate": "turbo run generate",
-    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true",
-    "typecheck": "turbo run typecheck"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.6",
-    "@types/node": "^24.5.2",
-    "lefthook": "^2.1.3",
-    "turbo": "^2.4.0",
-    "typescript": "^5.9.2",
-    "vitest": "^3.0.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/react": "^19.1.12",
-      "@types/react-dom": "^19.1.6"
-    }
-  }
+	"name": "@rivet-dev/agents-workspace",
+	"private": true,
+	"license": "Apache-2.0",
+	"packageManager": "pnpm@9.15.0",
+	"scripts": {
+		"prepare": "git rev-parse --git-dir >/dev/null 2>&1 && lefthook install || true",
+		"lint": "pnpm biome check .",
+		"fmt": "pnpm biome check --write --diagnostic-level=error ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.10",
+		"lefthook": "^2.1.3",
+		"tsx": "^4.21.0"
+	}
 }
