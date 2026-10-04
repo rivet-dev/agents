@@ -1782,8 +1782,8 @@ exit 0
                 .expect("write agent process launcher");
         }
 
-        // Pi and Cursor only need agent process launchers (native_required = false).
-        for agent in [AgentId::Pi, AgentId::Cursor] {
+        // Pi, Cursor, and Mock only need agent process launchers.
+        for agent in [AgentId::Pi, AgentId::Cursor, AgentId::Mock] {
             fs::write(manager.agent_process_path(agent), b"stub")
                 .expect("write agent process launcher");
         }

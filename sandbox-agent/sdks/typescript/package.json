@@ -105,7 +105,7 @@
   ],
   "scripts": {
     "generate:openapi": "SANDBOX_AGENT_SKIP_INSPECTOR=1 cargo run -p sandbox-agent-openapi-gen -- --out ../../docs/openapi.json",
-    "generate:types": "openapi-typescript ../../docs/openapi.json -o src/generated/openapi.ts && node ./scripts/patch-openapi-types.mjs",
+    "generate:types": "openapi-typescript ../../docs/openapi.json -o src/generated/openapi.ts && node ./scripts/patch-openapi-types.mjs && biome format --write src/generated/openapi.ts",
     "generate": "pnpm run generate:openapi && pnpm run generate:types",
     "build": "pnpm --filter acp-http-client build && pnpm --filter @sandbox-agent/cli-shared build && if [ -z \"$SKIP_OPENAPI_GEN\" ]; then pnpm run generate:openapi; fi && pnpm run generate:types && tsup",
     "typecheck": "tsc --noEmit",

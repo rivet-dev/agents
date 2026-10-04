@@ -53,7 +53,7 @@ RUN git config --global --add safe.directory '*' && \
     cd /root/osxcross && \
     wget -nc https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX11.3.sdk.tar.xz && \
     mv MacOSX11.3.sdk.tar.xz tarballs/ && \
-    UNATTENDED=yes OSX_VERSION_MIN=10.7 ./build.sh
+    UNATTENDED=1 BUILD_FLAVOR=stable OSX_VERSION_MIN=10.9 ./build.sh
 
 # Add osxcross to PATH
 ENV PATH="/root/osxcross/target/bin:$PATH"
