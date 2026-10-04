@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/media/banner.png" alt="Sandbox Agent SDK" />
+  <img src="../.github/media/banner.png" alt="Sandbox Agent SDK" />
 </p>
 
 <h3 align="center">Run Coding Agents in Sandboxes. Control Them Over HTTP.</h3>
@@ -39,7 +39,7 @@ Sandbox Agent solves three problems:
 
 ## Architecture
 
-![Agent Architecture Diagram](./.github/media/agent-diagram.gif)
+![Agent Architecture Diagram](../.github/media/agent-diagram.gif)
 
 The Sandbox Agent acts as a universal adapter between your client application and various coding agents. Each agent has its own adapter that handles the translation between the universal API and the agent-specific interface.
 
@@ -192,13 +192,13 @@ bunx @sandbox-agent/cli@0.4.x --help
 
 Debug sessions and events with the built-in Inspector UI (e.g., `http://localhost:2468/ui/`).
 
-![Sandbox Agent Inspector](./.github/media/inspector.png)
+![Sandbox Agent Inspector](../.github/media/inspector.png)
 
 [Inspector documentation](https://sandboxagent.dev/docs/inspector)
 
 ### OpenAPI Specification
 
-[Explore API](https://sandboxagent.dev/docs/api-reference) — [View Specification](https://github.com/rivet-dev/sandbox-agent/blob/main/docs/openapi.json)
+[Explore API](https://sandboxagent.dev/docs/api-reference) — [View Specification](https://github.com/rivet-dev/agents/blob/main/sandbox-agent/docs/openapi.json)
 
 ### Tip: Extract credentials
 

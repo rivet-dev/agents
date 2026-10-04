@@ -59,13 +59,13 @@ just build
 
 ## Releasing
 
-Releases are managed through a release script that handles version bumps, artifact uploads, npm/crates.io publishing, and GitHub releases.
+Releases are managed through a release script that handles version bumps, artifact uploads, npm/crates.io publishing, and GitHub releases. The script lives at the repository root (`scripts/release/`) and every release command below runs from the repository root, not from `sandbox-agent/`.
 
 ### Prerequisites
 
-1. Install dependencies in the release script directory:
+1. Install dependencies from the repository root:
    ```bash
-   cd scripts/release && pnpm install && cd ../..
+   pnpm install
    ```
 
 2. Ensure you have the following configured:
@@ -143,6 +143,7 @@ sandbox-daemon/
 │   └── cli/             # CLI wrapper (npm: @sandbox-agent/cli)
 ├── frontend/packages/
 │   └── inspector/       # Web console UI
-├── docs/                # Mintlify documentation
-└── scripts/release/     # Release automation
+└── docs/                # Mintlify documentation
+
+# The release automation lives at the repository root in scripts/release/.
 ```

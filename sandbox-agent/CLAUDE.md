@@ -2,7 +2,7 @@
 
 ## Naming and Ownership
 
-- This repository/product is **Sandbox Agent**.
+- This directory/product is **Sandbox Agent**. It lives in `sandbox-agent/` of the `rivet-dev/agents` repository, which releases everything on one version line from the repository root (`../scripts/release`, `../.github/workflows/release.yaml`).
 - **Gigacode** is a separate user-facing UI/client, not the server product name.
 - Gigacode integrates with Sandbox Agent via the OpenCode-compatible surface (`/opencode/*`) when that compatibility layer is enabled.
 - Canonical extension namespace/domain string is `sandboxagent.dev` (no hyphen).
@@ -79,6 +79,6 @@
   - `examples/docker/src/index.ts`
   - `examples/e2b/src/index.ts`
   - `examples/vercel/src/index.ts`
-  - `scripts/release/main.ts`
-  - `scripts/release/promote-artifacts.ts`
-  - `scripts/release/sdk.ts`
+  - `../scripts/release/main.ts`
+  - `../scripts/release/promote-artifacts.ts`
+  - `../scripts/release/sdk.ts`

@@ -65,8 +65,10 @@ jobs:
           //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
           EOF
 
-          # Install dependencies
+          # Install dependencies. The root workspace holds the release script;
+          # Sandbox Agent keeps its own workspace in sandbox-agent/.
           pnpm install --no-frozen-lockfile
+          pnpm --dir sandbox-agent install --no-frozen-lockfile
 
           # Install tsx globally
           npm install -g tsx
@@ -127,6 +129,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build binary
+        working-directory: sandbox-agent
         run: |
           # Use Docker BuildKit
           export DOCKER_BUILDKIT=1
@@ -138,6 +141,7 @@ jobs:
           ls -la dist/
 
       - name: Upload to R2
+        working-directory: sandbox-agent
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_RELEASES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_RELEASES_SECRET_ACCESS_KEY }}
@@ -181,19 +185,19 @@ jobs:
           - platform: linux/arm64
             runner: depot-ubuntu-24.04-arm-8
             tag_suffix: -arm64
-            dockerfile: docker/runtime/Dockerfile
+            dockerfile: sandbox-agent/docker/runtime/Dockerfile
           - platform: linux/amd64
             runner: depot-ubuntu-24.04-8
             tag_suffix: -amd64
-            dockerfile: docker/runtime/Dockerfile
+            dockerfile: sandbox-agent/docker/runtime/Dockerfile
           - platform: linux/arm64
             runner: depot-ubuntu-24.04-arm-8
             tag_suffix: -full-arm64
-            dockerfile: docker/runtime/Dockerfile.full
+            dockerfile: sandbox-agent/docker/runtime/Dockerfile.full
           - platform: linux/amd64
             runner: depot-ubuntu-24.04-8
             tag_suffix: -full-amd64
-            dockerfile: docker/runtime/Dockerfile.full
+            dockerfile: sandbox-agent/docker/runtime/Dockerfile.full
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -213,7 +217,7 @@ jobs:
       - name: Build & Push
         uses: docker/build-push-action@v4
         with:
-          context: .
+          context: sandbox-agent
           push: true
           tags: rivetdev/sandbox-agent:${{ steps.vars.outputs.sha_short }}${{ matrix.tag_suffix }}
           file: ${{ matrix.dockerfile }}
@@ -260,8 +264,10 @@ jobs:
           //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
           EOF
 
-          # Install dependencies
+          # Install dependencies. The root workspace holds the release script;
+          # Sandbox Agent keeps its own workspace in sandbox-agent/.
           pnpm install --no-frozen-lockfile
+          pnpm --dir sandbox-agent install --no-frozen-lockfile
 
           # Install tsx globally
           npm install -g tsx

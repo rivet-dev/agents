@@ -17,12 +17,19 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sandbox-agent -> target
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            sandbox-agent/pnpm-lock.yaml
       - run: pnpm install
+      - run: pnpm install
+        working-directory: sandbox-agent
       - name: Run formatter hooks
         shell: bash
         run: |
@@ -56,10 +63,11 @@ jobs:
       - name: Run checks
         run: ./scripts/release/main.ts --version 0.0.0 --only-steps run-ci-checks
       - name: Run ACP v1 server tests
+        working-directory: sandbox-agent
         run: |
           cargo test -p sandbox-agent-agent-management
           cargo test -p sandbox-agent --test v1_api
           cargo test -p sandbox-agent --test v1_agent_process_matrix
           cargo test -p sandbox-agent --lib
       - name: Run SDK tests
-        run: pnpm --dir sdks/typescript test
+        run: pnpm --dir sandbox-agent/sdks/typescript test
