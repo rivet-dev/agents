@@ -3,14 +3,17 @@ WORKDIR /app
 # git is required for pnpm to resolve the github: @rivet-dev/docs-theme dependency.
 RUN apk add --no-cache git && npm install -g pnpm@9
 
+# Railway builds this file from the repository root (Dockerfile path
+# website/Dockerfile). The site lives in sandbox-agent/frontend/packages/website.
+
 # Copy website package
-COPY frontend/packages/website/package.json ./
+COPY sandbox-agent/frontend/packages/website/package.json ./
 
 # Install dependencies
 RUN pnpm install
 
 # Copy website source
-COPY frontend/packages/website/ .
+COPY sandbox-agent/frontend/packages/website/ .
 
 # Build
 RUN pnpm build
