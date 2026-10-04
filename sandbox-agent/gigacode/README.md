@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../.github/media/gigacode-header.jpeg" alt="Gigacode. Use OpenCode's UI with any coding agent." />
+  <img src="../../.github/media/gigacode-header.jpeg" alt="Gigacode. Use OpenCode's UI with any coding agent." />
 </p>
 
 <h3 align="center">Supports Claude Code, Codex, Pi, and Amp.</h3>
