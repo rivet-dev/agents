@@ -1,6 +1,6 @@
-import { $ } from "execa";
 import * as fs from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
+import { $ } from "execa";
 import { glob } from "glob";
 import type { ReleaseOpts } from "./main";
 import { downloadFromReleases, PREFIX } from "./utils";
@@ -112,7 +112,7 @@ async function crateVersionExists(
 			return true;
 		}
 		return false;
-	} catch (error: any) {
+	} catch (_error: any) {
 		return false;
 	}
 }
