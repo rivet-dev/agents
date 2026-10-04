@@ -1,8 +1,9 @@
 FROM caddy:alpine
 # Railway keeps its existing Dockerfile path and domains. The website and docs
 # are published by rivet-dev/website; deploying this image migrates old links.
+# The existing custom domains target port 80, not Railway's injected PORT.
 RUN cat > /etc/caddy/Caddyfile <<'EOF'
-:{$PORT:80} {
+:80 {
 	handle /health {
 		respond "healthy" 200
 	}
