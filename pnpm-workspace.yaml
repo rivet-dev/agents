@@ -1,14 +1,8 @@
+# Root workspace. Sandbox Agent keeps its own pnpm workspace in sandbox-agent/
+# because its Dockerfiles build from that directory as the context root.
 packages:
-  - "frontend/packages/*"
-  - "foundry/packages/*"
-  - "!foundry/packages/cli"
-  - "!foundry/packages/desktop"
-  - "sdks/*"
-  - "sdks/cli"
-  - "sdks/cli/platforms/*"
-  - "sdks/gigacode"
-  - "sdks/gigacode/platforms/*"
-  - "resources/vercel-ai-sdk-schemas"
-  - "scripts/release"
-  - "examples/*"
-  - "server/packages/sandbox-agent/tests/opencode-compat"
+  - scripts/release
+
+onlyBuiltDependencies:
+  - '@biomejs/biome'
+  - lefthook

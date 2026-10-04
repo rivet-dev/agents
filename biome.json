@@ -1,7 +1,45 @@
 {
-  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "formatter": {
-    "indentStyle": "space",
-    "lineWidth": 160
-  }
+	"$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
+	"files": {
+		"includes": [
+			"scripts/**/*.{ts,mjs}",
+			"!/**/node_modules",
+			"!!sandbox-agent"
+		],
+		"ignoreUnknown": true
+	},
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true,
+		"defaultBranch": "main"
+	},
+	"formatter": {
+		"enabled": true,
+		"useEditorconfig": true
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"style": {
+				"noUselessElse": "off",
+				"useNodejsImportProtocol": "error"
+			},
+			"correctness": {
+				"noUnusedImports": "warn"
+			},
+			"suspicious": {
+				"noExplicitAny": "off",
+				"noControlCharactersInRegex": "off"
+			},
+			"performance": {
+				"useTopLevelRegex": "off"
+			},
+			"nursery": {
+				"noFloatingPromises": "error",
+				"noMisusedPromises": "error"
+			}
+		}
+	}
 }
