@@ -72,6 +72,27 @@ export async function commitAndPush(opts: ReleaseOpts, push: boolean) {
 		if (push) {
 			const bookmark = await getCurrentBookmark(opts.repoRoot);
 			const revision = await getCurrentRevision(opts.repoRoot);
+			const { stdout: gitDir } = await $({ cwd: opts.repoRoot })`jj git root`;
+			const gitOptions = {
+				cwd: opts.repoRoot,
+				env: { GIT_DIR: gitDir.trim() },
+			};
+			const remoteRef = `refs/remotes/origin/${bookmark}`;
+			const remote = await $({
+				...gitOptions,
+				reject: false,
+			})`git rev-parse -q --verify ${remoteRef}`;
+			if (remote.exitCode === 0) {
+				// jj pushes use lease semantics. Releases must also be fast-forward,
+				// even when a freshly initialized workspace has not tracked origin.
+				await $(
+					gitOptions,
+				)`git merge-base --is-ancestor ${remoteRef} ${revision}`;
+				await $({
+					stdio: "inherit",
+					cwd: opts.repoRoot,
+				})`jj bookmark track ${bookmark} --remote origin`;
+			}
 			await $({
 				stdio: "inherit",
 				cwd: opts.repoRoot,
@@ -79,7 +100,7 @@ export async function commitAndPush(opts: ReleaseOpts, push: boolean) {
 			await $({
 				stdio: "inherit",
 				cwd: opts.repoRoot,
-			})`jj git push --bookmark ${bookmark}`;
+			})`jj git push --remote origin --bookmark ${bookmark}`;
 		}
 		return;
 	}

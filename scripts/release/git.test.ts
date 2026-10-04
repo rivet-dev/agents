@@ -82,6 +82,25 @@ test("jj commit/push can resume without an extra commit", async (t) => {
 	await commitAndPush(opts(directory), true);
 	const { stdout } = await $`git --git-dir=${remote} rev-parse refs/heads/main`;
 	assert.equal(stdout.trim(), first);
+
+	await $({ cwd: directory })`jj bookmark untrack main@origin`;
+	await writeFile(join(directory, "file.txt"), "next release\n");
+	await commitAndPush(opts(directory), false);
+	await commitAndPush(opts(directory), true);
+	const second = await getCurrentRevision(directory);
+	assert.equal(
+		(await $`git --git-dir=${remote} rev-parse refs/heads/main`).stdout.trim(),
+		second,
+	);
+
+	// A release cannot rewind the remote even though jj itself supports leases.
+	await $({ cwd: directory })`jj new ${first}`;
+	await $({ cwd: directory })`jj bookmark set main -r @ --allow-backwards`;
+	await assert.rejects(commitAndPush(opts(directory), true));
+	assert.equal(
+		(await $`git --git-dir=${remote} rev-parse refs/heads/main`).stdout.trim(),
+		second,
+	);
 });
 
 test("an existing annotated tag is compared by peeled commit and never rewritten", async (t) => {
