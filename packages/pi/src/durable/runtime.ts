@@ -78,6 +78,7 @@ interface OpenHarness {
 	harness: Harness;
 	stopBusyWatch: () => void;
 	watches: ConnectionWatches;
+	isBusy: () => Promise<boolean>;
 }
 
 /** Per-actor-generation state, stored on `c.vars` under `PI_DURABLE_RUNTIME`. */
@@ -230,9 +231,12 @@ async function openHarness(
 	);
 	reportBlockedTasks(c, await harness.inspect(BACKGROUND_CONTEXT));
 	if (open.resume) harness.resume();
+	const isBusy = async () =>
+		busyState(await harness.inspect(BACKGROUND_CONTEXT), now(), LONG_WAIT_MS)
+			.kind === "busy";
 	const stopBusyWatch = watchBusy(c, harness, now, LONG_WAIT_MS);
 	await reattachWatches(c, runtime.watches, harness, documentsByKind(options));
-	return { harness, stopBusyWatch, watches: runtime.watches };
+	return { harness, stopBusyWatch, watches: runtime.watches, isBusy };
 }
 
 /** App documents by `kind`, for clients that name a document. */
@@ -519,24 +523,69 @@ function watchBusy(
 }
 
 /**
- * Closes Pi Durable for this actor generation. Records of interrupted work
- * stay running, and the next open resumes them. Then suspends the sandbox on
+ * Waits until no run is active, or until `drainUntil` passes. Idle sleep
+ * never has live work, so this only waits on a forced stop, such as a deploy.
+ * The deadline ends before RivetKit's, so closing still fits in the grace
+ * period. Pi's records are already stored, and the next wake resumes the work.
+ */
+async function drain(
+	c: PiContext,
+	open: OpenHarness,
+	drainUntil: number,
+): Promise<void> {
+	let changed = () => {};
+	let timedOut = false;
+	const unsubscribe = open.harness.subscribeCommits(() => changed());
+	const timer = setTimeout(
+		() => {
+			timedOut = true;
+			changed();
+		},
+		Math.max(0, drainUntil - Date.now()),
+	);
+	try {
+		while (!timedOut) {
+			// Armed before the check, so a commit during the check is not missed.
+			const next = new Promise<void>((resolve) => {
+				changed = resolve;
+			});
+			if (!(await open.isBusy())) return;
+			await next;
+		}
+		c.log.warn({
+			msg: "pi durable run still active at the end of the grace period; it resumes on wake",
+		});
+	} finally {
+		clearTimeout(timer);
+		unsubscribe();
+	}
+}
+
+/**
+ * Closes Pi Durable for this actor generation. On sleep it drains first. On
+ * destroy it stops running work at once. Records of interrupted work stay
+ * running, and the next open resumes them. Then suspends the sandbox on
  * sleep, or destroys it on destroy.
  */
 export async function closeHarness(
 	c: PiContext,
 	options: PiDurableOptions,
-	reason: "sleep" | "destroy",
+	stop: { reason: "sleep"; drainUntil: number } | { reason: "destroy" },
 ): Promise<void> {
 	const runtime = piDurableRuntime(c);
-	runtime.closing = true;
 	const errors: unknown[] = [];
-	const opening = runtime.harness;
-	runtime.harness = undefined;
 	let open: OpenHarness | undefined;
 	try {
-		open = await opening;
+		open = await runtime.harness;
 	} catch {}
+	// Destroy has no next generation to resume in, so it stops running work at once.
+	if (open && stop.reason === "sleep") {
+		await drain(c, open, stop.drainUntil).catch((error: unknown) =>
+			errors.push(error),
+		);
+	}
+	runtime.closing = true;
+	runtime.harness = undefined;
 	if (open) {
 		await closeOpenHarness(open).catch((error: unknown) => errors.push(error));
 	}
@@ -545,7 +594,7 @@ export async function closeHarness(
 	if (provider) {
 		try {
 			const connected = await runtime.sandbox?.catch(() => undefined);
-			if (reason === "sleep") {
+			if (stop.reason === "sleep") {
 				if (connected && provider.suspend)
 					await provider.suspend(c, connected.id);
 			} else if (provider.destroy) {
