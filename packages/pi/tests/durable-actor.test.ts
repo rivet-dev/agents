@@ -57,9 +57,8 @@ async function waitForSleeps(key: string[], count: number) {
 	);
 }
 
-/** Tool calls of the crash test: each tool waits on `release` and counts its executions. */
+/** Tool calls of the crash test. A tool's first run blocks until the stop aborts it; a rerun returns at once. */
 const toolRuns = { safe: 0, unsafe: 0 };
-const release = Promise.withResolvers<void>();
 
 const Todos = defineDoc<{ items: string[] }>({
 	kind: "app.todos",
@@ -114,7 +113,7 @@ function buildRegistry(mock: MockModel, root: string) {
 			replay,
 			execute: async (_args, _api, context) => {
 				toolRuns[name] += 1;
-				await Promise.race([release.promise, aborted(context.abortSignal)]);
+				if (toolRuns[name] === 1) await aborted(context.abortSignal);
 				context.abortSignal?.throwIfAborted();
 				return { content: [{ type: "text", text: `${name} done` }] };
 			},
@@ -131,6 +130,8 @@ function buildRegistry(mock: MockModel, root: string) {
 		...models,
 		registry: tools,
 		documents: [Todos],
+		// A short grace period, so a stop interrupts running tools like a crash does.
+		options: { sleepGracePeriod: 2_000 },
 		onSleep: countSleep,
 		actions: {
 			nap: (c) => {
@@ -188,7 +189,8 @@ function buildRegistry(mock: MockModel, root: string) {
 	const jobRunner = piDurable({
 		...models,
 		registry: jobsRegistry,
-		options: { sleepTimeout: 300 },
+		// The job runs until the stop interrupts it, so a short grace period ends the drain.
+		options: { sleepTimeout: 300, sleepGracePeriod: 1_000 },
 		onSleep: countSleep,
 		actions: {
 			nap: (c) => {
@@ -265,7 +267,7 @@ afterAll(async () => {
 });
 
 describe("piDurable actor", () => {
-	test("a run interrupted by sleep resumes on wake: safe tools rerun, unsafe tools report the interruption", async (c) => {
+	test("a run stopped at the end of the grace period resumes on wake: safe tools rerun, unsafe tools report the interruption", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["crash", randomUUID()];
 		const handle = client.agent.getOrCreate(key);
@@ -279,7 +281,6 @@ describe("piDurable actor", () => {
 
 		await handle.nap();
 		await waitForSleeps(key, 1);
-		release.resolve();
 
 		const settled = await handle.submission.wait(submission.id);
 		expect(settled.status).toBe("done");
