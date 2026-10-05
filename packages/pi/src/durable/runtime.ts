@@ -34,6 +34,12 @@ import { loadPiSandbox } from "../storage.js";
 import { actorSqlite } from "./actor-sqlite.js";
 import { sandboxEnv } from "./env.js";
 import { toClientError } from "./errors.js";
+import {
+	type ConnectionWatches,
+	createConnectionWatches,
+	reattachWatches,
+	stopAllWatches,
+} from "./watches.js";
 
 /**
  * Options accepted by `piDurable()` on top of ordinary actor config. The Pi
@@ -71,6 +77,7 @@ export const WAKE_ACTION = "pi.wake";
 interface OpenHarness {
 	harness: Harness;
 	stopBusyWatch: () => void;
+	watches: ConnectionWatches;
 }
 
 /** Per-actor-generation state, stored on `c.vars` under `PI_DURABLE_RUNTIME`. */
@@ -86,6 +93,8 @@ export interface PiDurableRuntime {
 	 * with the action.
 	 */
 	actor?: PiContext;
+	/** Open Pi watches of connections, for this generation. */
+	watches: ConnectionWatches;
 }
 
 export const PI_DURABLE_RUNTIME: unique symbol = Symbol.for(
@@ -93,10 +102,10 @@ export const PI_DURABLE_RUNTIME: unique symbol = Symbol.for(
 );
 
 export function createPiDurableRuntime(): PiDurableRuntime {
-	return { closing: false };
+	return { closing: false, watches: createConnectionWatches() };
 }
 
-function piDurableRuntime(c: PiContext): PiDurableRuntime {
+export function piDurableRuntime(c: PiContext): PiDurableRuntime {
 	const runtime = (
 		c.vars as Record<symbol, PiDurableRuntime | undefined> | undefined
 	)?.[PI_DURABLE_RUNTIME];
@@ -221,7 +230,18 @@ async function openHarness(
 	);
 	reportBlockedTasks(c, await harness.inspect(BACKGROUND_CONTEXT));
 	if (open.resume) harness.resume();
-	return { harness, stopBusyWatch: watchBusy(c, harness, now, LONG_WAIT_MS) };
+	const stopBusyWatch = watchBusy(c, harness, now, LONG_WAIT_MS);
+	await reattachWatches(c, runtime.watches, harness, documentsByKind(options));
+	return { harness, stopBusyWatch, watches: runtime.watches };
+}
+
+/** App documents by `kind`, for clients that name a document. */
+export function documentsByKind(
+	options: PiDurableOptions,
+): ReadonlyMap<string, ConversationDocToken<any>> {
+	return new Map(
+		(options.documents ?? []).map((doc) => [doc.definition.kind, doc]),
+	);
 }
 
 /** Pi Durable refuses every call once a commit failed after storage admitted it. */
@@ -271,6 +291,7 @@ async function recoverHarness(
 
 async function closeOpenHarness(open: OpenHarness): Promise<void> {
 	open.stopBusyWatch();
+	await stopAllWatches(open.watches);
 	await open.harness.close(BACKGROUND_CONTEXT);
 }
 
