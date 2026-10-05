@@ -8,6 +8,17 @@
 		"url": "https://github.com/rivet-dev/agents.git",
 		"directory": "packages/sandbox-adapter"
 	},
+	"homepage": "https://rivet.dev/agents/docs/sandboxes",
+	"bugs": "https://github.com/rivet-dev/agents/issues",
+	"keywords": [
+		"sandbox",
+		"e2b",
+		"daytona",
+		"agent",
+		"ai",
+		"rivet",
+		"actors"
+	],
 	"publishConfig": {
 		"access": "public"
 	},

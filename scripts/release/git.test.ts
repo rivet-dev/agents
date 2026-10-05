@@ -13,6 +13,7 @@ import {
 	validateGit,
 } from "./git";
 import type { ReleaseOpts } from "./main";
+import type { ReleaseTarget } from "./target";
 
 async function temporaryDirectory(t: test.TestContext) {
 	const directory = await mkdtemp(join(tmpdir(), "release-git-test-"));
@@ -20,8 +21,13 @@ async function temporaryDirectory(t: test.TestContext) {
 	return directory;
 }
 
-function opts(repoRoot: string, version = "1.2.3", commit = "HEAD") {
-	return { repoRoot, version, commit } as ReleaseOpts;
+function opts(
+	repoRoot: string,
+	version = "1.2.3",
+	commit = "HEAD",
+	target: ReleaseTarget = "sandbox-agent",
+) {
+	return { repoRoot, version, commit, target } as ReleaseOpts;
 }
 
 async function initGit(directory: string) {

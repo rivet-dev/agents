@@ -2,7 +2,7 @@
 
 ## Naming and Ownership
 
-- This directory/product is **Sandbox Agent**. It lives in `sandbox-agent/` of the `rivet-dev/agents` repository, which releases everything on one version line from the repository root (`../scripts/release`, `../.github/workflows/release.yaml`).
+- This directory/product is **Sandbox Agent**. It lives in `sandbox-agent/` of the `rivet-dev/agents` repository, which releases Sandbox Agent with `just release sandbox-agent` from the repository root (`../scripts/release`, `../.github/workflows/release.yaml`).
 - **Gigacode** is a separate user-facing UI/client, not the server product name.
 - Gigacode integrates with Sandbox Agent via the OpenCode-compatible surface (`/opencode/*`) when that compatibility layer is enabled.
 - Canonical extension namespace/domain string is `sandboxagent.dev` (no hyphen).

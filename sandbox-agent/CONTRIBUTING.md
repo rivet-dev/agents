@@ -79,16 +79,16 @@ Releases are managed through a release script that handles version bumps, artifa
 
 ```bash
 # Release with automatic patch bump
-just release --patch
+just release sandbox-agent --patch
 
 # Release with minor bump
-just release --minor
+just release sandbox-agent --minor
 
 # Release with specific version
-just release --version 0.2.0
+just release sandbox-agent --version 0.2.0
 
 # Release a pre-release
-just release --version 0.2.0-rc.1 --no-latest
+just release sandbox-agent --version 0.2.0-rc.1 --no-latest
 ```
 
 ### Release Flow
@@ -124,7 +124,7 @@ To run specific steps manually:
 
 ```bash
 # Run only local checks
-cd scripts/release && pnpm exec tsx ./main.ts --version 0.1.0 --only-steps run-local-checks
+cd scripts/release && pnpm exec tsx ./main.ts sandbox-agent --version 0.1.0 --only-steps run-local-checks
 
 # Build binaries locally
 just release-build-all

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { glob } from "glob";
 import * as semver from "semver";
 import type { ReleaseOpts } from "./main";
+import { type RootPackage, rootPackage } from "./target";
 
 function assert(condition: any, message?: string): asserts condition {
 	if (!condition) {
@@ -47,7 +48,18 @@ const VERSION_REFERENCE_FILES = [
 	"scripts/release/sdk.ts",
 ];
 
+/**
+ * Sets the release version in the files of `opts.target` only. A root package
+ * release changes its own package.json; a Sandbox Agent release changes Cargo,
+ * the Sandbox Agent SDKs, and its version references.
+ */
 export async function updateVersion(opts: ReleaseOpts) {
+	const pkg = rootPackage(opts.target);
+	if (pkg) {
+		await setPackageVersion(opts, pkg);
+		return;
+	}
+
 	// 1. Read current version from Cargo.toml before overwriting
 	const cargoTomlPath = join(opts.sandboxAgentRoot, "Cargo.toml");
 	let cargoContent = await fs.readFile(cargoTomlPath, "utf-8");
@@ -93,15 +105,12 @@ export async function updateVersion(opts: ReleaseOpts) {
 
 	await fs.writeFile(cargoTomlPath, cargoContent);
 
-	// 2. Discover and update every non-private package.json on the release line:
-	// Sandbox Agent SDKs and the root workspace packages.
-	const packageJsonPaths = await glob(
-		["sandbox-agent/sdks/**/package.json", "packages/*/package.json"],
-		{
-			cwd: opts.repoRoot,
-			ignore: ["**/node_modules/**"],
-		},
-	);
+	// 2. Discover and update every non-private Sandbox Agent SDK package.json.
+	// The root packages in `packages/` release on their own.
+	const packageJsonPaths = await glob(["sandbox-agent/sdks/**/package.json"], {
+		cwd: opts.repoRoot,
+		ignore: ["**/node_modules/**"],
+	});
 
 	// Filter to non-private packages only
 	const toUpdate: string[] = [];
@@ -134,6 +143,19 @@ export async function updateVersion(opts: ReleaseOpts) {
 
 	// 3. Update version references across docs, examples, and code
 	await updateVersionReferences(opts, oldVersion, oldMinorChannel);
+}
+
+async function setPackageVersion(opts: ReleaseOpts, pkg: RootPackage) {
+	const relPath = join(pkg.dir, "package.json");
+	const fullPath = join(opts.repoRoot, relPath);
+	const content = await fs.readFile(fullPath, "utf-8");
+	const versionPattern = /"version": ".*"/;
+	assert(versionPattern.test(content), `No version field in ${relPath}`);
+	await fs.writeFile(
+		fullPath,
+		content.replace(versionPattern, `"version": "${opts.version}"`),
+	);
+	console.log(`Set ${pkg.name} to ${opts.version} in ${relPath}`);
 }
 
 async function updateVersionReferences(
