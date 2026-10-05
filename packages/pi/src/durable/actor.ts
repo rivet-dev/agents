@@ -16,6 +16,11 @@ import {
 	type WakeContext,
 } from "rivetkit";
 import { db } from "rivetkit/db";
+import {
+	type ClientActions,
+	type DistributiveOmit,
+	wrapActions,
+} from "../actor-types.js";
 import { drainDeadline } from "../drain.js";
 import type { PiContext, PiDatabaseProvider } from "../runtime.js";
 import { createPiDurableActions, type PiDurableActions } from "./actions.js";
@@ -203,11 +208,6 @@ type WrappedKey =
 	| "actions"
 	| keyof PiDurableHooks<any, any, any, any, any, any, any>;
 
-/** `Omit` that keeps each member of a union, so `state` and `createState` stay alternatives. */
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
-	? Omit<T, K>
-	: never;
-
 export type PiDurableActorConfigInput<
 	TState = undefined,
 	TConnParams = undefined,
@@ -248,18 +248,6 @@ export type PiDurableActorConfigInput<
 		TQueues
 	> &
 	PiDurableOptions & { actions?: TUserActions };
-
-/** The app's actions as clients see them: the same arguments, without `c.pi`. */
-type ClientActions<T, TContext> = string extends keyof T
-	? Record<never, never>
-	: {
-			[K in keyof T]: T[K] extends (
-				c: any,
-				...args: infer TArgs
-			) => infer TResult
-				? (c: TContext, ...args: TArgs) => TResult
-				: ClientActions<T[K], TContext>;
-		};
 
 const piDurableOptionKeys = [
 	"registry",
@@ -402,7 +390,9 @@ export function piDurable<
 		db: db({ onMigrate: migratePiDurableTables }),
 		events: { ...(actorConfig.events ?? {}), ...piDurableEvents },
 		actions: {
-			...wrapActions(actorConfig.actions ?? {}, durableOptions),
+			...wrapActions(actorConfig.actions ?? {}, (c: PiContext, action) =>
+				withPiAccess(c, durableOptions, action),
+			),
 			...actions,
 		},
 		createVars: async (c: unknown, driverCtx: unknown) => {
@@ -464,22 +454,6 @@ export function piDurable<
 			}
 		},
 	} as any) as any;
-}
-
-/** Wraps each of the app's actions so it runs with `c.pi`. */
-function wrapActions(
-	actions: Record<string, unknown>,
-	options: PiDurableOptions,
-): Record<string, unknown> {
-	return Object.fromEntries(
-		Object.entries(actions).map(([name, action]) => [
-			name,
-			typeof action === "function"
-				? (c: PiContext, ...args: unknown[]) =>
-						withPiAccess(c, options, () => action(c, ...args))
-				: wrapActions(action as Record<string, unknown>, options),
-		]),
-	);
 }
 
 /** Adds the runtime slot to the user's vars without changing their shape. */
