@@ -76,7 +76,7 @@ export interface PiSession {
 	session: AgentSession;
 	settingsManager: SettingsManager;
 	cwd: string;
-	sandbox: ConnectedSandbox | undefined;
+	sandbox: LazySandbox | undefined;
 	/** Command execution for `executeBash`. Undefined when there is no sandbox. */
 	bashOperations: BashOperations | undefined;
 	/** JSON of the settings last written to SQLite, to skip no-op writes. */
@@ -92,6 +92,30 @@ export interface ConnectedSandbox {
 	provider: SandboxProvider;
 	id: string;
 	sandbox: Sandbox;
+}
+
+/**
+ * The actor's sandbox, connected on first use in this generation. Opening a
+ * session never needs it, so actions that touch no files cost no connect.
+ */
+interface LazySandbox {
+	connect(): Promise<ConnectedSandbox>;
+	/** The connection of this generation, if one was made. */
+	current: Promise<ConnectedSandbox> | undefined;
+}
+
+function lazySandbox(c: PiContext, provider: SandboxProvider): LazySandbox {
+	const lazy: LazySandbox = {
+		current: undefined,
+		connect: () =>
+			(lazy.current ??= connectSandbox(c, provider, piSandboxStore).catch(
+				(error: unknown) => {
+					lazy.current = undefined;
+					throw error;
+				},
+			)),
+	};
+	return lazy;
 }
 
 /** Per-actor-generation runtime state, stored on `c.vars` under `PI_RUNTIME`. */
@@ -162,22 +186,16 @@ async function openPiSession(
 		...sessionOptions
 	} = options;
 	const stored = await loadPiSession(c.db);
-	const connected = sandboxProvider
-		? await connectSandbox(c, sandboxProvider, piSandboxStore)
-		: undefined;
-	const sandbox = connected?.sandbox;
+	const sandbox = sandboxProvider ? lazySandbox(c, sandboxProvider) : undefined;
+	// A new session takes its working directory from the sandbox, so only its first open connects.
+	const firstSandbox =
+		sandbox && !stored ? (await sandbox.connect()).sandbox : undefined;
 	const cwd =
-		sandbox?.cwd ?? stored?.cwd ?? sessionOptions.cwd ?? process.cwd();
+		firstSandbox?.cwd ?? stored?.cwd ?? sessionOptions.cwd ?? process.cwd();
 	if (!isAbsolute(cwd)) {
 		throw new Error(`pi() cwd must be an absolute path, received ${cwd}`);
 	}
-	if (stored && stored.cwd !== cwd) {
-		c.log.warn({
-			msg: "pi session cwd changed since it was stored",
-			storedCwd: stored.cwd,
-			cwd,
-		});
-	}
+	const connect = sandbox && (async () => (await sandbox.connect()).sandbox);
 
 	const settingsManager = SettingsManager.inMemory(
 		stored?.settings ?? settings ?? {},
@@ -212,8 +230,11 @@ async function openPiSession(
 		settingsManager,
 		sessionManager,
 		resourceLoader,
-		customTools: sandbox
-			? [...(sessionOptions.customTools ?? []), ...createSandboxTools(sandbox)]
+		customTools: connect
+			? [
+					...(sessionOptions.customTools ?? []),
+					...createSandboxTools(cwd, connect),
+				]
 			: sessionOptions.customTools,
 		excludeTools: [
 			...new Set([
@@ -230,8 +251,10 @@ async function openPiSession(
 		session,
 		settingsManager,
 		cwd,
-		sandbox: connected,
-		bashOperations: sandbox ? createSandboxBashOperations(sandbox) : undefined,
+		sandbox,
+		bashOperations: connect
+			? createSandboxBashOperations(cwd, connect)
+			: undefined,
 		persistedSettings: JSON.stringify(settingsManager.getGlobalSettings()),
 		persistedEntryCount: stored?.entries.length ?? 0,
 		credentials,
@@ -624,13 +647,14 @@ export async function closePiSession(
 	const provider = options.sandbox;
 	if (provider) {
 		await attempt(errors, async () => {
+			const connected = await handle?.sandbox?.current?.catch(() => undefined);
 			if (stop.reason === "sleep") {
-				if (handle?.sandbox && provider.suspend) {
-					await provider.suspend(c, handle.sandbox.id);
+				if (connected && provider.suspend) {
+					await provider.suspend(c, connected.id);
 				}
 				return;
 			}
-			const sandbox = handle?.sandbox ?? (await storedSandbox(c, provider));
+			const sandbox = connected ?? (await storedSandbox(c, provider));
 			if (sandbox && provider.destroy) {
 				await provider.destroy(c, sandbox.id);
 			}
