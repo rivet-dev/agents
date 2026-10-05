@@ -30,7 +30,6 @@ import {
 	migratePiSession,
 	type PiQueue,
 	type PiSettings,
-	type StoredSandbox,
 	savePiIdle,
 	savePiRunning,
 	savePiSandbox,
@@ -51,6 +50,11 @@ export type PiContext = ActorContext<
 	any,
 	any
 >;
+
+/** How an actor generation stops. A sleep drains until `drainUntil`; a destroy stops at once. */
+export type PiStop =
+	| { reason: "sleep"; drainUntil: number }
+	| { reason: "destroy" };
 
 /** Pi options accepted by `pi()` on top of ordinary actor config. */
 export interface PiSessionOptions
@@ -109,12 +113,10 @@ function lazySandbox(c: PiContext, provider: SandboxProvider): LazySandbox {
 	const lazy: LazySandbox = {
 		current: undefined,
 		connect: () =>
-			(lazy.current ??= connectSandbox(c, provider, piSandboxStore).catch(
-				(error: unknown) => {
-					lazy.current = undefined;
-					throw error;
-				},
-			)),
+			(lazy.current ??= connectSandbox(c, provider).catch((error: unknown) => {
+				lazy.current = undefined;
+				throw error;
+			})),
 	};
 	return lazy;
 }
@@ -212,7 +214,7 @@ export async function withPiSession<T>(
 }
 
 /** Runs `body` with a `c.pi` that throws `error` when read. */
-function withUnavailablePi<T>(
+export function withUnavailablePi<T>(
 	c: PiContext,
 	error: unknown,
 	body: () => T | Promise<T>,
@@ -386,31 +388,18 @@ async function openPiSession(
 	return handle;
 }
 
-/** Where an actor stores the id of its sandbox. */
-export interface SandboxStore {
-	load(db: PiContext["db"]): Promise<StoredSandbox | undefined>;
-	save(db: PiContext["db"], sandbox: StoredSandbox): Promise<void>;
-}
-
-/** The `pi_sandbox` table, which `pi()` and `piDurable()` share. */
-export const piSandboxStore: SandboxStore = {
-	load: loadPiSandbox,
-	save: savePiSandbox,
-};
-
 /**
  * Connects to the actor's sandbox, creating one when none is stored or the
  * provider reports the stored one no longer exists. A new sandbox id is saved
  * as soon as `create` returns, so a failure later in the start reuses it. Any
  * other connect failure is thrown, so a temporary outage never replaces a
- * sandbox.
+ * sandbox. `pi()` and `piDurable()` both store the id in `pi_sandbox`.
  */
 export async function connectSandbox(
 	c: PiContext,
 	provider: SandboxProvider,
-	store: SandboxStore,
 ): Promise<ConnectedSandbox> {
-	const existing = await store.load(c.db);
+	const existing = await loadPiSandbox(c.db);
 	if (existing && existing.provider !== provider.name) {
 		throw new Error(
 			`pi sandbox was created by provider ${existing.provider}, but the actor now uses ${provider.name}`,
@@ -426,7 +415,7 @@ export async function connectSandbox(
 		});
 	}
 	const id = await provider.create(c);
-	await store.save(c.db, { provider: provider.name, id });
+	await savePiSandbox(c.db, { provider: provider.name, id });
 	const sandbox = await provider.connect(c, id);
 	if (!sandbox) {
 		throw new Error(
@@ -691,7 +680,7 @@ async function drain(
 export async function closePiSession(
 	c: PiContext,
 	options: PiSessionOptions,
-	stop: { reason: "sleep"; drainUntil: number } | { reason: "destroy" },
+	stop: PiStop,
 ): Promise<void> {
 	const runtime = piRuntime(c);
 	const ready = runtime.ready;
@@ -729,19 +718,9 @@ export async function closePiSession(
 
 	const provider = options.sandbox;
 	if (provider) {
-		await attempt(errors, async () => {
-			const connected = await handle?.sandbox?.current?.catch(() => undefined);
-			if (stop.reason === "sleep") {
-				if (connected && provider.suspend) {
-					await provider.suspend(c, connected.id);
-				}
-				return;
-			}
-			const sandbox = connected ?? (await storedSandbox(c, provider));
-			if (sandbox && provider.destroy) {
-				await provider.destroy(c, sandbox.id);
-			}
-		});
+		await attempt(errors, () =>
+			closeSandbox(c, provider, handle?.sandbox?.current, stop),
+		);
 	}
 
 	if (errors.length === 1) throw errors[0];
@@ -750,13 +729,28 @@ export async function closePiSession(
 	}
 }
 
-/** The stored sandbox, when it belongs to `provider`. */
-async function storedSandbox(
+/**
+ * Suspends the sandbox this generation connected when the actor sleeps. On
+ * destroy it destroys the actor's sandbox, also one stored by an earlier
+ * generation that this one never connected.
+ */
+export async function closeSandbox(
 	c: PiContext,
 	provider: SandboxProvider,
-): Promise<StoredSandbox | undefined> {
-	const sandbox = await loadPiSandbox(c.db);
-	return sandbox?.provider === provider.name ? sandbox : undefined;
+	connection: Promise<ConnectedSandbox> | undefined,
+	stop: PiStop,
+): Promise<void> {
+	const connected = await connection?.catch(() => undefined);
+	if (stop.reason === "sleep") {
+		if (connected && provider.suspend) await provider.suspend(c, connected.id);
+		return;
+	}
+	if (!provider.destroy) return;
+	const stored = connected ? undefined : await loadPiSandbox(c.db);
+	const id =
+		connected?.id ??
+		(stored?.provider === provider.name ? stored.id : undefined);
+	if (id !== undefined) await provider.destroy(c, id);
 }
 
 async function attempt(

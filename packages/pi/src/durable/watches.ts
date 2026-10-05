@@ -40,7 +40,10 @@ export type PiTaskGraphFrame = {
 	value?: TaskGraph;
 	ops?: readonly Op[];
 };
-/** Every frame carries the document's whole value; `null` means it was retired. */
+/**
+ * Every frame carries the document's whole value. `null` means the document
+ * does not exist: it was retired, or, in a `seq` 0 frame, it was never created.
+ */
 export type PiDocFrame = {
 	kind: string;
 	conversationId: number;
@@ -86,7 +89,7 @@ function serially<T>(
 
 type Documents = ReadonlyMap<string, ConversationDocToken<any>>;
 
-export function watchKey(spec: WatchSpec): string {
+function watchKey(spec: WatchSpec): string {
 	switch (spec.kind) {
 		case "events":
 		case "view":
@@ -101,7 +104,8 @@ export function watchKey(spec: WatchSpec): string {
 /**
  * Starts a watch for a connection, stored so it comes back after sleep, and
  * returns the value it starts from. Watching the same thing again restarts
- * it with a fresh value.
+ * it with a fresh value. `requireTarget` runs in the queue too, so a watch
+ * and an unwatch sent right after it take effect in the order they arrive.
  */
 export async function watch(
 	actor: PiContext,
@@ -110,9 +114,11 @@ export async function watch(
 	documents: Documents,
 	connId: string,
 	spec: WatchSpec,
+	requireTarget: () => Promise<void>,
 ): Promise<unknown> {
 	const key = watchKey(spec);
 	return serially(watches, async () => {
+		await requireTarget();
 		await saveWatch(actor.db, { connId, key, spec });
 		return attach(actor, watches, harness, documents, connId, key, spec, false);
 	});
@@ -312,8 +318,9 @@ async function start(
 }
 
 /**
- * Pi's `watchDoc` never creates a document. For one that does not exist yet,
- * the watch attaches when a commit creates it, and its value is the first frame.
+ * Pi's `watchDoc` never creates a document, and its watch ends when the
+ * document is retired. While the document does not exist, the watch attaches
+ * when a commit creates it, and its value is the next frame.
  */
 async function startDoc(
 	log: PiContext["log"],
@@ -331,6 +338,7 @@ async function startDoc(
 	const { docKind: kind, conversationId } = spec;
 	const conversation = conversationId as ConversationId;
 	let docWatch: WatchHandle<Readonly<JsonObject> | null> | undefined;
+	let unsubscribe: (() => void) | undefined;
 	let stopped = false;
 
 	const follow = (
@@ -340,9 +348,60 @@ async function startDoc(
 		docWatch = handle;
 		if (sendFirst)
 			send("pi.doc", { kind, conversationId, value: handle.value });
-		handle.start(async (value) =>
-			send("pi.doc", { kind, conversationId, value }),
-		);
+		handle.start(async (value) => {
+			send("pi.doc", { kind, conversationId, value });
+			if (value !== null || stopped) return;
+			// A retired document's watch ends, so wait for a commit that creates it again.
+			docWatch = undefined;
+			void handle.stop();
+			awaitCreation();
+		});
+	};
+
+	const awaitCreation = () => {
+		let attaching = false;
+		const attachCreated = async () => {
+			try {
+				const handle = await harness.watchDoc(
+					token,
+					conversation,
+					BACKGROUND_CONTEXT,
+				);
+				if (stopped) {
+					await handle?.stop();
+					return;
+				}
+				if (!handle) {
+					attaching = false;
+					return;
+				}
+				unsubscribe?.();
+				unsubscribe = undefined;
+				follow(handle, true);
+			} catch (error) {
+				// The next write to the document tries again.
+				attaching = false;
+				log.warn({
+					msg: "pi durable could not attach a document watch",
+					kind,
+					conversationId,
+					error,
+				});
+			}
+		};
+		unsubscribe = harness.subscribeCommits((publication) => {
+			const created = publication.changes.some(
+				(change) =>
+					change.type === "document" &&
+					change.record.kind === kind &&
+					change.conversationId === conversation &&
+					change.value !== null,
+			);
+			if (!created || attaching) return;
+			attaching = true;
+			// Commit listeners must not call Pi Durable, so the watch attaches after the listener returns.
+			queueMicrotask(() => void attachCreated());
+		});
 	};
 
 	const existing = await harness.watchDoc(
@@ -352,63 +411,15 @@ async function startDoc(
 	);
 	if (existing) {
 		follow(existing, resend);
-		return {
-			initial: { value: existing.value },
-			stop: async () => {
-				stopped = true;
-				await docWatch?.stop();
-			},
-		};
+	} else {
+		if (resend) send("pi.doc", { kind, conversationId, value: null });
+		awaitCreation();
 	}
-
-	if (resend) send("pi.doc", { kind, conversationId, value: null });
-	let attaching = false;
-	const unsubscribe = harness.subscribeCommits((publication) => {
-		const created = publication.changes.some(
-			(change) =>
-				change.type === "document" &&
-				change.record.kind === kind &&
-				change.conversationId === conversation &&
-				change.value !== null,
-		);
-		if (!created || attaching) return;
-		attaching = true;
-		// Commit listeners must not call Pi Durable, so the watch attaches after the listener returns.
-		queueMicrotask(() => void attachCreated());
-	});
-	const attachCreated = async () => {
-		try {
-			const handle = await harness.watchDoc(
-				token,
-				conversation,
-				BACKGROUND_CONTEXT,
-			);
-			if (stopped) {
-				await handle?.stop();
-				return;
-			}
-			if (!handle) {
-				attaching = false;
-				return;
-			}
-			unsubscribe();
-			follow(handle, true);
-		} catch (error) {
-			// The next write to the document tries again.
-			attaching = false;
-			log.warn({
-				msg: "pi durable could not attach a document watch",
-				kind,
-				conversationId,
-				error,
-			});
-		}
-	};
 	return {
-		initial: { value: undefined },
+		initial: { value: existing?.value },
 		stop: async () => {
 			stopped = true;
-			unsubscribe();
+			unsubscribe?.();
 			await docWatch?.stop();
 		},
 	};

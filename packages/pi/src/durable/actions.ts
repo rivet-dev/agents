@@ -21,12 +21,12 @@ import type {
 	UserInput,
 } from "@earendil-works/pi-durable";
 import { UserError } from "rivetkit";
+import { assertModelAllowed } from "../models.js";
 import type { PiContext } from "../runtime.js";
 import { traceDurableRun } from "../tracing.js";
 import {
 	documentsByKind,
 	type PiDurableOptions,
-	parseModelRef,
 	piDurableRuntime,
 	withHarness,
 } from "./runtime.js";
@@ -56,11 +56,13 @@ export interface PiAgentInfo {
 	cwd: Agent["cwd"];
 }
 
+/** Options for `harness.createConversation` and `conversation.fork`, with the agent change by name. */
 export interface PiCreateConversationOptions {
 	ownership: ConversationOwnership;
 	agent?: PiAgentChange;
 }
 
+/** Options for `prompt`. */
 export interface PiDurablePromptOptions {
 	/** Defaults to the root conversation. */
 	conversationId?: number;
@@ -69,14 +71,17 @@ export interface PiDurablePromptOptions {
 	whenBusy?: "steer" | "followUp" | "reject";
 }
 
-export interface PiDurablePromptResult {
-	status: "done" | "unanswered";
-	reason?: string;
-	/** The answer's text when `status` is `done`. */
-	text?: string;
-	submissionId: SubmissionId;
-}
+/** How a `prompt` settled. `unanswered` carries Pi's reason, such as a model error. */
+export type PiDurablePromptResult =
+	| {
+			status: "done";
+			/** The answer's text. */
+			text: string | undefined;
+			submissionId: SubmissionId;
+	  }
+	| { status: "unanswered"; reason: string; submissionId: SubmissionId };
 
+/** The built-in actions of a `piDurable()` actor, as clients call them. */
 export type PiDurableActions = ReturnType<typeof createPiDurableActions>;
 
 /**
@@ -94,11 +99,14 @@ export function createPiDurableActions(options: PiDurableOptions) {
 	const agentChange = (change: PiAgentChange | undefined) =>
 		change === undefined ? undefined : resolveAgentChange(options, change);
 
-	/** Starts a watch for the calling connection. Frames go to that connection only. */
+	/**
+	 * Starts a watch for the calling connection. Frames go to that connection
+	 * only. `T` is the starting value `start` in `watches.ts` returns for the
+	 * kind in `spec`; each action below names it.
+	 */
 	const watchFor = <T>(c: PiContext, spec: WatchSpec) =>
 		run(c, async (harness, context) => {
 			const connId = connectionId(c);
-			await requireWatchTarget(harness, spec, context);
 			const runtime = piDurableRuntime(c);
 			return (await watch(
 				runtime.actor ?? c,
@@ -107,6 +115,7 @@ export function createPiDurableActions(options: PiDurableOptions) {
 				documents,
 				connId,
 				spec,
+				() => requireWatchTarget(harness, spec, context),
 			)) as T;
 		});
 	const unwatchFor = (c: PiContext, spec: WatchSpec) =>
@@ -133,6 +142,8 @@ export function createPiDurableActions(options: PiDurableOptions) {
 		return doc;
 	};
 
+	// Ids arrive as plain numbers and are cast to Pi's branded id types. Pi's
+	// lookups check that each one exists, and a missing one is a `UserError`.
 	return {
 		harness: {
 			root: (c: PiContext, rootOptions?: { agent?: PiAgentChange }) =>
@@ -513,12 +524,7 @@ function resolveAgentChange(
 	};
 
 	if (change.model) {
-		const allowed =
-			options.scopedModels ?? (options.model ? [options.model] : undefined);
-		const name = `${change.model.provider}/${change.model.modelId}`;
-		if (allowed && !allowed.some((entry) => sameModel(entry, change.model!))) {
-			throw new UserError(`Model ${name} is not allowed for this agent.`);
-		}
+		assertModelAllowed(options, change.model.provider, change.model.modelId);
 	}
 
 	const { extensions, tools, ...rest } = change;
@@ -546,14 +552,6 @@ function isNameList(
 	value: readonly string[] | object,
 ): value is readonly string[] {
 	return Array.isArray(value);
-}
-
-function sameModel(
-	name: string,
-	model: NonNullable<AgentChange["model"]>,
-): boolean {
-	const ref = parseModelRef(name);
-	return ref.provider === model.provider && ref.modelId === model.modelId;
 }
 
 function agentInfo(agent: Agent): PiAgentInfo {

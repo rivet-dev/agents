@@ -22,6 +22,10 @@ export function actorSqlite(db: RawAccess): SqliteDatabase {
 	};
 }
 
+/**
+ * Pi Durable names the row type of each query it sends. SQLite returns plain
+ * rows, so `get` and `all` take Pi's word for their shape.
+ */
 function actorSqliteExecutor(db: Pick<RawAccess, "execute">): SqliteExecutor {
 	return {
 		exec: async (sql) => {

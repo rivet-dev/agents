@@ -88,6 +88,7 @@ export async function loadWatches(db: PiDatabase): Promise<StoredWatch[]> {
 	return rows.map((row) => ({
 		connId: row.conn_id,
 		key: row.watch_key,
+		// Only `saveWatch` writes this column, from a `WatchSpec`.
 		spec: JSON.parse(row.spec_json) as WatchSpec,
 	}));
 }

@@ -23,6 +23,7 @@ import {
 	type MockModel,
 	toolCall,
 } from "./helpers/mock-model.js";
+import { createSleepCounter } from "./helpers/sleeps.js";
 
 /** Resolves when `signal` aborts. Tasks honor it so a closing harness never waits on them. */
 function aborted(signal: AbortSignal | undefined): Promise<void> {
@@ -33,21 +34,11 @@ function aborted(signal: AbortSignal | undefined): Promise<void> {
 }
 
 /** Lifecycle facts by actor key, recorded in this process where the actors run. */
-const sleeps = new Map<string, number>();
+const sleeps = createSleepCounter();
 const stopping = new Set<string>();
+/** What reading `c.pi` gave the app's onDisconnect: "open" or the error message. */
+const disconnectOutcomes = new Map<string, string>();
 const keyOf = (c: { key: unknown[] }) => JSON.stringify(c.key);
-async function waitForSleeps(key: string[], count: number) {
-	// Sleep completes after the action that asked for it returns, and onSleep records it in this process.
-	await vi.waitFor(
-		() =>
-			expect(sleeps.get(JSON.stringify(key)) ?? 0).toBeGreaterThanOrEqual(
-				count,
-			),
-		{
-			timeout: 20_000,
-		},
-	);
-}
 
 /** When each actor's stop started and when its sandbox was suspended, by actor id, recorded in this process. */
 const stopStartedAt = new Map<string, number>();
@@ -71,6 +62,21 @@ const deployTool = defineTool({
 		deployRuns += 1;
 		await release.promise;
 		return { content: [{ type: "text", text: "deployed" }] };
+	},
+});
+
+/** The tool of the waiting-caller test waits for `shipRelease`. */
+let shipRuns = 0;
+const shipRelease = Promise.withResolvers<void>();
+const shipTool = defineTool({
+	name: "ship_tool",
+	description: "A tool that waits",
+	parameters: Type.Object({}),
+	replay: "unsafe",
+	execute: async () => {
+		shipRuns += 1;
+		await shipRelease.promise;
+		return { content: [{ type: "text", text: "shipped" }] };
 	},
 });
 
@@ -155,17 +161,29 @@ function buildRegistry(mock: MockModel, root: string) {
 			});
 		},
 		onSleep: (c: { key: unknown[] }) => {
-			sleeps.set(keyOf(c), (sleeps.get(keyOf(c)) ?? 0) + 1);
+			sleeps.record(c);
 		},
 	};
 	const tools = createRegistry();
 	tools.install(
-		defineExtension({ name: "deploy", tools: [deployTool, blockingTool] }),
+		defineExtension({
+			name: "deploy",
+			tools: [deployTool, shipTool, blockingTool],
+		}),
 	);
 	const drainer = piDurable({
 		...models,
 		...lifecycle,
 		registry: tools,
+		onDisconnect: (c) => {
+			let outcome = "open";
+			try {
+				void c.pi;
+			} catch (error) {
+				outcome = (error as Error).message;
+			}
+			disconnectOutcomes.set(keyOf(c), outcome);
+		},
 		actions: {
 			nap: (c) => {
 				c.sleep();
@@ -265,6 +283,11 @@ beforeAll(async () => {
 	);
 	mockModel.reply("follow up", fauxAssistantMessage("followed up"));
 	mockModel.reply(
+		"ship",
+		toolCall("ship_tool", {}),
+		fauxAssistantMessage("shipped it"),
+	);
+	mockModel.reply(
 		"run until closed",
 		toolCall("bash", { command: "sleep 600" }),
 		fauxAssistantMessage("closed"),
@@ -307,7 +330,7 @@ describe("piDurable drain and upgrades", () => {
 		const sentDuringStop = handle.conversation.submit(root.id, followUp);
 		release.resolve();
 		const first = await sentDuringStop;
-		expect(sleeps.get(JSON.stringify(key))).toBe(1);
+		expect(sleeps.count(key)).toBe(1);
 
 		expect(await handle.submission.wait(deploy.id)).toMatchObject({
 			status: "done",
@@ -334,6 +357,23 @@ describe("piDurable drain and upgrades", () => {
 				),
 		);
 		expect(answers).toHaveLength(1);
+	});
+
+	test("a prompt in flight when a forced stop starts still gets its answer once the drain finishes the run", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["waiting-caller", randomUUID()];
+		const handle = client.drainer.getOrCreate(key);
+		const answer = handle.prompt("ship");
+		// The tool runs in the background of the prompt action; its counter lives in this process.
+		await vi.waitFor(() => expect(shipRuns).toBe(1));
+
+		await handle.nap();
+		// Shutdown starts after the nap action returns; onWake's abort listener records it in this process.
+		await vi.waitFor(() =>
+			expect(stopping.has(JSON.stringify(key))).toBe(true),
+		);
+		shipRelease.resolve();
+		expect(await answer).toMatchObject({ status: "done", text: "shipped it" });
 	});
 
 	test("a run that outlasts the grace period still lets the sandbox suspend before the grace period ends, even when the app's onSleep is slow", async (c) => {
@@ -385,7 +425,7 @@ describe("piDurable drain and upgrades", () => {
 		const handle = client.migrating.getOrCreate(key);
 		const taskId = await handle.startJob();
 		await handle.nap();
-		await waitForSleeps(key, 1);
+		await sleeps.waitFor(key, 1);
 
 		migratingJobs.install(defineExtension({ name: "jobs", tasks: [jobV2] }));
 		const settled = await handle.harness.waitForTask(taskId);
@@ -395,19 +435,37 @@ describe("piDurable drain and upgrades", () => {
 		});
 	});
 
-	test("storage written by a newer Pi Durable schema makes actions fail with an internal error", async (c) => {
+	test("storage written by a newer Pi Durable schema makes Pi's actions fail with an internal error, while the app's own actions and hooks still run", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["rollback", randomUUID()];
 		const handle = client.migrating.getOrCreate(key);
 		await handle.harness.root();
 		await handle.bumpSchema();
 		await handle.nap();
-		await waitForSleeps(key, 1);
+		await sleeps.waitFor(key, 1);
 
 		// The caller cannot fix a rollback, so RivetKit hides Pi's message; the actor logs it.
 		await expect(handle.harness.inspect()).rejects.toMatchObject({
 			group: "rivetkit",
 			code: "internal_error",
 		});
+		await handle.nap();
+		await sleeps.waitFor(key, 2);
+	});
+
+	test("the app's onDisconnect runs after a destroy closed Pi Durable, and only reading c.pi fails", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["closed", randomUUID()];
+		const conn = client.drainer.getOrCreate(key).connect();
+		await conn.harness.root();
+
+		await client.drainer.getOrCreate(key).destroySelf();
+		// Destroy closes Pi Durable, then disconnects the connection; the hook records what c.pi gave in this process.
+		await vi.waitFor(() =>
+			expect(disconnectOutcomes.get(JSON.stringify(key))).toBe(
+				"Pi Durable is closed because the actor is stopping.",
+			),
+		);
+		await conn.dispose();
 	});
 });

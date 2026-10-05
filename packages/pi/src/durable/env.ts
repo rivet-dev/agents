@@ -22,7 +22,8 @@ import { resolveSandboxPath, shellQuote } from "../sandbox.js";
  * never receive the actor host's environment variables.
  *
  * Only the operations Pi's tools use are supported. Every other operation
- * returns a `not_supported` error. Failures are returned, never thrown.
+ * returns a `not_supported` error. Operations return failures instead of
+ * throwing. Building the environment throws when `cwd` is outside the sandbox.
  */
 export function sandboxEnv(
 	id: string,

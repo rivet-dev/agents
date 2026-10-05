@@ -29,6 +29,7 @@ import {
 	slowly,
 	toolCall,
 } from "./helpers/mock-model.js";
+import { createSleepCounter } from "./helpers/sleeps.js";
 
 /** Resolves when `signal` aborts. Tools and tasks honor it so a closing harness never waits on them. */
 function aborted(signal: AbortSignal | undefined): Promise<void> {
@@ -38,24 +39,10 @@ function aborted(signal: AbortSignal | undefined): Promise<void> {
 	});
 }
 
-/** Lifecycle hook calls by actor key, recorded in this process where the actors run. */
-const sleeps = new Map<string, number>();
-const actorKey = (c: { key: unknown[] }) => JSON.stringify(c.key);
-const countSleep = (c: { key: unknown[] }) => {
-	sleeps.set(actorKey(c), (sleeps.get(actorKey(c)) ?? 0) + 1);
-};
-async function waitForSleeps(key: string[], count: number) {
-	// Sleep completes after the action that asked for it returns, and onSleep records it in this process.
-	await vi.waitFor(
-		() =>
-			expect(sleeps.get(JSON.stringify(key)) ?? 0).toBeGreaterThanOrEqual(
-				count,
-			),
-		{
-			timeout: 20_000,
-		},
-	);
-}
+const sleeps = createSleepCounter();
+
+const STORY_ONE = "alpha ".repeat(40).trim();
+const STORY_TWO = "omega ".repeat(40).trim();
 
 /** Tool calls of the crash test. A tool's first run blocks until the stop aborts it; a rerun returns at once. */
 const toolRuns = { safe: 0, unsafe: 0 };
@@ -132,7 +119,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		documents: [Todos],
 		// A short grace period, so a stop interrupts running tools like a crash does.
 		options: { sleepGracePeriod: 2_000 },
-		onSleep: countSleep,
+		onSleep: sleeps.record,
 		actions: {
 			nap: (c) => {
 				c.sleep();
@@ -176,7 +163,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		// A retry wait just past the one-minute threshold, so the actor sleeps through it.
 		settings: { retry: { baseDelayMs: 61_000, maxAgentDelayMs: 61_000 } },
 		options: { sleepTimeout: 300 },
-		onSleep: countSleep,
+		onSleep: sleeps.record,
 	});
 	// Every schedule write fails, so a long wait cannot get its wake.
 	const backoffWithoutSchedules = piDurable({
@@ -184,14 +171,14 @@ function buildRegistry(mock: MockModel, root: string) {
 		registry: createRegistry(),
 		settings: { retry: { baseDelayMs: 61_000, maxAgentDelayMs: 61_000 } },
 		options: { sleepTimeout: 300, maxSchedules: 0 },
-		onSleep: countSleep,
+		onSleep: sleeps.record,
 	});
 	const jobRunner = piDurable({
 		...models,
 		registry: jobsRegistry,
 		// The job runs until the stop interrupts it, so a short grace period ends the drain.
 		options: { sleepTimeout: 300, sleepGracePeriod: 1_000 },
-		onSleep: countSleep,
+		onSleep: sleeps.record,
 		actions: {
 			nap: (c) => {
 				c.sleep();
@@ -213,8 +200,21 @@ function buildRegistry(mock: MockModel, root: string) {
 			},
 		},
 	});
+	// Neither `model` nor `scopedModels`, so clients may not choose a model.
+	const unscoped = piDurable({
+		providers: models.providers,
+		apiKeys: models.apiKeys,
+		registry: createRegistry(),
+	});
 	return setup({
-		use: { agent, coder, backoff, backoffWithoutSchedules, jobRunner },
+		use: {
+			agent,
+			coder,
+			backoff,
+			backoffWithoutSchedules,
+			jobRunner,
+			unscoped,
+		},
 	});
 }
 
@@ -252,6 +252,8 @@ beforeAll(async () => {
 		toolCall("bash", { command: 'echo "key=[$PI_TEST_HOST_KEY]"' }),
 		fauxAssistantMessage("ran"),
 	);
+	mockModel.reply("tell story one", slowly(fauxAssistantMessage(STORY_ONE)));
+	mockModel.reply("tell story two", slowly(fauxAssistantMessage(STORY_TWO)));
 	mockModel.reply(
 		"flaky",
 		fauxAssistantMessage("", {
@@ -280,7 +282,7 @@ describe("piDurable actor", () => {
 		await vi.waitFor(() => expect(toolRuns).toEqual({ safe: 1, unsafe: 1 }));
 
 		await handle.nap();
-		await waitForSleeps(key, 1);
+		await sleeps.waitFor(key, 1);
 
 		const settled = await handle.submission.wait(submission.id);
 		expect(settled.status).toBe("done");
@@ -314,7 +316,7 @@ describe("piDurable actor", () => {
 
 		await handle.addTodo(root.id, "buy milk");
 		await handle.nap();
-		await waitForSleeps(key, 1);
+		await sleeps.waitFor(key, 1);
 
 		expect(await handle.harness.snapshot("app.todos", root.id)).toEqual({
 			items: ["buy milk"],
@@ -355,6 +357,45 @@ describe("piDurable actor", () => {
 		await expect(handle.writePoison()).rejects.toThrow();
 		const result = await handle.prompt("say hello");
 		expect(result).toMatchObject({ status: "done", text: "Hi there!" });
+	});
+
+	test("two conversations prompted at the same time each get their own answer, and neither transcript holds the other's messages", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.agent.getOrCreate(["two", randomUUID()]);
+		const one = await handle.harness.root();
+		const two = await handle.harness.createConversation({
+			ownership: { kind: "ownerless" },
+		});
+
+		// Both answers stream slowly, so the two runs overlap.
+		const [first, second] = await Promise.all([
+			handle.prompt("tell story one", { conversationId: one.id }),
+			handle.prompt("tell story two", { conversationId: two.id }),
+		]);
+		expect(first).toMatchObject({ status: "done", text: STORY_ONE });
+		expect(second).toMatchObject({ status: "done", text: STORY_TWO });
+
+		const transcript = async (id: number) =>
+			JSON.stringify((await handle.conversation.context(id)).messages);
+		const transcriptOne = await transcript(one.id);
+		const transcriptTwo = await transcript(two.id);
+		expect(transcriptOne).toContain("tell story one");
+		expect(transcriptOne).not.toContain("omega");
+		expect(transcriptTwo).toContain("tell story two");
+		expect(transcriptTwo).not.toContain("alpha");
+	});
+
+	test("a client cannot give a conversation a model when the actor allows none", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.unscoped.getOrCreate(["unscoped", randomUUID()]);
+		const root = await handle.harness.root();
+
+		await expect(
+			handle.conversation.configure(root.id, {
+				model: { provider: "mock", modelId: "mock-model-2" },
+			}),
+		).rejects.toMatchObject({ group: "user", code: "model_not_allowed" });
+		expect((await handle.conversation.agent(root.id)).model).toBeUndefined();
 	});
 
 	test("Pi's built-in tools write files inside the sandbox", async (c) => {
@@ -411,7 +452,7 @@ describe("piDurable actor", () => {
 			content: "flaky",
 		});
 
-		await waitForSleeps(key, 1);
+		await sleeps.waitFor(key, 1);
 		// No client calls the actor here: only the scheduled wake can make the retried model request, recorded in this process.
 		await vi.waitFor(
 			() => expect(mockModel.requests.length).toBe(requestsBefore + 2),
@@ -442,7 +483,7 @@ describe("piDurable actor", () => {
 			() => expect(mockModel.requests.length).toBe(requestsBefore + 2),
 			{ timeout: 90_000 },
 		);
-		expect(sleeps.get(JSON.stringify(key)) ?? 0).toBe(0);
+		expect(sleeps.count(key)).toBe(0);
 		const settled = await handle.submission.wait(submission.id);
 		expect(settled.status).toBe("done");
 	}, 120_000);
@@ -453,7 +494,7 @@ describe("piDurable actor", () => {
 		const handle = client.jobRunner.getOrCreate(key);
 		await handle.startJob();
 		await handle.nap();
-		await waitForSleeps(key, 1);
+		await sleeps.waitFor(key, 1);
 		jobsRegistry.uninstall(jobs);
 		try {
 			const inspection = await handle.harness.inspect();
@@ -463,7 +504,7 @@ describe("piDurable actor", () => {
 					state: { kind: "blocked", reason: "missing_task" },
 				}),
 			]);
-			await waitForSleeps(key, 2);
+			await sleeps.waitFor(key, 2);
 		} finally {
 			jobsRegistry.install(jobs);
 		}

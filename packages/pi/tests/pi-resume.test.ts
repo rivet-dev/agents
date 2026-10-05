@@ -19,30 +19,14 @@ import {
 	slowly,
 	toolCall,
 } from "./helpers/mock-model.js";
+import { createSleepCounter } from "./helpers/sleeps.js";
 
 /** About four seconds of tokens from a `slowly` reply, so a stop lands in the middle. */
 const STORY = "word ".repeat(100).trim();
 /** About two seconds of tokens. */
 const SHORT_ANSWER = "word ".repeat(50).trim();
 
-/** Sleeps by actor key, recorded in this process where the actors run. */
-const sleeps = new Map<string, number>();
-const countSleep = (c: { key: unknown[] }) => {
-	const key = JSON.stringify(c.key);
-	sleeps.set(key, (sleeps.get(key) ?? 0) + 1);
-};
-async function waitForSleeps(key: string[], count: number) {
-	// Sleep completes after the action that asked for it returns, and onSleep records it in this process.
-	await vi.waitFor(
-		() =>
-			expect(sleeps.get(JSON.stringify(key)) ?? 0).toBeGreaterThanOrEqual(
-				count,
-			),
-		{
-			timeout: 20_000,
-		},
-	);
-}
+const sleeps = createSleepCounter();
 
 /** The tool of the destroy test runs until it is stopped. This process records both. */
 const blocking = { started: 0, stopped: 0 };
@@ -97,7 +81,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		providers: { mock: mock.providerConfig },
 		apiKeys: { mock: "mock" },
 		settings: { retry: { baseDelayMs: 10 } },
-		onSleep: countSleep,
+		onSleep: sleeps.record,
 		actions: {
 			nap: (c: { sleep: () => void }) => {
 				c.sleep();
@@ -232,7 +216,7 @@ describe("pi() drain and resume", () => {
 		await conn.dispose();
 
 		await handle.nap();
-		await waitForSleeps(key, 1);
+		await sleeps.waitFor(key, 1);
 
 		expect(assistantTexts(await handle.getMessages())).toEqual([
 			{ stopReason: "stop", text: SHORT_ANSWER },
@@ -289,7 +273,7 @@ describe("pi() drain and resume", () => {
 		await conn.dispose();
 
 		await handle.nap();
-		await waitForSleeps(key, 1);
+		await sleeps.waitFor(key, 1);
 		// The wake resumes the run in the background; waitForIdle waits for it.
 		await handle.waitForIdle();
 
@@ -312,7 +296,7 @@ describe("pi() drain and resume", () => {
 		await conn.dispose();
 
 		await handle.nap();
-		await waitForSleeps(key, 1);
+		await sleeps.waitFor(key, 1);
 		const requestsBefore = mockModel.requests.length;
 		await handle.prompt("say hello");
 

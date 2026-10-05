@@ -1,28 +1,24 @@
 import type { Harness } from "@earendil-works/pi-durable";
 import {
-	type ActionContext,
-	type ActorConfigInput,
-	type ActorDefinition,
 	actor,
-	type Conn,
-	type ConnectContext,
-	type DestroyContext,
-	type DisconnectContext,
 	type EventSchemaConfig,
 	event,
 	type QueueSchemaConfig,
-	type SleepContext,
 	type Type,
-	type WakeContext,
 } from "rivetkit";
 import { db } from "rivetkit/db";
 import {
-	type ClientActions,
-	type DistributiveOmit,
+	assertNoReservedNames,
+	sharedActorConfig,
+	splitConfig,
 	wrapActions,
+} from "../actor-config.js";
+import type {
+	PiActorDefinition,
+	UserActions,
+	UserActorConfig,
 } from "../actor-types.js";
-import { drainDeadline } from "../drain.js";
-import type { PiContext, PiDatabaseProvider } from "../runtime.js";
+import { type PiContext, withUnavailablePi } from "../runtime.js";
 import { createPiDurableActions, type PiDurableActions } from "./actions.js";
 import {
 	closeHarness,
@@ -42,15 +38,6 @@ import {
 	unwatchConnection,
 } from "./watches.js";
 
-/** Ten minutes. `submission.wait` and `prompt` wait for a whole run. */
-const DEFAULT_ACTION_TIMEOUT_MS = 10 * 60_000;
-
-/**
- * Fifteen minutes, so a running model call or tool call can finish before a
- * deploy moves the actor. The engine's stop threshold still bounds it.
- */
-const DEFAULT_SLEEP_GRACE_PERIOD_MS = 15 * 60_000;
-
 /** Watch frames, sent only to the connection that asked. See `PiWatchEvents`. */
 export type PiDurableEvents = {
 	"pi.events": Type<PiEventsFrame>;
@@ -66,13 +53,18 @@ const piDurableEvents: PiDurableEvents = {
 	"pi.doc": event<PiDocFrame>(),
 };
 
-/** `c.pi`: the actor's Pi Durable harness, in the app's own actions and hooks. */
+/**
+ * `c.pi`: the actor's Pi Durable harness, in the app's own actions and hooks.
+ * Reading it throws when Pi Durable cannot open, such as after a rollback to
+ * an older schema. In `onSleep` and `onDestroy` it is set only when Pi Durable
+ * is already open in this actor generation.
+ */
 export interface PiDurableAccess {
 	readonly pi: Harness;
 }
 
 /** The app's own actions, which get `c.pi`. Nested objects become dotted action names. */
-export interface PiDurableUserActions<
+export type PiDurableUserActions<
 	TState,
 	TConnParams,
 	TConnState,
@@ -80,134 +72,18 @@ export interface PiDurableUserActions<
 	TInput,
 	TEvents extends EventSchemaConfig,
 	TQueues extends QueueSchemaConfig,
-> {
-	[action: string]:
-		| ((
-				c: ActionContext<
-					TState,
-					TConnParams,
-					TConnState,
-					TVars,
-					TInput,
-					PiDatabaseProvider,
-					TEvents,
-					TQueues
-				> &
-					PiDurableAccess,
-				...args: any[]
-		  ) => any)
-		| PiDurableUserActions<
-				TState,
-				TConnParams,
-				TConnState,
-				TVars,
-				TInput,
-				TEvents,
-				TQueues
-		  >;
-}
-
-/** Lifecycle hooks that get `c.pi`. Other hooks run before Pi Durable opens or outside it. */
-interface PiDurableHooks<
+> = UserActions<
 	TState,
 	TConnParams,
 	TConnState,
 	TVars,
 	TInput,
-	TEvents extends EventSchemaConfig,
-	TQueues extends QueueSchemaConfig,
-> {
-	onWake?: (
-		c: WakeContext<
-			TState,
-			TConnParams,
-			TConnState,
-			TVars,
-			TInput,
-			PiDatabaseProvider,
-			TEvents,
-			TQueues
-		> &
-			PiDurableAccess,
-	) => void | Promise<void>;
-	onSleep?: (
-		c: SleepContext<
-			TState,
-			TConnParams,
-			TConnState,
-			TVars,
-			TInput,
-			PiDatabaseProvider,
-			TEvents,
-			TQueues
-		> &
-			PiDurableAccess,
-	) => void | Promise<void>;
-	onDestroy?: (
-		c: DestroyContext<
-			TState,
-			TConnParams,
-			TConnState,
-			TVars,
-			TInput,
-			PiDatabaseProvider,
-			TEvents,
-			TQueues
-		> &
-			PiDurableAccess,
-	) => void | Promise<void>;
-	onConnect?: (
-		c: ConnectContext<
-			TState,
-			TConnParams,
-			TConnState,
-			TVars,
-			TInput,
-			PiDatabaseProvider,
-			TEvents,
-			TQueues
-		> &
-			PiDurableAccess,
-		conn: Conn<
-			TState,
-			TConnParams,
-			TConnState,
-			TVars,
-			TInput,
-			PiDatabaseProvider,
-			TEvents,
-			TQueues
-		>,
-	) => void | Promise<void>;
-	onDisconnect?: (
-		c: DisconnectContext<
-			TState,
-			TConnParams,
-			TConnState,
-			TVars,
-			TInput,
-			PiDatabaseProvider,
-			TEvents,
-			TQueues
-		> &
-			PiDurableAccess,
-		conn: Conn<
-			TState,
-			TConnParams,
-			TConnState,
-			TVars,
-			TInput,
-			PiDatabaseProvider,
-			TEvents,
-			TQueues
-		>,
-	) => void | Promise<void>;
-}
+	TEvents,
+	TQueues,
+	PiDurableAccess
+>;
 
-type WrappedKey =
-	| "actions"
-	| keyof PiDurableHooks<any, any, any, any, any, any, any>;
-
+/** Ordinary actor config plus the Pi Durable options. The app's actions and lifecycle hooks get `c.pi`. */
 export type PiDurableActorConfigInput<
 	TState = undefined,
 	TConnParams = undefined,
@@ -225,29 +101,18 @@ export type PiDurableActorConfigInput<
 		TEvents,
 		TQueues
 	> = Record<never, never>,
-> = DistributiveOmit<
-	ActorConfigInput<
-		TState,
-		TConnParams,
-		TConnState,
-		TVars,
-		TInput,
-		PiDatabaseProvider,
-		TEvents,
-		TQueues
-	>,
-	WrappedKey
-> &
-	PiDurableHooks<
-		TState,
-		TConnParams,
-		TConnState,
-		TVars,
-		TInput,
-		TEvents,
-		TQueues
-	> &
-	PiDurableOptions & { actions?: TUserActions };
+> = UserActorConfig<
+	TState,
+	TConnParams,
+	TConnState,
+	TVars,
+	TInput,
+	TEvents,
+	TQueues,
+	TUserActions,
+	PiDurableOptions,
+	PiDurableAccess
+>;
 
 const piDurableOptionKeys = [
 	"registry",
@@ -311,39 +176,20 @@ export function piDurable<
 		TQueues,
 		TUserActions
 	>,
-): ActorDefinition<
+): PiActorDefinition<
 	TState,
 	TConnParams,
 	TConnState,
 	TVars,
 	TInput,
-	PiDatabaseProvider,
-	TEvents & PiDurableEvents,
+	TEvents,
 	TQueues,
-	ClientActions<
-		TUserActions,
-		ActionContext<
-			TState,
-			TConnParams,
-			TConnState,
-			TVars,
-			TInput,
-			PiDatabaseProvider,
-			TEvents,
-			TQueues
-		>
-	> &
-		PiDurableActions
+	TUserActions,
+	PiDurableEvents,
+	PiDurableActions
 > {
-	const actorConfig: Record<string, any> = { ...config };
-	const options: Record<string, unknown> = {};
-	for (const key of piDurableOptionKeys) {
-		if (key in actorConfig) {
-			options[key] = actorConfig[key];
-			delete actorConfig[key];
-		}
-	}
-	const durableOptions = options as unknown as PiDurableOptions;
+	const { actorConfig, options: durableOptions } =
+		splitConfig<PiDurableOptions>(config, piDurableOptionKeys);
 	if (!durableOptions.registry) {
 		throw new Error(
 			"piDurable() needs a registry; pass createRegistry() from @earendil-works/pi-durable",
@@ -355,38 +201,36 @@ export function piDurable<
 		);
 	}
 	const actions = createPiDurableActions(durableOptions);
-	for (const key of Object.keys(actorConfig.actions ?? {})) {
-		if (key in actions)
-			throw new Error(`piDurable() action name is reserved: ${key}`);
-	}
-	for (const key of Object.keys(actorConfig.events ?? {})) {
-		if (key in piDurableEvents)
-			throw new Error(`piDurable() event name is reserved: ${key}`);
-	}
+	assertNoReservedNames("piDurable()", actorConfig, {
+		action: actions,
+		event: piDurableEvents,
+	});
 
 	const withPi = <TArgs extends unknown[]>(
 		hook: ((c: PiContext, ...args: TArgs) => unknown) | undefined,
+		opensHarness = true,
 	) =>
 		hook &&
 		((c: PiContext, ...args: TArgs) =>
-			withPiAccess(c, durableOptions, () => hook(c, ...args)));
-	const userVars = actorConfig.vars;
-	const userCreateVars = actorConfig.createVars;
+			withPiAccess(c, durableOptions, () => hook(c, ...args), {
+				opensHarness,
+			}));
 	const userOnWake = actorConfig.onWake;
-	const userOnSleep = withPi(actorConfig.onSleep);
-	const userOnDestroy = withPi(actorConfig.onDestroy);
 	const userOnDisconnect = withPi(actorConfig.onDisconnect);
-	delete actorConfig.vars;
-	const sleepGracePeriod: number =
-		actorConfig.options?.sleepGracePeriod ?? DEFAULT_SLEEP_GRACE_PERIOD_MS;
 
+	// The config is built from untyped parts, so `actor()` cannot check it
+	// against the generics. The declared return type is the public contract.
 	return actor({
-		...actorConfig,
-		options: {
-			actionTimeout: DEFAULT_ACTION_TIMEOUT_MS,
-			sleepGracePeriod: DEFAULT_SLEEP_GRACE_PERIOD_MS,
-			...actorConfig.options,
-		},
+		...sharedActorConfig(
+			"piDurable()",
+			actorConfig,
+			{ slot: PI_DURABLE_RUNTIME, create: createPiDurableRuntime },
+			(c, stop) => closeHarness(c, durableOptions, stop),
+			{
+				onSleep: withPi(actorConfig.onSleep, false),
+				onDestroy: withPi(actorConfig.onDestroy, false),
+			},
+		),
 		db: db({ onMigrate: migratePiDurableTables }),
 		events: { ...(actorConfig.events ?? {}), ...piDurableEvents },
 		actions: {
@@ -395,20 +239,11 @@ export function piDurable<
 			),
 			...actions,
 		},
-		createVars: async (c: unknown, driverCtx: unknown) => {
-			const vars = userCreateVars
-				? await userCreateVars(c, driverCtx)
-				: userVars === undefined
-					? undefined
-					: structuredClone(userVars);
-			return attachRuntime(vars);
-		},
 		// Opening on wake resumes interrupted work, after the app's own onWake.
 		onWake: async (c: PiContext) => {
-			let harness: Harness | undefined;
+			let harness: Harness;
 			try {
 				harness = await openOnWake(c, durableOptions);
-				Object.defineProperty(c, "pi", { value: harness, configurable: true });
 			} catch (error) {
 				// The actor stays up so actions can report the cause, such as a
 				// schema newer than the code. Using c.pi throws it.
@@ -416,17 +251,13 @@ export function piDurable<
 					msg: "pi durable could not open on wake; actions will retry",
 					error,
 				});
-				Object.defineProperty(c, "pi", {
-					get: () => {
-						throw error;
-					},
-					configurable: true,
-				});
+				return withUnavailablePi(c, error, () => userOnWake?.(c));
 			}
+			Object.defineProperty(c, "pi", { value: harness, configurable: true });
 			try {
 				await userOnWake?.(c);
 			} finally {
-				harness?.resume();
+				harness.resume();
 			}
 		},
 		onConnect: withPi(actorConfig.onConnect),
@@ -438,32 +269,5 @@ export function piDurable<
 				await unwatchConnection(runtime.actor ?? c, runtime.watches, conn.id);
 			}
 		},
-		onSleep: async (c: PiContext) => {
-			const drainUntil = drainDeadline(sleepGracePeriod);
-			try {
-				await userOnSleep?.(c);
-			} finally {
-				await closeHarness(c, durableOptions, { reason: "sleep", drainUntil });
-			}
-		},
-		onDestroy: async (c: PiContext) => {
-			try {
-				await userOnDestroy?.(c);
-			} finally {
-				await closeHarness(c, durableOptions, { reason: "destroy" });
-			}
-		},
-	} as any) as any;
-}
-
-/** Adds the runtime slot to the user's vars without changing their shape. */
-function attachRuntime(vars: unknown): object {
-	const runtime = createPiDurableRuntime();
-	if (vars === undefined) {
-		return { [PI_DURABLE_RUNTIME]: runtime };
-	}
-	if (typeof vars !== "object" || vars === null) {
-		throw new Error("piDurable() requires actor vars to be an object");
-	}
-	return Object.assign(vars, { [PI_DURABLE_RUNTIME]: runtime });
+	} as any);
 }

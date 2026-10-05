@@ -110,6 +110,23 @@ function isAllowed(
 	return allowedModels(options).includes(`${provider}/${modelId}`);
 }
 
+/**
+ * Throws unless a client may switch to `provider/modelId`. With neither
+ * `model` nor `scopedModels` set, a client may not choose any model.
+ */
+export function assertModelAllowed(
+	options: AllowlistOptions,
+	provider: string,
+	modelId: string,
+): void {
+	if (!isAllowed(options, provider, modelId)) {
+		throw new UserError(
+			`Model ${provider}/${modelId} is not allowed for this agent.`,
+			{ code: "model_not_allowed" },
+		);
+	}
+}
+
 /** Looks up a `provider/modelId` in the actor's catalog. */
 function catalogModel(runtime: ModelRuntime, name: string): PiModel {
 	const slash = name.indexOf("/");
@@ -192,14 +209,7 @@ export async function switchModel(
 	provider: string,
 	modelId: string,
 ): Promise<void> {
-	if (!isAllowed(options, provider, modelId)) {
-		throw new UserError(
-			`Model ${provider}/${modelId} is not allowed for this agent.`,
-			{
-				code: "model_not_allowed",
-			},
-		);
-	}
+	assertModelAllowed(options, provider, modelId);
 	const model = session.modelRuntime
 		.getAvailableSnapshot()
 		.find(

@@ -1,8 +1,5 @@
 import type { Context, JsonValue } from "@earendil-works/chord";
-import {
-	BACKGROUND_CONTEXT,
-	withAbortSignal,
-} from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Models, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import {
 	AgentDoc,
@@ -26,11 +23,12 @@ import {
 } from "../models.js";
 import {
 	type ConnectedSandbox,
+	closeSandbox,
 	connectSandbox,
 	type PiContext,
-	piSandboxStore,
+	type PiStop,
+	withUnavailablePi,
 } from "../runtime.js";
-import { loadPiSandbox } from "../storage.js";
 import { actorSqlite } from "./actor-sqlite.js";
 import { sandboxEnv } from "./env.js";
 import { toClientError } from "./errors.js";
@@ -72,12 +70,11 @@ export interface PiDurableOptions extends PiModelOptions {
 const LONG_WAIT_MS = 60_000;
 
 /** The internal action a scheduled wake calls. */
-export const WAKE_ACTION = "pi.wake";
+const WAKE_ACTION = "pi.wake";
 
 interface OpenHarness {
 	harness: Harness;
 	stopBusyWatch: () => void;
-	watches: ConnectionWatches;
 	isBusy: () => Promise<boolean>;
 }
 
@@ -132,15 +129,13 @@ export async function openOnWake(
 }
 
 /** Returns the actor's Pi Durable harness, opening it from SQLite on first use. */
-export async function ensureHarness(
+async function ensureHarness(
 	c: PiContext,
 	options: PiDurableOptions,
 	open: { resume: boolean } = { resume: true },
 ): Promise<Harness> {
 	const runtime = piDurableRuntime(c);
-	if (runtime.closing) {
-		throw new UserError("Pi Durable is closed because the actor is stopping.");
-	}
+	if (runtime.closing) throw harnessClosed();
 	runtime.harness ??= openHarness(
 		runtime.actor ?? c,
 		runtime,
@@ -156,7 +151,10 @@ export async function ensureHarness(
 /**
  * Runs an action against the harness. A failed call that left Pi Durable
  * unusable reopens it before the error reaches the client, so the next call
- * works.
+ * works. Calls use `BACKGROUND_CONTEXT`, so a wait such as `prompt` lasts
+ * until the run settles or the action times out, including while a stopping
+ * actor drains the run. RivetKit's action signal also fires when the actor
+ * starts to stop, so it cannot cancel a wait.
  */
 export async function withHarness<T>(
 	c: PiContext,
@@ -165,7 +163,7 @@ export async function withHarness<T>(
 ): Promise<T> {
 	const harness = await ensureHarness(c, options);
 	try {
-		return await run(harness, actionContext(c));
+		return await run(harness, BACKGROUND_CONTEXT);
 	} catch (error) {
 		const runtime = piDurableRuntime(c);
 		await recoverHarness(runtime.actor ?? c, runtime, options);
@@ -176,27 +174,50 @@ export async function withHarness<T>(
 /**
  * Runs one of the app's own actions or hooks with the harness on `c.pi`. A
  * failure that left Pi Durable unusable reopens it. The error reaches the
- * client as from a built-in action.
+ * client as from a built-in action. Code that never reads `c.pi` runs even
+ * when Pi Durable is closed or cannot open; reading `c.pi` throws the cause.
+ * Shutdown hooks pass `opensHarness: false`, so they use a harness that is
+ * already open and never open and resume one only to close it.
  */
 export async function withPiAccess<T>(
 	c: PiContext,
 	options: PiDurableOptions,
 	body: () => T | Promise<T>,
+	{ opensHarness = true }: { opensHarness?: boolean } = {},
 ): Promise<T> {
-	const harness = await ensureHarness(c, options);
+	const runtime = piDurableRuntime(c);
+	// Hooks such as onDisconnect still run after Pi Durable closed; only using c.pi fails.
+	if (runtime.closing) return withUnavailablePi(c, harnessClosed(), body);
+	if (!opensHarness && !runtime.harness) {
+		return withUnavailablePi(c, harnessNotOpen(), body);
+	}
+	let harness: Harness;
+	try {
+		harness = await ensureHarness(c, options);
+	} catch (error) {
+		c.log.warn({
+			msg: "pi durable could not open; reading c.pi throws this error",
+			error,
+		});
+		return withUnavailablePi(c, error, body);
+	}
 	Object.defineProperty(c, "pi", { value: harness, configurable: true });
 	try {
 		return await body();
 	} catch (error) {
-		const runtime = piDurableRuntime(c);
 		await recoverHarness(runtime.actor ?? c, runtime, options);
 		throw toClientError(error);
 	}
 }
 
-/** A cancelled action stops waiting. It never cancels durable work, as Pi Durable's own rule says. */
-function actionContext(c: PiContext): Context {
-	return withAbortSignal(c.abortSignal, BACKGROUND_CONTEXT);
+function harnessNotOpen() {
+	return new UserError(
+		"Pi Durable is not open in this actor generation, so this shutdown hook cannot use c.pi.",
+	);
+}
+
+function harnessClosed() {
+	return new UserError("Pi Durable is closed because the actor is stopping.");
 }
 
 async function openHarness(
@@ -236,7 +257,7 @@ async function openHarness(
 			.kind === "busy";
 	const stopBusyWatch = watchBusy(c, harness, now, LONG_WAIT_MS);
 	await reattachWatches(c, runtime.watches, harness, documentsByKind(options));
-	return { harness, stopBusyWatch, watches: runtime.watches, isBusy };
+	return { harness, stopBusyWatch, isBusy };
 }
 
 /** App documents by `kind`, for clients that name a document. */
@@ -279,7 +300,7 @@ async function recoverHarness(
 		msg: "pi durable stopped after a failed commit, reopening it from storage",
 	});
 	const reopened = (async () => {
-		await closeOpenHarness(open);
+		await closeOpenHarness(open, runtime.watches);
 		return openHarness(c, runtime, options);
 	})().catch((error: unknown) => {
 		if (runtime.harness === reopened) runtime.harness = undefined;
@@ -293,9 +314,12 @@ async function recoverHarness(
 	await reopened.catch(() => {});
 }
 
-async function closeOpenHarness(open: OpenHarness): Promise<void> {
+async function closeOpenHarness(
+	open: OpenHarness,
+	watches: ConnectionWatches,
+): Promise<void> {
 	open.stopBusyWatch();
-	await stopAllWatches(open.watches);
+	await stopAllWatches(watches);
 	await open.harness.close(BACKGROUND_CONTEXT);
 }
 
@@ -354,12 +378,10 @@ function sandboxEnvBuilder(
 	provider: SandboxProvider,
 ): NonNullable<HarnessOptions["env"]> {
 	return async (target): Promise<ExecutionEnv> => {
-		runtime.sandbox ??= connectSandbox(c, provider, piSandboxStore).catch(
-			(error: unknown) => {
-				runtime.sandbox = undefined;
-				throw error;
-			},
-		);
+		runtime.sandbox ??= connectSandbox(c, provider).catch((error: unknown) => {
+			runtime.sandbox = undefined;
+			throw error;
+		});
 		const connected = await runtime.sandbox;
 		return sandboxEnv(
 			`${provider.name}:${connected.id}`,
@@ -570,7 +592,7 @@ async function drain(
 export async function closeHarness(
 	c: PiContext,
 	options: PiDurableOptions,
-	stop: { reason: "sleep"; drainUntil: number } | { reason: "destroy" },
+	stop: PiStop,
 ): Promise<void> {
 	const runtime = piDurableRuntime(c);
 	const errors: unknown[] = [];
@@ -587,26 +609,16 @@ export async function closeHarness(
 	runtime.closing = true;
 	runtime.harness = undefined;
 	if (open) {
-		await closeOpenHarness(open).catch((error: unknown) => errors.push(error));
+		await closeOpenHarness(open, runtime.watches).catch((error: unknown) =>
+			errors.push(error),
+		);
 	}
 
 	const provider = options.sandbox;
 	if (provider) {
-		try {
-			const connected = await runtime.sandbox?.catch(() => undefined);
-			if (stop.reason === "sleep") {
-				if (connected && provider.suspend)
-					await provider.suspend(c, connected.id);
-			} else if (provider.destroy) {
-				const stored = connected ? undefined : await loadPiSandbox(c.db);
-				const id =
-					connected?.id ??
-					(stored?.provider === provider.name ? stored.id : undefined);
-				if (id !== undefined) await provider.destroy(c, id);
-			}
-		} catch (error) {
-			errors.push(error);
-		}
+		await closeSandbox(c, provider, runtime.sandbox, stop).catch(
+			(error: unknown) => errors.push(error),
+		);
 	}
 
 	if (errors.length === 1) throw errors[0];

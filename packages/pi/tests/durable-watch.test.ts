@@ -75,6 +75,12 @@ function buildRegistry(mock: MockModel) {
 					);
 				}, BACKGROUND_CONTEXT);
 			},
+			clearTodos: async (c, conversationId: number) => {
+				await c.pi.commit(
+					(tx) => tx.retireDoc(Todos, conversationId as ConversationId),
+					BACKGROUND_CONTEXT,
+				);
+			},
 		},
 	});
 	return setup({ use: { agent } });
@@ -238,6 +244,31 @@ describe("piDurable watches", () => {
 			group: "user",
 			message: expect.stringContaining("app.unknown"),
 		});
+	});
+
+	test("a watched document that is retired and created again keeps sending frames", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const conn = client.agent.getOrCreate(["recreate", randomUUID()]).connect();
+		const { frames: docFrames, push } = received<PiDocFrame>();
+		conn.on("pi.doc", push);
+		const root = await conn.harness.root();
+		await conn.addTodo(root.id, "milk");
+
+		expect(await conn.harness.watchDoc("app.todos", root.id)).toEqual({
+			value: { items: ["milk"] },
+		});
+		await conn.clearTodos(root.id);
+		// The retire frame follows the commit; wait for it so the next write cannot land first.
+		await vi.waitFor(() => expect(docFrames).toHaveLength(1));
+		await conn.addTodo(root.id, "eggs");
+
+		// Document frames follow the commits that the actions made.
+		await vi.waitFor(() =>
+			expect(docFrames.map(({ seq, value }) => ({ seq, value }))).toEqual([
+				{ seq: 1, value: null },
+				{ seq: 2, value: { items: ["eggs"] } },
+			]),
+		);
 	});
 
 	test("a connection that survives sleep gets its watch back with a fresh snapshot", async (c) => {

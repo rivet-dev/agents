@@ -201,6 +201,7 @@ export async function migratePiSession(
 	if ((stored.header.version ?? 1) >= CURRENT_SESSION_VERSION) return stored;
 	const entries = structuredClone(toFileEntries(stored));
 	migrateSessionEntries(entries);
+	// `toFileEntries` puts the header first, and Pi's migration keeps the order.
 	const [header, ...rest] = entries as [SessionHeader, ...SessionEntry[]];
 	await db.transaction(async (tx) => {
 		await tx.execute(`DELETE FROM pi_entry`);
@@ -247,6 +248,7 @@ export async function loadPiInterruptedRun(
 	}>(`SELECT run_state, queued_json FROM pi_session WHERE singleton = 1`);
 	const row = rows[0];
 	if (row?.run_state !== "running") return undefined;
+	// Only `savePiRunning` writes `queued_json`, from a `PiQueue`.
 	return row.queued_json === null
 		? { steering: [], followUp: [] }
 		: (JSON.parse(row.queued_json) as PiQueue);

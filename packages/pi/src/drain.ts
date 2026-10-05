@@ -1,4 +1,10 @@
 /**
+ * Fifteen minutes, so a running model call or tool call can finish before a
+ * deploy moves the actor. The engine's stop threshold still bounds it.
+ */
+export const DEFAULT_SLEEP_GRACE_PERIOD_MS = 15 * 60_000;
+
+/**
  * Time kept back from the grace period for closing Pi and suspending the
  * sandbox after a drain, so both finish before RivetKit's grace deadline.
  */
