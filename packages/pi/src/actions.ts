@@ -149,15 +149,11 @@ export function createPiActions(options: PiSessionOptions): PiActions {
 				await reloadCredentials(handle);
 				const { session } = handle;
 				requireCredential(session);
-				const abort = () => void session.abort();
-				c.abortSignal.addEventListener("abort", abort, { once: true });
-				try {
-					await traceRun(session, c.actorId, () =>
-						session.prompt(text, promptOptions),
-					);
-				} finally {
-					c.abortSignal.removeEventListener("abort", abort);
-				}
+				// The run outlives this action: a timeout, a caller that leaves, or
+				// a stopping actor never aborts it. Only the abort action does.
+				await traceRun(session, c.actorId, () =>
+					session.prompt(text, promptOptions),
+				);
 			}),
 		steer: (c, ...args) => mutate(c, ({ session }) => session.steer(...args)),
 		followUp: (c, ...args) =>
