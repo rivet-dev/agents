@@ -6,13 +6,17 @@ import type {
 	ConversationAbortOptions,
 	ConversationId,
 	ConversationOwnership,
+	ConversationView,
 	Cursor,
 	EntryId,
 	EntryQuery,
 	Harness,
+	JsonObject,
+	SnapshotEvent,
 	Submission,
 	SubmissionDraft,
 	SubmissionId,
+	TaskGraph,
 	TaskId,
 	UserInput,
 } from "@earendil-works/pi-durable";
@@ -20,10 +24,14 @@ import { UserError } from "rivetkit";
 import type { PiContext } from "../runtime.js";
 import { traceDurableRun } from "../tracing.js";
 import {
+	documentsByKind,
 	type PiDurableOptions,
 	parseModelRef,
+	piDurableRuntime,
 	withHarness,
 } from "./runtime.js";
+import type { WatchSpec } from "./storage.js";
+import { unwatch, watch } from "./watches.js";
 
 /** `AgentChange` as it crosses the wire: extensions and tools by name. */
 export type PiAgentChange = Omit<AgentChange, "extensions" | "tools"> & {
@@ -78,15 +86,52 @@ export type PiDurableActions = ReturnType<typeof createPiDurableActions>;
  * conversation id first. `prompt` is the one convenience action.
  */
 export function createPiDurableActions(options: PiDurableOptions) {
-	const documents = new Map(
-		(options.documents ?? []).map((doc) => [doc.definition.kind, doc]),
-	);
+	const documents = documentsByKind(options);
 	const run = <T>(
 		c: PiContext,
 		body: (harness: Harness, context: Context) => Promise<T>,
 	) => withHarness(c, options, body);
 	const agentChange = (change: PiAgentChange | undefined) =>
 		change === undefined ? undefined : resolveAgentChange(options, change);
+
+	/** Starts a watch for the calling connection. Frames go to that connection only. */
+	const watchFor = <T>(c: PiContext, spec: WatchSpec) =>
+		run(c, async (harness, context) => {
+			const connId = connectionId(c);
+			await requireWatchTarget(harness, spec, context);
+			const runtime = piDurableRuntime(c);
+			return (await watch(
+				runtime.actor ?? c,
+				runtime.watches,
+				harness,
+				documents,
+				connId,
+				spec,
+			)) as T;
+		});
+	const unwatchFor = (c: PiContext, spec: WatchSpec) =>
+		run(c, async () => {
+			const runtime = piDurableRuntime(c);
+			await unwatch(runtime.actor ?? c, runtime.watches, connectionId(c), spec);
+		});
+	const requireWatchTarget = async (
+		harness: Harness,
+		spec: WatchSpec,
+		context: Context,
+	) => {
+		if (spec.kind === "doc") requireDocument(spec.docKind);
+		if (spec.kind !== "taskGraph")
+			await requireConversation(harness, spec.conversationId, context);
+	};
+	const requireDocument = (kind: string) => {
+		const doc = documents.get(kind);
+		if (!doc) {
+			throw new UserError(
+				`Document ${kind} is not listed in piDurable({ documents }).`,
+			);
+		}
+		return doc;
+	};
 
 	return {
 		harness: {
@@ -175,19 +220,30 @@ export function createPiDurableActions(options: PiDurableOptions) {
 					}
 				}),
 			snapshot: (c: PiContext, kind: string, conversationId: number) =>
-				run(c, async (harness, context) => {
-					const doc = documents.get(kind);
-					if (!doc) {
-						throw new UserError(
-							`Document ${kind} is not listed in piDurable({ documents }).`,
-						);
-					}
-					return harness.snapshot(
-						doc,
+				run(c, async (harness, context) =>
+					harness.snapshot(
+						requireDocument(kind),
 						conversationId as ConversationId,
 						context,
-					);
+					),
+				),
+			/** The task graph; then `pi.taskGraph` frames to this connection. */
+			watchTaskGraph: (c: PiContext) =>
+				watchFor<{ value: TaskGraph }>(c, { kind: "taskGraph" }),
+			unwatchTaskGraph: (c: PiContext) => unwatchFor(c, { kind: "taskGraph" }),
+			/**
+			 * The document's value; then `pi.doc` frames to this connection. A
+			 * document that does not exist yet has value `undefined`, and its
+			 * first frame arrives when a commit creates it.
+			 */
+			watchDoc: (c: PiContext, kind: string, conversationId: number) =>
+				watchFor<{ value: JsonObject | null | undefined }>(c, {
+					kind: "doc",
+					docKind: kind,
+					conversationId,
 				}),
+			unwatchDoc: (c: PiContext, kind: string, conversationId: number) =>
+				unwatchFor(c, { kind: "doc", docKind: kind, conversationId }),
 		},
 
 		conversation: {
@@ -289,6 +345,22 @@ export function createPiDurableActions(options: PiDurableOptions) {
 						await requireConversation(harness, conversationId, context)
 					).waitForIdle(context),
 				),
+			/** The structural view; then `pi.view` frames with Chord operations to this connection. */
+			watch: (c: PiContext, conversationId: number) =>
+				watchFor<{ value: ConversationView }>(c, {
+					kind: "view",
+					conversationId,
+				}),
+			unwatch: (c: PiContext, conversationId: number) =>
+				unwatchFor(c, { kind: "view", conversationId }),
+			/** A snapshot, partial answer included; then `pi.events` batches to this connection. Nothing is replayed. */
+			watchEvents: (c: PiContext, conversationId: number) =>
+				watchFor<{ snapshot: SnapshotEvent }>(c, {
+					kind: "events",
+					conversationId,
+				}),
+			unwatchEvents: (c: PiContext, conversationId: number) =>
+				unwatchFor(c, { kind: "events", conversationId }),
 		},
 
 		submission: {
@@ -363,6 +435,21 @@ export function createPiDurableActions(options: PiDurableOptions) {
 			wake: (c: PiContext) => run(c, async () => {}),
 		},
 	};
+}
+
+/**
+ * The calling connection, which receives the watch's frames. A stateless call
+ * gets the starting value, and its watch ends with the request. Only a call
+ * with no connection at all, such as a scheduled action, cannot watch.
+ */
+function connectionId(c: PiContext): string {
+	const conn = (c as { conn?: { id: string } }).conn;
+	if (!conn) {
+		throw new UserError(
+			"Watching needs a calling connection. Call it from a client handle, and use connect() to receive frames.",
+		);
+	}
+	return conn.id;
 }
 
 async function requireConversation(
