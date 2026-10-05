@@ -32,6 +32,8 @@ export interface MockModel {
 	reply(userText: string, ...replies: MockReply[]): void;
 	/** Every model call: the model id and the API key Pi resolved for it. */
 	requests: { model: string; apiKey: string | undefined }[];
+	/** How many answers are streaming right now. */
+	streaming(): number;
 }
 
 /** A reply that calls one tool. */
@@ -63,6 +65,7 @@ export function createMockModel(): MockModel {
 	const replies = new Map<string, MockReply[]>();
 	const calls = new Map<string, number>();
 	const requests: MockModel["requests"] = [];
+	let streaming = 0;
 	const cores = new Map<number, ReturnType<typeof createFauxCore>>();
 	const coreFor = (tokensPerSecond: number) => {
 		let core = cores.get(tokensPerSecond);
@@ -106,13 +109,20 @@ export function createMockModel(): MockModel {
 					"message" in reply ? reply : { message: reply, tokensPerSecond: 0 };
 				const core = coreFor(tokensPerSecond);
 				core.setResponses([message]);
-				return core.streamSimple(model, context, options);
+				const stream = core.streamSimple(model, context, options);
+				streaming += 1;
+				const done = () => {
+					streaming -= 1;
+				};
+				void stream.result().then(done, done);
+				return stream;
 			},
 		},
 		reply: (userText, ...scripted) => {
 			replies.set(userText, scripted);
 		},
 		requests,
+		streaming: () => streaming,
 	};
 }
 
