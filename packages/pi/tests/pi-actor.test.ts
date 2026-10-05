@@ -25,6 +25,9 @@ let sandboxProviderDown = false;
 /** Sleeps of the `sandboxed` actors by key, recorded in this process where they run. */
 const sandboxedSleeps = new Map<string, number>();
 
+/** What `c.pi` gave each `closing` actor's onDisconnect hook, by key, recorded in this process. */
+const disconnectOutcomes = new Map<string, string>();
+
 let mockModel: MockModel;
 let workdir: string;
 let registry: ReturnType<typeof buildRegistry>;
@@ -62,6 +65,7 @@ function buildRegistry(mock: MockModel, root: string) {
 				c.sleep();
 			},
 			sleeps: (c) => c.state.sleeps,
+			sessionId: (c) => c.pi.sessionId,
 			destroySelf: (c) => {
 				c.destroy();
 			},
@@ -73,7 +77,26 @@ function buildRegistry(mock: MockModel, root: string) {
 		apiKeys: { mock: "mock" },
 		options: { actionTimeout: 1_000 },
 	});
-	return setup({ use: { agent, sandboxed, timed } });
+	const closing = pi({
+		model: "mock/mock-model",
+		providers: { mock: mock.providerConfig },
+		apiKeys: { mock: "mock" },
+		onDisconnect: (c) => {
+			let outcome: string;
+			try {
+				outcome = `open ${c.pi.sessionId}`;
+			} catch (error) {
+				outcome = (error as Error).message;
+			}
+			disconnectOutcomes.set(JSON.stringify(c.key), outcome);
+		},
+		actions: {
+			destroySelf: (c) => {
+				c.destroy();
+			},
+		},
+	});
+	return setup({ use: { agent, sandboxed, timed, closing } });
 }
 
 beforeAll(async () => {
@@ -310,6 +333,22 @@ describe("pi actor", () => {
 		await conn.dispose();
 	});
 
+	test("a hook that runs after the session closed gets an error from c.pi instead of reopening it", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["closed", randomUUID()];
+		const conn = client.closing.getOrCreate(key).connect();
+		await conn.getSession();
+
+		await client.closing.getOrCreate(key).destroySelf();
+		// Destroy closes the session, then disconnects the connection; the hook records what c.pi gave in this process.
+		await vi.waitFor(() =>
+			expect(disconnectOutcomes.get(JSON.stringify(key))).toBe(
+				"The Pi session is closed because the actor is stopping.",
+			),
+		);
+		await conn.dispose();
+	});
+
 	test("while the sandbox provider is down, history stays readable and sandbox work fails until it is back", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["outage", randomUUID()];
@@ -331,6 +370,26 @@ describe("pi actor", () => {
 		expect((await handle.executeBash("cat kept.txt")).output.trim()).toBe(
 			"kept",
 		);
+	});
+
+	test("while the sandbox provider is down, a new actor's own actions and hooks run, and only reading c.pi fails", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["new-outage", randomUUID()];
+		const handle = client.sandboxed.getOrCreate(key);
+
+		sandboxProviderDown = true;
+		try {
+			// A new session needs the sandbox for its working directory.
+			await expect(handle.sessionId()).rejects.toThrow();
+			await handle.nap();
+			// Any action would wake the actor, so wait for the sleep hook in this process.
+			await vi.waitFor(() =>
+				expect(sandboxedSleeps.get(JSON.stringify(key))).toBe(1),
+			);
+		} finally {
+			sandboxProviderDown = false;
+		}
+		expect(await handle.sessionId()).toEqual(expect.any(String));
 	});
 
 	test("the sandbox outlives sleep, is replaced when deleted, and is destroyed with the actor", async (c) => {
