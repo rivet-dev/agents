@@ -16,6 +16,9 @@ import {
 	toolCall,
 } from "./helpers/mock-model.js";
 
+/** About two seconds of tokens from a `slowly` reply. */
+const TWO_SECOND_ANSWER = "word ".repeat(50).trim();
+
 let mockModel: MockModel;
 let workdir: string;
 let registry: ReturnType<typeof buildRegistry>;
@@ -74,6 +77,10 @@ beforeAll(async () => {
 	mockModel.reply(
 		"answer slowly",
 		slowly(fauxAssistantMessage("word ".repeat(400))),
+	);
+	mockModel.reply(
+		"answer for two seconds",
+		slowly(fauxAssistantMessage(TWO_SECOND_ANSWER)),
 	);
 	mockModel.reply(
 		"create hello.txt",
@@ -167,19 +174,26 @@ describe("pi actor", () => {
 		await conn.dispose();
 	});
 
-	test("a prompt that outlives the action timeout rejects and its run stops", async (c) => {
+	test("a prompt that outlives the action timeout rejects, and its run still finishes", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const handle = client.timed.getOrCreate(["times-out", randomUUID()]);
 
-		await expect(handle.prompt("answer slowly")).rejects.toMatchObject({
-			code: "action_timed_out",
-		});
+		await expect(handle.prompt("answer for two seconds")).rejects.toMatchObject(
+			{ code: "action_timed_out" },
+		);
 
-		await handle.waitForIdle();
+		// The run continues after the action ends, and waitForIdle has the same one-second timeout.
+		await vi.waitFor(
+			async () => expect((await handle.getSession()).isStreaming).toBe(false),
+			{
+				timeout: 10_000,
+			},
+		);
 		const messages = await handle.getMessages();
 		expect(messages.at(-1)).toMatchObject({
 			role: "assistant",
-			stopReason: "aborted",
+			stopReason: "stop",
+			content: [{ type: "text", text: TWO_SECOND_ANSWER }],
 		});
 	});
 
