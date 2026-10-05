@@ -4,7 +4,13 @@ export type {
 	PiPromptOptions,
 	PiSessionInfo,
 } from "./actions.js";
-export { type PiActorConfigInput, type PiEvents, pi } from "./actor.js";
+export {
+	type PiAccess,
+	type PiActorConfigInput,
+	type PiEvents,
+	type PiUserActions,
+	pi,
+} from "./actor.js";
 export type {
 	PiCredentialInfo,
 	PiCredentialSource,

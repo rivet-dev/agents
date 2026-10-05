@@ -30,7 +30,17 @@ function buildRegistry(mock: MockModel) {
 		onSleep: (c) => {
 			c.state.sleeps += 1;
 		},
-		actions: { ...napActions, sleeps: (c) => c.state.sleeps },
+		actions: {
+			...napActions,
+			sleeps: (c) => c.state.sleeps,
+			useModel: async (c, modelId: string) => {
+				const model = c.pi.modelRuntime
+					.getAvailableSnapshot()
+					.find((candidate) => candidate.id === modelId);
+				if (!model) throw new Error(`model ${modelId} is not available`);
+				await c.pi.setModel(model);
+			},
+		},
 	});
 	const noKey = pi({
 		providers,
@@ -81,6 +91,25 @@ describe("pi model selection", () => {
 		const { client } = await setupTest(c, registry);
 		const handle = client.agent.getOrCreate(["switch-sleep", randomUUID()]);
 		await handle.setModel("mock", "mock-model-2");
+
+		await handle.nap();
+		// Sleep finishes after the `nap` action returns, so poll the persisted
+		// counter until the sleep hook has run.
+		await vi.waitFor(async () => {
+			expect(await handle.sleeps()).toBeGreaterThanOrEqual(1);
+		});
+
+		const before = mockModel.requests.length;
+		await handle.prompt("say hello");
+		expect(
+			mockModel.requests.slice(before).map((request) => request.model),
+		).toEqual(["mock-model-2"]);
+	});
+
+	test("a model an app action sets through c.pi is still used after the actor sleeps", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.agent.getOrCreate(["app-model", randomUUID()]);
+		await handle.useModel("mock-model-2");
 
 		await handle.nap();
 		// Sleep finishes after the `nap` action returns, so poll the persisted
