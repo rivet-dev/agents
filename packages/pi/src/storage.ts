@@ -1,8 +1,10 @@
-import type {
-	FileEntry,
-	SessionEntry,
-	SessionHeader,
-	SettingsManager,
+import {
+	CURRENT_SESSION_VERSION,
+	type FileEntry,
+	migrateSessionEntries,
+	type SessionEntry,
+	type SessionHeader,
+	type SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { RawAccess } from "rivetkit/db";
 import { migrations } from "rivetkit/unstable/migrations";
@@ -185,6 +187,31 @@ export async function savePiSettings(
 		JSON.stringify(settings),
 		Date.now(),
 	);
+}
+
+/**
+ * Brings a session stored by an older `pi-coding-agent` to the current session
+ * format with Pi's own migration, and rewrites the stored rows in one
+ * transaction, so later loads read them as they are.
+ */
+export async function migratePiSession(
+	db: RawAccess,
+	stored: StoredPiSession,
+): Promise<StoredPiSession> {
+	if ((stored.header.version ?? 1) >= CURRENT_SESSION_VERSION) return stored;
+	const entries = structuredClone(toFileEntries(stored));
+	migrateSessionEntries(entries);
+	const [header, ...rest] = entries as [SessionHeader, ...SessionEntry[]];
+	await db.transaction(async (tx) => {
+		await tx.execute(`DELETE FROM pi_entry`);
+		for (const entry of rest) await appendPiEntry(tx, entry);
+		await tx.execute(
+			`UPDATE pi_session SET header_json = ?, updated_at = ? WHERE singleton = 1`,
+			JSON.stringify(header),
+			Date.now(),
+		);
+	});
+	return { ...stored, header, entries: rest };
 }
 
 /** Builds the entry list `SessionManager.inMemory` expects: header first. */
