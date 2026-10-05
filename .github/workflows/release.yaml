@@ -1,8 +1,17 @@
 name: release
+run-name: release ${{ inputs.target }} ${{ inputs.version }}
 
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: 'What to release'
+        required: true
+        type: choice
+        options:
+          - sandbox-agent
+          - pi
+          - sandbox-adapter
       version:
         description: 'Version'
         required: true
@@ -74,7 +83,7 @@ jobs:
           npm install -g tsx
 
           # Build command based on inputs
-          CMD="./scripts/release/main.ts --version \"${{ github.event.inputs.version }}\" --phase setup-ci"
+          CMD="./scripts/release/main.ts \"${{ inputs.target }}\" --version \"${{ github.event.inputs.version }}\" --phase setup-ci"
 
           if [ "${{ inputs.latest }}" != "true" ]; then
             CMD="$CMD --no-latest"
@@ -89,7 +98,8 @@ jobs:
   binaries:
     name: "Build & Upload Binaries"
     needs: [setup]
-    if: ${{ !inputs.reuse_engine_version }}
+    # Only Sandbox Agent ships binaries and Docker images.
+    if: ${{ inputs.target == 'sandbox-agent' && !inputs.reuse_engine_version }}
     strategy:
       fail-fast: false
       matrix:
@@ -177,7 +187,8 @@ jobs:
   docker:
     name: "Build & Push Docker Images"
     needs: [setup]
-    if: ${{ !inputs.reuse_engine_version }}
+    # Only Sandbox Agent ships binaries and Docker images.
+    if: ${{ inputs.target == 'sandbox-agent' && !inputs.reuse_engine_version }}
     strategy:
       fail-fast: false
       matrix:
@@ -273,7 +284,7 @@ jobs:
           npm install -g tsx
 
           # Build command based on inputs
-          CMD="./scripts/release/main.ts --version \"${{ github.event.inputs.version }}\" --phase complete-ci --no-validate-git"
+          CMD="./scripts/release/main.ts \"${{ inputs.target }}\" --version \"${{ github.event.inputs.version }}\" --phase complete-ci --no-validate-git"
 
           if [ "${{ inputs.latest }}" != "true" ]; then
             CMD="$CMD --no-latest"

@@ -2,6 +2,14 @@ import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { $ } from "execa";
 import type { ReleaseOpts } from "./main";
+import { releaseTag, releaseTitle, rootPackage } from "./target";
+
+function releaseCommitMessage(opts: ReleaseOpts): string {
+	const pkg = rootPackage(opts.target);
+	return pkg
+		? `chore(release): update ${pkg.name} to ${opts.version}`
+		: `chore(release): update version to ${opts.version}`;
+}
 
 export async function configureVcs(repoRoot: string): Promise<boolean> {
 	try {
@@ -67,7 +75,7 @@ export async function commitAndPush(opts: ReleaseOpts, push: boolean) {
 			await $({
 				stdio: "inherit",
 				cwd: opts.repoRoot,
-			})`jj commit -m ${`chore(release): update version to ${opts.version}`}`;
+			})`jj commit -m ${releaseCommitMessage(opts)}`;
 		}
 		if (push) {
 			const bookmark = await getCurrentBookmark(opts.repoRoot);
@@ -113,7 +121,7 @@ export async function commitAndPush(opts: ReleaseOpts, push: boolean) {
 			await $({
 				stdio: "inherit",
 				cwd: opts.repoRoot,
-			})`git commit -m ${`chore(release): update version to ${opts.version}`}`;
+			})`git commit -m ${releaseCommitMessage(opts)}`;
 	} else {
 		const bookmark = await getCurrentBookmark(opts.repoRoot);
 		if (bookmark === "main") {
@@ -141,13 +149,13 @@ export async function validateGit(opts: ReleaseOpts) {
 }
 
 export async function createAndPushTag(opts: ReleaseOpts) {
-	console.log(`Creating tag v${opts.version}...`);
+	const tag = releaseTag(opts.target, opts.version);
+	console.log(`Creating tag ${tag}...`);
 	try {
 		const gitDir = (await configureVcs(opts.repoRoot))
 			? (await $({ cwd: opts.repoRoot })`jj git root`).stdout.trim()
 			: undefined;
 		const gitOptions = { cwd: opts.repoRoot, env: { GIT_DIR: gitDir } };
-		const tag = `v${opts.version}`;
 		const existing = await $({
 			...gitOptions,
 			reject: false,
@@ -168,7 +176,7 @@ export async function createAndPushTag(opts: ReleaseOpts) {
 			stdio: "inherit",
 		})`git push origin refs/tags/${tag}`;
 
-		console.log(`✅ Tag v${opts.version} created and pushed`);
+		console.log(`✅ Tag ${tag} created and pushed`);
 	} catch (err) {
 		console.error("❌ Failed to create or push tag");
 		throw err;
@@ -179,33 +187,32 @@ export async function createGitHubRelease(opts: ReleaseOpts) {
 	console.log("Creating GitHub release...");
 
 	try {
-		const tagName = `v${opts.version}`;
+		const tagName = releaseTag(opts.target, opts.version);
+		const title = releaseTitle(opts.target, opts.version);
 
-		console.log(`Looking for existing release for ${opts.version}`);
+		console.log(`Looking for existing release ${title}`);
 
 		// Check if a release with this version name already exists
 		const { stdout: releaseJson } = await $({
 			cwd: opts.repoRoot,
 		})`gh release list --json name,tagName`;
 		const releases = JSON.parse(releaseJson);
-		const existingRelease = releases.find((r: any) => r.name === opts.version);
+		const existingRelease = releases.find((r: any) => r.name === title);
 
 		if (existingRelease) {
-			console.log(
-				`Updating release ${opts.version} to point to new tag ${tagName}`,
-			);
+			console.log(`Updating release ${title} to point to new tag ${tagName}`);
 			await $({
 				stdio: "inherit",
 				cwd: opts.repoRoot,
 			})`gh release edit ${existingRelease.tagName} --tag ${tagName}`;
 		} else {
-			console.log(
-				`Creating new release ${opts.version} pointing to tag ${tagName}`,
-			);
+			console.log(`Creating new release ${title} pointing to tag ${tagName}`);
+			// GitHub's "Latest" badge stays on Sandbox Agent's releases.
+			const latest = rootPackage(opts.target) ? ["--latest=false"] : [];
 			await $({
 				stdio: "inherit",
 				cwd: opts.repoRoot,
-			})`gh release create ${tagName} --title ${opts.version} --generate-notes`;
+			})`gh release create ${tagName} --title ${title} --generate-notes ${latest}`;
 
 			// Check if this is a pre-release (contains -rc. or similar)
 			if (opts.version.includes("-")) {

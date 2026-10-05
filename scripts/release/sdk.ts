@@ -3,6 +3,7 @@ import { dirname, join, relative } from "node:path";
 import { $ } from "execa";
 import { glob } from "glob";
 import type { ReleaseOpts } from "./main";
+import { rootPackage } from "./target";
 import { downloadFromReleases, PREFIX } from "./utils";
 
 // ─── Platform binary mapping (npm package → Rust target) ────────────────────
@@ -126,6 +127,7 @@ interface NpmPackageInfo {
 	workspaceRoot: string;
 	hasBuildScript: boolean;
 	localDeps: string[];
+	version: string;
 }
 
 /**
@@ -155,6 +157,7 @@ async function discoverNpmPackages(
 				workspaceRoot: root,
 				hasBuildScript: !!pkg.scripts?.build,
 				localDeps,
+				version: pkg.version,
 			});
 		}
 	}
@@ -278,9 +281,9 @@ export async function publishCrates(opts: ReleaseOpts) {
 // ─── NPM library publishing ────────────────────────────────────────────────
 
 /**
- * Discover and publish all non-private library packages under sdks/.
- * Excludes CLI/gigacode wrapper and platform packages (handled by publishNpmCli).
- * Publishes in dependency order via topological sort.
+ * Discover and publish Sandbox Agent's non-private library packages under
+ * sdks/. Excludes CLI/gigacode wrapper and platform packages (handled by
+ * publishNpmCli). Publishes in dependency order via topological sort.
  */
 export async function publishNpmLibraries(opts: ReleaseOpts) {
 	console.log("==> Discovering library packages");
@@ -297,15 +300,7 @@ export async function publishNpmLibraries(opts: ReleaseOpts) {
 		);
 	});
 
-	// Root workspace packages (for example @rivet-dev/pi) ship on the same
-	// version line.
-	const rootLibraries = await discoverNpmPackages(opts.repoRoot, [
-		"packages/*/package.json",
-	]);
-
-	const libraries = [...sandboxAgentLibraries, ...rootLibraries];
-
-	const sorted = topoSort(libraries);
+	const sorted = topoSort(sandboxAgentLibraries);
 
 	console.log(`Found ${sorted.length} library packages to publish:`);
 	for (const pkg of sorted) console.log(`  - ${pkg.name}`);
@@ -345,8 +340,7 @@ export async function publishNpmLibraries(opts: ReleaseOpts) {
 			if (
 				err.stderr?.includes(
 					"You cannot publish over the previously published versions",
-				) ||
-				err.stderr?.includes("403")
+				)
 			) {
 				console.log(
 					`⚠️ ${pkg.name}@${opts.version} already published (npm registry). Skipping.`,
@@ -358,6 +352,65 @@ export async function publishNpmLibraries(opts: ReleaseOpts) {
 	}
 
 	console.log("✅ All library packages published");
+}
+
+// ─── Root package publishing ────────────────────────────────────────────────
+
+/**
+ * Publishes the root package that `opts.target` names, at `opts.version`.
+ * Fails when that version is already on npm, and when a workspace dependency
+ * is not on npm at the version the package pins, so `pnpm publish` never
+ * ships a dependency users cannot install.
+ */
+export async function publishRootPackage(opts: ReleaseOpts) {
+	const target = rootPackage(opts.target);
+	if (!target) {
+		throw new Error(`${opts.target} is not a root package`);
+	}
+	const workspace = await discoverNpmPackages(opts.repoRoot, [
+		"packages/*/package.json",
+	]);
+	const pkg = workspace.find((candidate) => candidate.name === target.name);
+	if (!pkg) {
+		throw new Error(`${target.name} is not in ${target.dir}`);
+	}
+	if (pkg.version !== opts.version) {
+		throw new Error(
+			`${target.dir}/package.json is at ${pkg.version}, not ${opts.version}`,
+		);
+	}
+	if (await npmVersionExists(pkg.name, pkg.version)) {
+		throw new Error(`${pkg.name}@${pkg.version} is already on npm`);
+	}
+	for (const depName of pkg.localDeps) {
+		const dep = workspace.find((candidate) => candidate.name === depName);
+		if (!dep) continue;
+		if (!(await npmVersionExists(dep.name, dep.version))) {
+			throw new Error(
+				`${pkg.name} pins ${dep.name}@${dep.version}, which is not on npm; release ${dep.name} first`,
+			);
+		}
+	}
+
+	// This run does not publish the workspace dependencies, but the package's
+	// build reads their build output.
+	console.log(`==> Building ${pkg.name} and its workspace dependencies`);
+	await $({
+		stdio: "inherit",
+		cwd: opts.repoRoot,
+	})`pnpm --filter ${`${pkg.name}...`} build`;
+
+	const tag = opts.version.includes("-rc.")
+		? "rc"
+		: opts.latest
+			? "latest"
+			: opts.minorVersionChannel;
+	console.log(`==> Publishing to NPM: ${pkg.name}@${pkg.version} (${tag})`);
+	await $({
+		stdio: "inherit",
+		cwd: pkg.dir,
+	})`pnpm publish --access public --tag ${tag} --no-git-checks`;
+	console.log(`✅ Published ${pkg.name}@${pkg.version}`);
 }
 
 // ─── NPM CLI publishing ────────────────────────────────────────────────────
@@ -439,8 +492,7 @@ export async function publishNpmCli(opts: ReleaseOpts) {
 			if (
 				err.stderr?.includes(
 					"You cannot publish over the previously published versions",
-				) ||
-				err.stderr?.includes("403")
+				)
 			) {
 				console.log(
 					`⚠️ ${pkg.name}@${opts.version} already published (npm registry). Skipping.`,

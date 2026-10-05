@@ -8,6 +8,18 @@
 		"url": "https://github.com/rivet-dev/agents.git",
 		"directory": "packages/pi"
 	},
+	"homepage": "https://rivet.dev/agents/docs/pi",
+	"bugs": "https://github.com/rivet-dev/agents/issues",
+	"keywords": [
+		"pi",
+		"coding-agent",
+		"agent",
+		"ai",
+		"rivet",
+		"rivetkit",
+		"actors",
+		"durable"
+	],
 	"publishConfig": {
 		"access": "public"
 	},
