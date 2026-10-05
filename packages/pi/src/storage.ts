@@ -66,8 +66,23 @@ export const migratePiTables = migrations({
 				) STRICT;
 			`,
 		},
+		{
+			version: 2,
+			sql: `
+				ALTER TABLE pi_session ADD COLUMN run_state TEXT NOT NULL DEFAULT 'idle'
+					CHECK (run_state IN ('idle', 'running'));
+				ALTER TABLE pi_session ADD COLUMN queued_json TEXT
+					CHECK (queued_json IS NULL OR json_valid(queued_json));
+			`,
+		},
 	],
 });
+
+/** Messages Pi queued during a run, as `AgentSession` lists them. */
+export interface PiQueue {
+	steering: string[];
+	followUp: string[];
+}
 
 export async function loadPiSession(
 	db: PiDatabase,
@@ -175,4 +190,37 @@ export async function savePiSettings(
 /** Builds the entry list `SessionManager.inMemory` expects: header first. */
 export function toFileEntries(stored: StoredPiSession): FileEntry[] {
 	return [stored.header, ...stored.entries];
+}
+
+/** Records that a run is active, with the messages queued for it. */
+export async function savePiRunning(
+	db: PiDatabase,
+	queue: PiQueue,
+): Promise<void> {
+	await db.execute(
+		`UPDATE pi_session SET run_state = 'running', queued_json = ? WHERE singleton = 1`,
+		JSON.stringify(queue),
+	);
+}
+
+/** Records that no run is active. */
+export async function savePiIdle(db: PiDatabase): Promise<void> {
+	await db.execute(
+		`UPDATE pi_session SET run_state = 'idle', queued_json = NULL WHERE singleton = 1`,
+	);
+}
+
+/** The queue of the run that was active when the actor stopped, or undefined when none was. */
+export async function loadPiInterruptedRun(
+	db: PiDatabase,
+): Promise<PiQueue | undefined> {
+	const rows = await db.execute<{
+		run_state: string;
+		queued_json: string | null;
+	}>(`SELECT run_state, queued_json FROM pi_session WHERE singleton = 1`);
+	const row = rows[0];
+	if (row?.run_state !== "running") return undefined;
+	return row.queued_json === null
+		? { steering: [], followUp: [] }
+		: (JSON.parse(row.queued_json) as PiQueue);
 }
