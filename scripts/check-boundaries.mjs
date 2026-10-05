@@ -32,23 +32,6 @@ function assert(condition, message) {
 const piPackage = await readJson("packages/pi/package.json");
 const adapterPackage = await readJson("packages/sandbox-adapter/package.json");
 
-// One release line: every published package in the repository carries the
-// Sandbox Agent workspace version, which `just release` bumps everywhere.
-const cargo = await read("sandbox-agent/Cargo.toml");
-const cargoVersion = cargo.match(
-	/\[workspace\.package\]\nversion = "([^"]+)"/,
-)?.[1];
-assert(
-	cargoVersion,
-	"could not read the workspace version from sandbox-agent/Cargo.toml",
-);
-for (const manifest of [piPackage, adapterPackage]) {
-	assert(
-		manifest.version === cargoVersion,
-		`${manifest.name}@${manifest.version} is off the release line (${cargoVersion})`,
-	);
-}
-
 // pi runs inside the user's registry, so it must share their RivetKit.
 assert(
 	!piPackage.dependencies?.rivetkit,

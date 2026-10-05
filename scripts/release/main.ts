@@ -27,9 +27,9 @@ import {
 } from "./utils";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-// The release script lives at the repository root and releases everything in
-// the repository on one version line. Sandbox Agent keeps its own workspace
-// (Cargo, pnpm, Docker) under `sandbox-agent/`.
+// The release script lives at the repository root. Sandbox Agent releases on
+// one version line and keeps its own workspace (Cargo, pnpm, Docker) under
+// `sandbox-agent/`. The root packages in `packages/` carry their own versions.
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const SANDBOX_AGENT_ROOT = path.join(REPO_ROOT, "sandbox-agent");
 
@@ -45,6 +45,10 @@ export interface ReleaseOpts {
 	commit: string;
 	/** Optional version to reuse artifacts and Docker images from instead of building. */
 	reuseEngineVersion?: string;
+	/** `@rivet-dev/pi` version to set. Unset keeps the version in its package.json. */
+	piVersion?: string;
+	/** `@rivet-dev/sandbox-adapter` version to set. Unset keeps the version in its package.json. */
+	sandboxAdapterVersion?: string;
 }
 
 async function getAllGitVersions(): Promise<string[]> {
@@ -391,6 +395,14 @@ async function main() {
 		.option("--patch", "Bump patch version")
 		.option("--version <version>", "Set specific version")
 		.option(
+			"--pi-version <version>",
+			"Set the @rivet-dev/pi version (default: keep its package.json version; a version already on npm is skipped)",
+		)
+		.option(
+			"--sandbox-adapter-version <version>",
+			"Set the @rivet-dev/sandbox-adapter version (default: keep its package.json version; a version already on npm is skipped)",
+		)
+		.option(
 			"--override-commit <commit>",
 			"Override the commit to pull artifacts from (defaults to current commit)",
 		)
@@ -504,7 +516,15 @@ async function main() {
 		minorVersionChannel,
 		commit,
 		reuseEngineVersion: opts.reuseEngineVersion,
+		piVersion: opts.piVersion,
+		sandboxAdapterVersion: opts.sandboxAdapterVersion,
 	};
+	for (const packageVersion of [opts.piVersion, opts.sandboxAdapterVersion]) {
+		assert(
+			packageVersion === undefined || semver.valid(packageVersion) !== null,
+			`package version ${packageVersion} must be a valid semantic version`,
+		);
+	}
 
 	if (releaseOpts.commit.length === 40) {
 		releaseOpts.commit = releaseOpts.commit.slice(0, 7);
@@ -524,6 +544,10 @@ async function main() {
 		console.log(`  Latest: ${releaseOpts.latest}`);
 		console.log(`  Minor channel: ${releaseOpts.minorVersionChannel}`);
 		console.log(`  Commit: ${releaseOpts.commit}`);
+		console.log(`  @rivet-dev/pi: ${releaseOpts.piVersion ?? "unchanged"}`);
+		console.log(
+			`  @rivet-dev/sandbox-adapter: ${releaseOpts.sandboxAdapterVersion ?? "unchanged"}`,
+		);
 		if (releaseOpts.reuseEngineVersion) {
 			console.log(
 				`  Reusing engine version: ${releaseOpts.reuseEngineVersion}`,

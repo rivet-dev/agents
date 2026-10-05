@@ -1,6 +1,6 @@
 {
 	"name": "@rivet-dev/sandbox-adapter",
-	"version": "0.4.3",
+	"version": "0.1.0",
 	"description": "Sandbox providers for agent harnesses running in Rivet Actors",
 	"license": "Apache-2.0",
 	"repository": {

@@ -94,14 +94,12 @@ export async function updateVersion(opts: ReleaseOpts) {
 	await fs.writeFile(cargoTomlPath, cargoContent);
 
 	// 2. Discover and update every non-private package.json on the release line:
-	// Sandbox Agent SDKs and the root workspace packages.
-	const packageJsonPaths = await glob(
-		["sandbox-agent/sdks/**/package.json", "packages/*/package.json"],
-		{
-			cwd: opts.repoRoot,
-			ignore: ["**/node_modules/**"],
-		},
-	);
+	// the Sandbox Agent SDKs. The root packages in `packages/` carry their own
+	// versions, set below.
+	const packageJsonPaths = await glob(["sandbox-agent/sdks/**/package.json"], {
+		cwd: opts.repoRoot,
+		ignore: ["**/node_modules/**"],
+	});
 
 	// Filter to non-private packages only
 	const toUpdate: string[] = [];
@@ -132,7 +130,24 @@ export async function updateVersion(opts: ReleaseOpts) {
 		await fs.writeFile(fullPath, updated);
 	}
 
-	// 3. Update version references across docs, examples, and code
+	// 3. Set the root packages' own versions, when given.
+	for (const [relPath, version] of [
+		["packages/pi/package.json", opts.piVersion],
+		["packages/sandbox-adapter/package.json", opts.sandboxAdapterVersion],
+	] as const) {
+		if (!version) continue;
+		const fullPath = join(opts.repoRoot, relPath);
+		const content = await fs.readFile(fullPath, "utf-8");
+		const versionPattern = /"version": ".*"/;
+		assert(versionPattern.test(content), `No version field in ${relPath}`);
+		await fs.writeFile(
+			fullPath,
+			content.replace(versionPattern, `"version": "${version}"`),
+		);
+		console.log(`Set ${relPath} to ${version}`);
+	}
+
+	// 4. Update version references across docs, examples, and code
 	await updateVersionReferences(opts, oldVersion, oldMinorChannel);
 }
 

@@ -126,6 +126,8 @@ interface NpmPackageInfo {
 	workspaceRoot: string;
 	hasBuildScript: boolean;
 	localDeps: string[];
+	/** The version in package.json, which is the version that gets published. */
+	version: string;
 }
 
 /**
@@ -155,6 +157,7 @@ async function discoverNpmPackages(
 				workspaceRoot: root,
 				hasBuildScript: !!pkg.scripts?.build,
 				localDeps,
+				version: pkg.version,
 			});
 		}
 	}
@@ -297,8 +300,9 @@ export async function publishNpmLibraries(opts: ReleaseOpts) {
 		);
 	});
 
-	// Root workspace packages (for example @rivet-dev/pi) ship on the same
-	// version line.
+	// Root workspace packages (for example @rivet-dev/pi) ship at their own
+	// versions, so a release skips any root package whose version is already
+	// on npm.
 	const rootLibraries = await discoverNpmPackages(opts.repoRoot, [
 		"packages/*/package.json",
 	]);
@@ -311,17 +315,26 @@ export async function publishNpmLibraries(opts: ReleaseOpts) {
 	for (const pkg of sorted) console.log(`  - ${pkg.name}`);
 
 	const isReleaseCandidate = opts.version.includes("-rc.");
-	const tag = isReleaseCandidate
+	const sandboxAgentTag = isReleaseCandidate
 		? "rc"
 		: opts.latest
 			? "latest"
 			: opts.minorVersionChannel;
 
 	for (const pkg of sorted) {
-		const versionExists = await npmVersionExists(pkg.name, opts.version);
+		const version = pkg.version;
+		// Sandbox Agent's latest and minor-channel tags follow its version line,
+		// which the root packages are not on.
+		const tag =
+			pkg.workspaceRoot === opts.repoRoot
+				? version.includes("-rc.")
+					? "rc"
+					: "latest"
+				: sandboxAgentTag;
+		const versionExists = await npmVersionExists(pkg.name, version);
 		if (versionExists) {
 			console.log(
-				`Version ${opts.version} of ${pkg.name} already exists. Skipping...`,
+				`Version ${version} of ${pkg.name} already exists. Skipping...`,
 			);
 			continue;
 		}
@@ -334,13 +347,13 @@ export async function publishNpmLibraries(opts: ReleaseOpts) {
 			})`pnpm --filter ${pkg.name} build`;
 		}
 
-		console.log(`==> Publishing to NPM: ${pkg.name}@${opts.version}`);
+		console.log(`==> Publishing to NPM: ${pkg.name}@${version}`);
 		try {
 			await $({
 				stdio: "inherit",
 				cwd: pkg.dir,
 			})`pnpm publish --access public --tag ${tag} --no-git-checks`;
-			console.log(`✅ Published ${pkg.name}@${opts.version}`);
+			console.log(`✅ Published ${pkg.name}@${version}`);
 		} catch (err: any) {
 			if (
 				err.stderr?.includes(
@@ -349,7 +362,7 @@ export async function publishNpmLibraries(opts: ReleaseOpts) {
 				err.stderr?.includes("403")
 			) {
 				console.log(
-					`⚠️ ${pkg.name}@${opts.version} already published (npm registry). Skipping.`,
+					`⚠️ ${pkg.name}@${version} already published (npm registry). Skipping.`,
 				);
 			} else {
 				throw err;
