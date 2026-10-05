@@ -9,7 +9,15 @@ export type {
 export {
 	type PiDurableAccess,
 	type PiDurableActorConfigInput,
+	type PiDurableEvents,
 	type PiDurableUserActions,
 	piDurable,
 } from "./actor.js";
 export type { PiDurableOptions } from "./runtime.js";
+export type {
+	PiDocFrame,
+	PiEventsFrame,
+	PiTaskGraphFrame,
+	PiViewFrame,
+	PiWatchEvents,
+} from "./watches.js";

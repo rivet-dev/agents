@@ -9,8 +9,10 @@ import {
 	type DestroyContext,
 	type DisconnectContext,
 	type EventSchemaConfig,
+	event,
 	type QueueSchemaConfig,
 	type SleepContext,
+	type Type,
 	type WakeContext,
 } from "rivetkit";
 import { db } from "rivetkit/db";
@@ -22,12 +24,35 @@ import {
 	openOnWake,
 	PI_DURABLE_RUNTIME,
 	type PiDurableOptions,
+	piDurableRuntime,
 	withPiAccess,
 } from "./runtime.js";
 import { migratePiDurableTables } from "./storage.js";
+import {
+	type PiDocFrame,
+	type PiEventsFrame,
+	type PiTaskGraphFrame,
+	type PiViewFrame,
+	unwatchConnection,
+} from "./watches.js";
 
 /** Ten minutes. `submission.wait` and `prompt` wait for a whole run. */
 const DEFAULT_ACTION_TIMEOUT_MS = 10 * 60_000;
+
+/** Watch frames, sent only to the connection that asked. See `PiWatchEvents`. */
+export type PiDurableEvents = {
+	"pi.events": Type<PiEventsFrame>;
+	"pi.view": Type<PiViewFrame>;
+	"pi.taskGraph": Type<PiTaskGraphFrame>;
+	"pi.doc": Type<PiDocFrame>;
+};
+
+const piDurableEvents: PiDurableEvents = {
+	"pi.events": event<PiEventsFrame>(),
+	"pi.view": event<PiViewFrame>(),
+	"pi.taskGraph": event<PiTaskGraphFrame>(),
+	"pi.doc": event<PiDocFrame>(),
+};
 
 /** `c.pi`: the actor's Pi Durable harness, in the app's own actions and hooks. */
 export interface PiDurableAccess {
@@ -298,7 +323,7 @@ export function piDurable<
 	TVars,
 	TInput,
 	PiDatabaseProvider,
-	TEvents,
+	TEvents & PiDurableEvents,
 	TQueues,
 	ClientActions<
 		TUserActions,
@@ -339,6 +364,10 @@ export function piDurable<
 		if (key in actions)
 			throw new Error(`piDurable() action name is reserved: ${key}`);
 	}
+	for (const key of Object.keys(actorConfig.events ?? {})) {
+		if (key in piDurableEvents)
+			throw new Error(`piDurable() event name is reserved: ${key}`);
+	}
 
 	const withPi = <TArgs extends unknown[]>(
 		hook: ((c: PiContext, ...args: TArgs) => unknown) | undefined,
@@ -351,6 +380,7 @@ export function piDurable<
 	const userOnWake = actorConfig.onWake;
 	const userOnSleep = withPi(actorConfig.onSleep);
 	const userOnDestroy = withPi(actorConfig.onDestroy);
+	const userOnDisconnect = withPi(actorConfig.onDisconnect);
 	delete actorConfig.vars;
 
 	return actor({
@@ -360,6 +390,7 @@ export function piDurable<
 			...actorConfig.options,
 		},
 		db: db({ onMigrate: migratePiDurableTables }),
+		events: { ...(actorConfig.events ?? {}), ...piDurableEvents },
 		actions: {
 			...wrapActions(actorConfig.actions ?? {}, durableOptions),
 			...actions,
@@ -395,7 +426,14 @@ export function piDurable<
 			);
 		},
 		onConnect: withPi(actorConfig.onConnect),
-		onDisconnect: withPi(actorConfig.onDisconnect),
+		onDisconnect: async (c: PiContext, conn: { id: string }) => {
+			try {
+				await userOnDisconnect?.(c, conn);
+			} finally {
+				const runtime = piDurableRuntime(c);
+				await unwatchConnection(runtime.actor ?? c, runtime.watches, conn.id);
+			}
+		},
 		onSleep: async (c: PiContext) => {
 			try {
 				await userOnSleep?.(c);
