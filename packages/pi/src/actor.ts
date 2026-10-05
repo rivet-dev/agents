@@ -10,6 +10,7 @@ import {
 	type Type,
 } from "rivetkit";
 import { db } from "rivetkit/db";
+import { drainDeadline } from "./drain.js";
 import { createPiActions, type PiActions } from "./actions.js";
 import {
 	closePiSession,
@@ -18,11 +19,19 @@ import {
 	type PiContext,
 	type PiDatabaseProvider,
 	type PiSessionOptions,
+	resumeInterruptedRun,
+	stopRunWhenLost,
 } from "./runtime.js";
 import { migratePiTables } from "./storage.js";
 
 /** Ten minutes. Pi actions such as `waitForIdle` and `compact` outlive RivetKit's one-minute default. */
 const DEFAULT_ACTION_TIMEOUT_MS = 10 * 60_000;
+
+/**
+ * Fifteen minutes, so a running model call or tool call can finish before a
+ * deploy moves the actor. The engine's stop threshold still bounds it.
+ */
+const DEFAULT_SLEEP_GRACE_PERIOD_MS = 15 * 60_000;
 
 /** Every Pi `AgentSessionEvent`, in order, for connected clients. */
 export type PiEvents = {
@@ -164,14 +173,18 @@ export function pi<
 
 	const userVars = actorConfig.vars;
 	const userCreateVars = actorConfig.createVars;
+	const userOnWake = actorConfig.onWake;
 	const userOnSleep = actorConfig.onSleep;
 	const userOnDestroy = actorConfig.onDestroy;
 	delete actorConfig.vars;
+	const sleepGracePeriod: number =
+		actorConfig.options?.sleepGracePeriod ?? DEFAULT_SLEEP_GRACE_PERIOD_MS;
 
 	return actor({
 		...actorConfig,
 		options: {
 			actionTimeout: DEFAULT_ACTION_TIMEOUT_MS,
+			sleepGracePeriod: DEFAULT_SLEEP_GRACE_PERIOD_MS,
 			...actorConfig.options,
 		},
 		db: db({ onMigrate: migratePiTables }),
@@ -185,18 +198,32 @@ export function pi<
 					: structuredClone(userVars);
 			return attachRuntime(vars);
 		},
+		onWake: async (c: PiContext) => {
+			stopRunWhenLost(c);
+			await userOnWake?.(c);
+			await resumeInterruptedRun(c, sessionOptions).catch((error: unknown) => {
+				c.log.error({
+					msg: "pi could not resume the run that was active when the actor stopped",
+					error,
+				});
+			});
+		},
 		onSleep: async (c: PiContext) => {
+			const drainUntil = drainDeadline(sleepGracePeriod);
 			try {
 				await userOnSleep?.(c);
 			} finally {
-				await closePiSession(c, sessionOptions, "sleep");
+				await closePiSession(c, sessionOptions, {
+					reason: "sleep",
+					drainUntil,
+				});
 			}
 		},
 		onDestroy: async (c: PiContext) => {
 			try {
 				await userOnDestroy?.(c);
 			} finally {
-				await closePiSession(c, sessionOptions, "destroy");
+				await closePiSession(c, sessionOptions, { reason: "destroy" });
 			}
 		},
 	} as any) as ActorDefinition<
