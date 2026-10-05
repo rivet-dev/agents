@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
@@ -18,6 +19,11 @@ import {
 
 /** About two seconds of tokens from a `slowly` reply. */
 const TWO_SECOND_ANSWER = "word ".repeat(50).trim();
+
+/** Makes the `sandboxed` actors' provider refuse every connect. Tests in a file run one at a time. */
+let sandboxProviderDown = false;
+/** Sleeps of the `sandboxed` actors by key, recorded in this process where they run. */
+const sandboxedSleeps = new Map<string, number>();
 
 let mockModel: MockModel;
 let workdir: string;
@@ -44,10 +50,12 @@ function buildRegistry(mock: MockModel, root: string) {
 		providers: { mock: mock.providerConfig },
 		apiKeys: { mock: "mock" },
 		tools: ["write", "find", "bash"],
-		sandbox: localSandboxProvider(join(root, "sandboxes")),
+		sandbox: withOutage(localSandboxProvider(join(root, "sandboxes"))),
 		state: { sleeps: 0 },
 		onSleep: (c) => {
 			c.state.sleeps += 1;
+			const key = JSON.stringify(c.key);
+			sandboxedSleeps.set(key, (sandboxedSleeps.get(key) ?? 0) + 1);
 		},
 		actions: {
 			nap: (c) => {
@@ -302,6 +310,29 @@ describe("pi actor", () => {
 		await conn.dispose();
 	});
 
+	test("while the sandbox provider is down, history stays readable and sandbox work fails until it is back", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["outage", randomUUID()];
+		const handle = client.sandboxed.getOrCreate(key);
+		await handle.executeBash("echo kept > kept.txt");
+		await handle.nap();
+		// Any action would wake the actor, so wait for the sleep hook in this process.
+		await vi.waitFor(() =>
+			expect(sandboxedSleeps.get(JSON.stringify(key))).toBe(1),
+		);
+
+		sandboxProviderDown = true;
+		try {
+			expect(await handle.getMessages()).toBeInstanceOf(Array);
+			await expect(handle.executeBash("cat kept.txt")).rejects.toThrow();
+		} finally {
+			sandboxProviderDown = false;
+		}
+		expect((await handle.executeBash("cat kept.txt")).output.trim()).toBe(
+			"kept",
+		);
+	});
+
 	test("the sandbox outlives sleep, is replaced when deleted, and is destroyed with the actor", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const handle = client.sandboxed.getOrCreate(["lifecycle", randomUUID()]);
@@ -325,15 +356,19 @@ describe("pi actor", () => {
 			expect(await handle.sleeps()).toBe(2);
 		});
 		await rm(first.cwd, { recursive: true, force: true });
-		const replaced = await handle.getSession();
-		expect(replaced.sessionId).toBe(first.sessionId);
-		expect(replaced.cwd).not.toBe(first.cwd);
+		// A new sandbox replaces the deleted one. The session keeps its id and working directory.
+		expect(await handle.getSession()).toMatchObject({
+			sessionId: first.sessionId,
+			cwd: first.cwd,
+		});
 		expect((await handle.executeBash("test -e kept.txt")).exitCode).toBe(1);
+		const replacedDirectory = (await handle.executeBash("pwd")).output.trim();
+		expect(replacedDirectory).not.toBe(first.cwd);
 
 		await handle.destroySelf();
 		// Destruction runs after the action returns; poll the sandbox directory.
 		await vi.waitFor(async () => {
-			expect(await exists(replaced.cwd)).toBe(false);
+			expect(await exists(replacedDirectory)).toBe(false);
 		});
 	});
 });
@@ -343,6 +378,16 @@ function toolResult(events: AgentSessionEvent[], toolName: string) {
 		(event) =>
 			event.type === "tool_execution_end" && event.toolName === toolName,
 	);
+}
+
+function withOutage(provider: SandboxProvider): SandboxProvider {
+	return {
+		...provider,
+		connect: async (c, id) => {
+			if (sandboxProviderDown) throw new Error("sandbox provider is down");
+			return provider.connect(c, id);
+		},
+	};
 }
 
 function exists(path: string): Promise<boolean> {
