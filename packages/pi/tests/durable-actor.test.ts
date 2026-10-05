@@ -1,0 +1,470 @@
+import { randomUUID } from "node:crypto";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import {
+	fauxAssistantMessage,
+	fauxToolCall,
+	Type,
+} from "@earendil-works/pi-ai";
+import {
+	type ConversationId,
+	createRegistry,
+	defineDoc,
+	defineExtension,
+	defineTask,
+	defineTool,
+	ROOT_CONVERSATION_ID,
+} from "@earendil-works/pi-durable";
+import { CodingTools } from "@earendil-works/pi-durable/tools";
+import { setup } from "rivetkit";
+import { setupTest } from "rivetkit/test";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import { piDurable } from "../src/durable/index.js";
+import { localSandboxProvider } from "./helpers/local-sandbox.js";
+import {
+	createMockModel,
+	type MockModel,
+	slowly,
+	toolCall,
+} from "./helpers/mock-model.js";
+
+/** Resolves when `signal` aborts. Tools and tasks honor it so a closing harness never waits on them. */
+function aborted(signal: AbortSignal | undefined): Promise<void> {
+	return new Promise((resolve) => {
+		if (!signal || signal.aborted) return resolve();
+		signal.addEventListener("abort", () => resolve(), { once: true });
+	});
+}
+
+/** Lifecycle hook calls by actor key, recorded in this process where the actors run. */
+const sleeps = new Map<string, number>();
+const actorKey = (c: { key: unknown[] }) => JSON.stringify(c.key);
+const countSleep = (c: { key: unknown[] }) => {
+	sleeps.set(actorKey(c), (sleeps.get(actorKey(c)) ?? 0) + 1);
+};
+async function waitForSleeps(key: string[], count: number) {
+	// Sleep completes after the action that asked for it returns, and onSleep records it in this process.
+	await vi.waitFor(
+		() =>
+			expect(sleeps.get(JSON.stringify(key)) ?? 0).toBeGreaterThanOrEqual(
+				count,
+			),
+		{
+			timeout: 20_000,
+		},
+	);
+}
+
+/** Tool calls of the crash test: each tool waits on `release` and counts its executions. */
+const toolRuns = { safe: 0, unsafe: 0 };
+const release = Promise.withResolvers<void>();
+
+const Todos = defineDoc<{ items: string[] }>({
+	kind: "app.todos",
+	version: 1,
+	scope: "conversation",
+	history: "latest",
+	fork: "current",
+	initial: () => ({ items: [] }),
+});
+
+const Poison = defineDoc<{ value: string }>({
+	kind: "app.poison",
+	version: 1,
+	scope: "conversation",
+	history: "latest",
+	fork: "current",
+	initial: () => ({ value: "" }),
+});
+
+const JobTask = defineTask<Record<string, never>, { phase: "run" }, null>({
+	name: "app.job",
+	version: 1,
+	initial: () => ({ phase: "run" }),
+	phases: {
+		run: async (_task, _runtime, context) => aborted(context.abortSignal),
+	},
+	abort: async (_task, runtime, context) => {
+		await runtime.commit(
+			() => ({ status: "terminal", outcome: { status: "aborted" } }),
+			context,
+		);
+	},
+});
+const jobs = defineExtension({ name: "jobs", tasks: [JobTask] });
+
+let mockModel: MockModel;
+let workdir: string;
+let registry: ReturnType<typeof buildRegistry>;
+const jobsRegistry = createRegistry();
+
+function buildRegistry(mock: MockModel, root: string) {
+	const models = {
+		model: "mock/mock-model",
+		providers: { mock: mock.providerConfig },
+		apiKeys: { mock: "mock" },
+	};
+	const waitingTool = (name: "safe" | "unsafe", replay: "safe" | "unsafe") =>
+		defineTool({
+			name: `${name}_tool`,
+			description: `A ${replay} tool that waits`,
+			parameters: Type.Object({}),
+			replay,
+			execute: async (_args, _api, context) => {
+				toolRuns[name] += 1;
+				await Promise.race([release.promise, aborted(context.abortSignal)]);
+				context.abortSignal?.throwIfAborted();
+				return { content: [{ type: "text", text: `${name} done` }] };
+			},
+		});
+	const tools = createRegistry();
+	tools.install(
+		defineExtension({
+			name: "tools",
+			tools: [waitingTool("safe", "safe"), waitingTool("unsafe", "unsafe")],
+		}),
+	);
+
+	const agent = piDurable({
+		...models,
+		registry: tools,
+		documents: [Todos],
+		onSleep: countSleep,
+		actions: {
+			nap: (c) => {
+				c.sleep();
+			},
+			addTodo: async (c, conversationId: number, item: string) => {
+				const conversation = await c.pi.conversation(
+					conversationId as ConversationId,
+					BACKGROUND_CONTEXT,
+				);
+				await conversation!.commit(async (tx) => {
+					(await tx.doc(Todos, conversationId as ConversationId)).items.push(
+						item,
+					);
+				}, BACKGROUND_CONTEXT);
+			},
+			failCommitsOfPoison: async (c) => {
+				await c.db.execute(
+					`CREATE TRIGGER IF NOT EXISTS test_fail_poison BEFORE INSERT ON documents
+					 WHEN NEW.kind = '"app.poison"' BEGIN SELECT RAISE(ABORT, 'injected storage failure'); END`,
+				);
+			},
+			writePoison: async (c) => {
+				await c.pi.commit(async (tx) => {
+					(await tx.doc(Poison, ROOT_CONVERSATION_ID)).value = "x";
+				}, BACKGROUND_CONTEXT);
+			},
+		},
+	});
+	const coder = piDurable({
+		...models,
+		registry: (() => {
+			const coding = createRegistry();
+			coding.install(CodingTools);
+			return coding;
+		})(),
+		sandbox: localSandboxProvider(join(root, "sandboxes")),
+	});
+	const backoff = piDurable({
+		...models,
+		registry: createRegistry(),
+		// A retry wait just past the one-minute threshold, so the actor sleeps through it.
+		settings: { retry: { baseDelayMs: 61_000, maxAgentDelayMs: 61_000 } },
+		options: { sleepTimeout: 300 },
+		onSleep: countSleep,
+	});
+	// Every schedule write fails, so a long wait cannot get its wake.
+	const backoffWithoutSchedules = piDurable({
+		...models,
+		registry: createRegistry(),
+		settings: { retry: { baseDelayMs: 61_000, maxAgentDelayMs: 61_000 } },
+		options: { sleepTimeout: 300, maxSchedules: 0 },
+		onSleep: countSleep,
+	});
+	const jobRunner = piDurable({
+		...models,
+		registry: jobsRegistry,
+		options: { sleepTimeout: 300 },
+		onSleep: countSleep,
+		actions: {
+			nap: (c) => {
+				c.sleep();
+			},
+			startJob: async (c) => {
+				await c.pi.root(BACKGROUND_CONTEXT);
+				await c.pi.commit(
+					(tx) =>
+						tx.createTask(
+							JobTask,
+							{},
+							{
+								ownership: { kind: "conversation" },
+								conversationId: ROOT_CONVERSATION_ID,
+							},
+						),
+					BACKGROUND_CONTEXT,
+				);
+			},
+		},
+	});
+	return setup({
+		use: { agent, coder, backoff, backoffWithoutSchedules, jobRunner },
+	});
+}
+
+beforeAll(async () => {
+	mockModel = createMockModel();
+	workdir = await mkdtemp(join(tmpdir(), "rivet-pi-durable-test-"));
+	registry = buildRegistry(mockModel, workdir);
+	jobsRegistry.install(jobs);
+
+	mockModel.reply("say hello", fauxAssistantMessage("Hi there!"));
+	mockModel.reply(
+		"take your time",
+		slowly(fauxAssistantMessage("word ".repeat(60).trim())),
+	);
+	mockModel.reply(
+		"use both tools",
+		fauxAssistantMessage(
+			[fauxToolCall("safe_tool", {}), fauxToolCall("unsafe_tool", {})],
+			{ stopReason: "toolUse" },
+		),
+		fauxAssistantMessage("finished"),
+	);
+	mockModel.reply(
+		"create hello.txt",
+		toolCall("write", { path: "hello.txt", content: "hi from pi\n" }),
+		fauxAssistantMessage("written"),
+	);
+	mockModel.reply(
+		"write outside the sandbox",
+		toolCall("write", { path: "../outside.txt", content: "escaped\n" }),
+		fauxAssistantMessage("tried"),
+	);
+	mockModel.reply(
+		"print the host key",
+		toolCall("bash", { command: 'echo "key=[$PI_TEST_HOST_KEY]"' }),
+		fauxAssistantMessage("ran"),
+	);
+	mockModel.reply(
+		"flaky",
+		fauxAssistantMessage("", {
+			stopReason: "error",
+			errorMessage: "overloaded_error: Overloaded",
+		}),
+		fauxAssistantMessage("recovered"),
+	);
+});
+
+afterAll(async () => {
+	if (workdir) await rm(workdir, { recursive: true, force: true });
+});
+
+describe("piDurable actor", () => {
+	test("a run interrupted by sleep resumes on wake: safe tools rerun, unsafe tools report the interruption", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["crash", randomUUID()];
+		const handle = client.agent.getOrCreate(key);
+		const root = await handle.harness.root();
+		const submission = await handle.conversation.submit(root.id, {
+			type: "input",
+			content: "use both tools",
+		});
+		// Tools run in the background after submit returns; their counters live in this process.
+		await vi.waitFor(() => expect(toolRuns).toEqual({ safe: 1, unsafe: 1 }));
+
+		await handle.nap();
+		await waitForSleeps(key, 1);
+		release.resolve();
+
+		const settled = await handle.submission.wait(submission.id);
+		expect(settled.status).toBe("done");
+		expect(toolRuns).toEqual({ safe: 2, unsafe: 1 });
+		const { messages } = await handle.conversation.context(root.id);
+		const results = messages.filter((message) => message.role === "toolResult");
+		expect(
+			results.find((result) => result.toolName === "safe_tool"),
+		).toMatchObject({ isError: false });
+		expect(
+			results.find((result) => result.toolName === "unsafe_tool"),
+		).toMatchObject({
+			isError: true,
+			content: [{ type: "text", text: expect.stringContaining("interrupted") }],
+		});
+		const answers = messages.filter(
+			(message) =>
+				message.role === "assistant" &&
+				message.content.some(
+					(block) => block.type === "text" && block.text === "finished",
+				),
+		);
+		expect(answers).toHaveLength(1);
+	});
+
+	test("an app action writes a document through c.pi, and clients read it by kind after sleep", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["todos", randomUUID()];
+		const handle = client.agent.getOrCreate(key);
+		const root = await handle.harness.root();
+
+		await handle.addTodo(root.id, "buy milk");
+		await handle.nap();
+		await waitForSleeps(key, 1);
+
+		expect(await handle.harness.snapshot("app.todos", root.id)).toEqual({
+			items: ["buy milk"],
+		});
+		await expect(
+			handle.harness.snapshot("app.unknown", root.id),
+		).rejects.toMatchObject({
+			group: "user",
+			message: expect.stringContaining("app.unknown"),
+		});
+	});
+
+	test("Pi Durable's own errors reach the client with Pi's error name as the code", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.agent.getOrCreate(["busy", randomUUID()]);
+		const root = await handle.harness.root();
+		await handle.conversation.submit(root.id, {
+			type: "input",
+			content: "take your time",
+		});
+
+		await expect(
+			handle.conversation.submit(root.id, {
+				type: "input",
+				content: "say hello",
+				whenBusy: "reject",
+			}),
+		).rejects.toMatchObject({ group: "user", code: "ConversationBusy" });
+		await handle.conversation.abort(root.id);
+	});
+
+	test("a failed commit reopens the harness, and the next prompt is answered", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.agent.getOrCreate(["poison", randomUUID()]);
+		await handle.harness.root();
+		await handle.failCommitsOfPoison();
+
+		await expect(handle.writePoison()).rejects.toThrow();
+		const result = await handle.prompt("say hello");
+		expect(result).toMatchObject({ status: "done", text: "Hi there!" });
+	});
+
+	test("Pi's built-in tools write files inside the sandbox", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.coder.getOrCreate(["write", randomUUID()]);
+
+		expect(await handle.prompt("create hello.txt")).toMatchObject({
+			status: "done",
+			text: "written",
+		});
+		const sandboxes = join(workdir, "sandboxes");
+		const contents = await Promise.all(
+			(await readdir(sandboxes)).map((id) =>
+				readFile(join(sandboxes, id, "hello.txt"), "utf8").catch(
+					() => undefined,
+				),
+			),
+		);
+		expect(contents).toContain("hi from pi\n");
+	});
+
+	test("sandbox tools cannot write outside the sandbox or read the actor host's environment", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.coder.getOrCreate(["escape", randomUUID()]);
+		process.env.PI_TEST_HOST_KEY = "host-secret";
+		try {
+			await handle.prompt("write outside the sandbox");
+			await handle.prompt("print the host key");
+		} finally {
+			delete process.env.PI_TEST_HOST_KEY;
+		}
+
+		const root = await handle.harness.root();
+		const { messages } = await handle.conversation.context(root.id);
+		const results = messages.filter((message) => message.role === "toolResult");
+		expect(results.find((result) => result.toolName === "write")).toMatchObject(
+			{ isError: true },
+		);
+		const bash = results.find((result) => result.toolName === "bash");
+		expect(JSON.stringify(bash?.content)).toContain("key=[]");
+		await expect(
+			readFile(join(workdir, "sandboxes", "outside.txt"), "utf8"),
+		).rejects.toThrow();
+	});
+
+	test("a long retry wait lets the actor sleep, and a scheduled wake finishes the run", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["backoff", randomUUID()];
+		const handle = client.backoff.getOrCreate(key);
+		const root = await handle.harness.root();
+		const requestsBefore = mockModel.requests.length;
+		const submission = await handle.conversation.submit(root.id, {
+			type: "input",
+			content: "flaky",
+		});
+
+		await waitForSleeps(key, 1);
+		// No client calls the actor here: only the scheduled wake can make the retried model request, recorded in this process.
+		await vi.waitFor(
+			() => expect(mockModel.requests.length).toBe(requestsBefore + 2),
+			{ timeout: 90_000 },
+		);
+		const settled = await handle.submission.wait(submission.id);
+		expect(settled.status).toBe("done");
+		const { messages } = await handle.conversation.context(root.id);
+		expect(messages.at(-1)).toMatchObject({
+			role: "assistant",
+			content: [{ type: "text", text: "recovered" }],
+		});
+	}, 120_000);
+
+	test("a long retry wait whose wake cannot be scheduled keeps the actor awake until the run finishes", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["backoff-without-schedules", randomUUID()];
+		const handle = client.backoffWithoutSchedules.getOrCreate(key);
+		const root = await handle.harness.root();
+		const requestsBefore = mockModel.requests.length;
+		const submission = await handle.conversation.submit(root.id, {
+			type: "input",
+			content: "flaky",
+		});
+
+		// No client calls the actor here, so only an actor that stayed awake makes the retried model request, recorded in this process.
+		await vi.waitFor(
+			() => expect(mockModel.requests.length).toBe(requestsBefore + 2),
+			{ timeout: 90_000 },
+		);
+		expect(sleeps.get(JSON.stringify(key)) ?? 0).toBe(0);
+		const settled = await handle.submission.wait(submission.id);
+		expect(settled.status).toBe("done");
+	}, 120_000);
+
+	test("a task whose definition is gone is reported blocked and does not keep the actor awake", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["blocked", randomUUID()];
+		const handle = client.jobRunner.getOrCreate(key);
+		await handle.startJob();
+		await handle.nap();
+		await waitForSleeps(key, 1);
+		jobsRegistry.uninstall(jobs);
+		try {
+			const inspection = await handle.harness.inspect();
+			expect(inspection.tasks).toEqual([
+				expect.objectContaining({
+					record: expect.objectContaining({ kind: "app.job" }),
+					state: { kind: "blocked", reason: "missing_task" },
+				}),
+			]);
+			await waitForSleeps(key, 2);
+		} finally {
+			jobsRegistry.install(jobs);
+		}
+	});
+});

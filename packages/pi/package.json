@@ -32,6 +32,10 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
+		},
+		"./durable": {
+			"types": "./dist/durable/index.d.ts",
+			"default": "./dist/durable/index.js"
 		}
 	},
 	"main": "./dist/index.js",

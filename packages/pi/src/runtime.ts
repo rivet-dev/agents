@@ -159,7 +159,7 @@ async function openPiSession(
 	} = options;
 	const stored = await loadPiSession(c.db);
 	const connected = sandboxProvider
-		? await connectSandbox(c, sandboxProvider)
+		? await connectSandbox(c, sandboxProvider, piSandboxStore)
 		: undefined;
 	const sandbox = connected?.sandbox;
 	const cwd =
@@ -267,6 +267,18 @@ async function openPiSession(
 	return handle;
 }
 
+/** Where an actor stores the id of its sandbox. */
+export interface SandboxStore {
+	load(db: PiContext["db"]): Promise<StoredSandbox | undefined>;
+	save(db: PiContext["db"], sandbox: StoredSandbox): Promise<void>;
+}
+
+/** The `pi_sandbox` table, which `pi()` and `piDurable()` share. */
+export const piSandboxStore: SandboxStore = {
+	load: loadPiSandbox,
+	save: savePiSandbox,
+};
+
 /**
  * Connects to the actor's sandbox, creating one when none is stored or the
  * provider reports the stored one no longer exists. A new sandbox id is saved
@@ -274,11 +286,12 @@ async function openPiSession(
  * other connect failure is thrown, so a temporary outage never replaces a
  * sandbox.
  */
-async function connectSandbox(
+export async function connectSandbox(
 	c: PiContext,
 	provider: SandboxProvider,
+	store: SandboxStore,
 ): Promise<ConnectedSandbox> {
-	const existing = await loadPiSandbox(c.db);
+	const existing = await store.load(c.db);
 	if (existing && existing.provider !== provider.name) {
 		throw new Error(
 			`pi sandbox was created by provider ${existing.provider}, but the actor now uses ${provider.name}`,
@@ -294,7 +307,7 @@ async function connectSandbox(
 		});
 	}
 	const id = await provider.create(c);
-	await savePiSandbox(c.db, { provider: provider.name, id });
+	await store.save(c.db, { provider: provider.name, id });
 	const sandbox = await provider.connect(c, id);
 	if (!sandbox) {
 		throw new Error(

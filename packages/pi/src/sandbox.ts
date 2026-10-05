@@ -232,6 +232,6 @@ function imageMimeType(path: string): string | undefined {
 	}[extension];
 }
 
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
 	return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
