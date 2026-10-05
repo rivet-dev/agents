@@ -7,8 +7,8 @@
 	},
 	"dependencies": {
 		"@daytonaio/sdk": "^0.216.0",
-		"@earendil-works/pi-ai": "1.0.0",
-		"@earendil-works/pi-coding-agent": "1.0.0",
+		"@earendil-works/pi-ai": "1.0.2",
+		"@earendil-works/pi-coding-agent": "1.0.2",
 		"@linear/sdk": "^97.0.0",
 		"@octokit/rest": "^22.0.1",
 		"@octokit/webhooks-methods": "^6.0.0",
