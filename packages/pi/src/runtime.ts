@@ -27,6 +27,7 @@ import {
 	loadPiInterruptedRun,
 	loadPiSandbox,
 	loadPiSession,
+	migratePiSession,
 	type PiQueue,
 	type PiSettings,
 	type StoredSandbox,
@@ -264,7 +265,8 @@ async function openPiSession(
 		credentials: credentialSource,
 		...sessionOptions
 	} = options;
-	const stored = await loadPiSession(c.db);
+	const loaded = await loadPiSession(c.db);
+	const stored = loaded && (await migratePiSession(c.db, loaded));
 	const sandbox = sandboxProvider ? lazySandbox(c, sandboxProvider) : undefined;
 	// A new session takes its working directory from the sandbox, so only its first open connects.
 	const firstSandbox =
