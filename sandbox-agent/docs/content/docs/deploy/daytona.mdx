@@ -16,7 +16,7 @@ See [Daytona network limits](https://www.daytona.io/docs/en/network-limits/).
 ## TypeScript example
 
 ```bash
-npm install sandbox-agent@0.4.x @daytonaio/sdk
+npm install sandbox-agent@0.5.x @daytonaio/sdk
 ```
 
 ```typescript
@@ -44,7 +44,7 @@ try {
 }
 ```
 
-The `daytona` provider uses the `rivetdev/sandbox-agent:0.4.3-full` image by default and starts the server automatically.
+The `daytona` provider uses the `rivetdev/sandbox-agent:0.5.0-full` image by default and starts the server automatically.
 
 ## Using snapshots for faster startup
 
@@ -61,7 +61,7 @@ if (!hasSnapshot) {
     name: SNAPSHOT,
     image: Image.base("ubuntu:22.04").runCommands(
       "apt-get update && apt-get install -y curl ca-certificates",
-      "curl -fsSL https://releases.rivet.dev/sandbox-agent/0.4.x/install.sh | sh",
+      "curl -fsSL https://releases.rivet.dev/sandbox-agent/0.5.x/install.sh | sh",
       "sandbox-agent install-agent claude",
       "sandbox-agent install-agent codex",
     ),

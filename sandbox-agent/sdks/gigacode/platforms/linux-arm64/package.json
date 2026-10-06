@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/gigacode-linux-arm64",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "gigacode CLI binary for Linux arm64",
   "license": "Apache-2.0",
   "repository": {

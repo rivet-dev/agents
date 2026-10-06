@@ -25,7 +25,7 @@ cd my-sandbox
 ```dockerfile
 FROM cloudflare/sandbox:0.7.0
 
-RUN curl -fsSL https://releases.rivet.dev/sandbox-agent/0.4.x/install.sh | sh
+RUN curl -fsSL https://releases.rivet.dev/sandbox-agent/0.5.x/install.sh | sh
 RUN sandbox-agent install-agent claude && sandbox-agent install-agent codex
 
 EXPOSE 8000
@@ -36,7 +36,7 @@ EXPOSE 8000
 For standalone scripts, use the `cloudflare` provider:
 
 ```bash
-npm install sandbox-agent@0.4.x @cloudflare/sandbox
+npm install sandbox-agent@0.5.x @cloudflare/sandbox
 ```
 
 ```typescript

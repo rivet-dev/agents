@@ -15,11 +15,11 @@ Run the published full image with all supported agents pre-installed:
 docker run --rm -p 3000:3000 \
   -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   -e OPENAI_API_KEY="$OPENAI_API_KEY" \
-  rivetdev/sandbox-agent:0.4.3-full \
+  rivetdev/sandbox-agent:0.5.0-full \
   server --no-token --host 0.0.0.0 --port 3000
 ```
 
-The `0.4.3-full` tag pins the exact version. The moving `full` tag is also published for contributors who want the latest full image.
+The `0.5.0-full` tag pins the exact version. The moving `full` tag is also published for contributors who want the latest full image.
 
 If you also want the desktop API inside the container, install desktop dependencies before starting the server:
 
@@ -31,7 +31,7 @@ docker run --rm -p 3000:3000 \
     apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates bash libstdc++6 && \
     rm -rf /var/lib/apt/lists/* && \
-    curl -fsSL https://releases.rivet.dev/sandbox-agent/0.4.x/install.sh | sh && \
+    curl -fsSL https://releases.rivet.dev/sandbox-agent/0.5.x/install.sh | sh && \
     sandbox-agent install desktop --yes && \
     sandbox-agent server --no-token --host 0.0.0.0 --port 3000"
 ```
@@ -52,7 +52,7 @@ const docker = new Docker();
 const PORT = 3000;
 
 const container = await docker.createContainer({
-  Image: "rivetdev/sandbox-agent:0.4.3-full",
+  Image: "rivetdev/sandbox-agent:0.5.0-full",
   Cmd: ["server", "--no-token", "--host", "0.0.0.0", "--port", `${PORT}`],
   Env: [
     `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY}`,
@@ -86,7 +86,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash ca-certificates curl git && \
     rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://releases.rivet.dev/sandbox-agent/0.4.x/install.sh | sh && \
+RUN curl -fsSL https://releases.rivet.dev/sandbox-agent/0.5.x/install.sh | sh && \
     sandbox-agent install-agent --all
 
 RUN useradd -m -s /bin/bash sandbox

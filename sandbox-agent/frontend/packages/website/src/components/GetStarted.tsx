@@ -103,7 +103,7 @@ function SdkCodeHighlighted() {
   );
 }
 
-const sandboxCommand = `curl -fsSL https://releases.rivet.dev/sandbox-agent/0.4.x/install.sh | sh`;
+const sandboxCommand = `curl -fsSL https://releases.rivet.dev/sandbox-agent/0.5.x/install.sh | sh`;
 
 const sourceCommands = `git clone https://github.com/rivet-dev/sandbox-agent
 cd sandbox-agent
@@ -196,7 +196,7 @@ export function GetStarted() {
                     <span className="text-zinc-300">curl -fsSL \</span>
                     {"\n"}
                     <span className="text-zinc-300">{"    "}</span>
-                    <span className="text-green-400">https://releases.rivet.dev/sandbox-agent/0.4.x/install.sh</span>
+                    <span className="text-green-400">https://releases.rivet.dev/sandbox-agent/0.5.x/install.sh</span>
                     <span className="text-zinc-300"> | </span>
                     <span className="text-blue-400">sh</span>
                   </code>

@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/cli",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "CLI for sandbox-agent - run AI coding agents in sandboxes",
   "license": "Apache-2.0",
   "repository": {

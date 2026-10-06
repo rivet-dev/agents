@@ -80,11 +80,11 @@ Import the SDK directly into your Node or browser application. Full type safety 
 **Install**
 
 ```bash
-npm install sandbox-agent@0.4.x
+npm install sandbox-agent@0.5.x
 ```
 
 ```bash
-bun add sandbox-agent@0.4.x
+bun add sandbox-agent@0.5.x
 # Optional: allow Bun to run postinstall scripts for native binaries (required for SandboxAgent.start()).
 bun pm trust @sandbox-agent/cli-linux-x64 @sandbox-agent/cli-linux-arm64 @sandbox-agent/cli-darwin-arm64 @sandbox-agent/cli-darwin-x64 @sandbox-agent/cli-win32-x64
 ```
@@ -135,7 +135,7 @@ Run as an HTTP server and connect from any language. Deploy to E2B, Daytona, Ver
 
 ```bash
 # Install it
-curl -fsSL https://releases.rivet.dev/sandbox-agent/0.4.x/install.sh | sh
+curl -fsSL https://releases.rivet.dev/sandbox-agent/0.5.x/install.sh | sh
 # Run it
 sandbox-agent server --token "$SANDBOX_TOKEN" --host 127.0.0.1 --port 2468
 ```
@@ -159,12 +159,12 @@ sandbox-agent server --no-token --host 127.0.0.1 --port 2468
 Install the CLI wrapper (optional but convenient):
 
 ```bash
-npm install -g @sandbox-agent/cli@0.4.x
+npm install -g @sandbox-agent/cli@0.5.x
 ```
 
 ```bash
 # Allow Bun to run postinstall scripts for native binaries.
-bun add -g @sandbox-agent/cli@0.4.x
+bun add -g @sandbox-agent/cli@0.5.x
 bun pm -g trust @sandbox-agent/cli-linux-x64 @sandbox-agent/cli-linux-arm64 @sandbox-agent/cli-darwin-arm64 @sandbox-agent/cli-darwin-x64 @sandbox-agent/cli-win32-x64
 ```
 
@@ -179,11 +179,11 @@ sandbox-agent api sessions send-message-stream my-session --message "Hello" --en
 You can also use npx like:
 
 ```bash
-npx @sandbox-agent/cli@0.4.x --help
+npx @sandbox-agent/cli@0.5.x --help
 ```
 
 ```bash
-bunx @sandbox-agent/cli@0.4.x --help
+bunx @sandbox-agent/cli@0.5.x --help
 ```
 
 [CLI documentation](https://rivet.dev/sandbox-agent/docs/cli)

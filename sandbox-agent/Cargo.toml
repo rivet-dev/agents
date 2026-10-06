@@ -4,7 +4,7 @@ members = ["server/packages/*", "gigacode"]
 exclude = ["factory/packages/desktop/src-tauri", "foundry/packages/desktop/src-tauri"]
 
 [workspace.package]
-version = "0.4.3"
+version = "0.5.0"
 edition = "2021"
 authors = [ "Rivet Gaming, LLC <developer@rivet.gg>" ]
 license = "Apache-2.0"
@@ -13,13 +13,13 @@ description = "Universal API for automatic coding agents in sandboxes. Supports 
 
 [workspace.dependencies]
 # Internal crates
-sandbox-agent = { version = "0.4.3", path = "server/packages/sandbox-agent" }
-sandbox-agent-error = { version = "0.4.3", path = "server/packages/error" }
-sandbox-agent-agent-management = { version = "0.4.3", path = "server/packages/agent-management" }
-sandbox-agent-agent-credentials = { version = "0.4.3", path = "server/packages/agent-credentials" }
-sandbox-agent-opencode-adapter = { version = "0.4.3", path = "server/packages/opencode-adapter" }
-sandbox-agent-opencode-server-manager = { version = "0.4.3", path = "server/packages/opencode-server-manager" }
-acp-http-adapter = { version = "0.4.3", path = "server/packages/acp-http-adapter" }
+sandbox-agent = { version = "0.5.0", path = "server/packages/sandbox-agent" }
+sandbox-agent-error = { version = "0.5.0", path = "server/packages/error" }
+sandbox-agent-agent-management = { version = "0.5.0", path = "server/packages/agent-management" }
+sandbox-agent-agent-credentials = { version = "0.5.0", path = "server/packages/agent-credentials" }
+sandbox-agent-opencode-adapter = { version = "0.5.0", path = "server/packages/opencode-adapter" }
+sandbox-agent-opencode-server-manager = { version = "0.5.0", path = "server/packages/opencode-server-manager" }
+acp-http-adapter = { version = "0.5.0", path = "server/packages/acp-http-adapter" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

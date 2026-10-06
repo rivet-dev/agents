@@ -43,7 +43,7 @@ Manually verify the install script works in a fresh environment:
 ```bash
 docker run --rm alpine:latest sh -c "
   apk add --no-cache curl ca-certificates libstdc++ libgcc bash &&
-  curl -fsSL https://releases.rivet.dev/sandbox-agent/0.4.x/install.sh | sh &&
+  curl -fsSL https://releases.rivet.dev/sandbox-agent/0.5.x/install.sh | sh &&
   sandbox-agent --version
 "
 ```

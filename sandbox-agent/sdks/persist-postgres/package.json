@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/persist-postgres",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "PostgreSQL persistence driver for the Sandbox Agent TypeScript SDK (DEPRECATED)",
   "license": "Apache-2.0",
   "repository": {
