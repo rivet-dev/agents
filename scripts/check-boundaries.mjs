@@ -31,6 +31,7 @@ function assert(condition, message) {
 
 const piPackage = await readJson("packages/pi/package.json");
 const adapterPackage = await readJson("packages/sandbox-adapter/package.json");
+const nanocodexPackage = await readJson("packages/nanocodex/package.json");
 
 // One release line: every published package in the repository carries the
 // Sandbox Agent workspace version, which `just release` bumps everywhere.
@@ -42,30 +43,32 @@ assert(
 	cargoVersion,
 	"could not read the workspace version from sandbox-agent/Cargo.toml",
 );
-for (const manifest of [piPackage, adapterPackage]) {
+for (const manifest of [piPackage, adapterPackage, nanocodexPackage]) {
 	assert(
 		manifest.version === cargoVersion,
 		`${manifest.name}@${manifest.version} is off the release line (${cargoVersion})`,
 	);
 }
 
-// pi runs inside the user's registry, so it must share their RivetKit.
-assert(
-	!piPackage.dependencies?.rivetkit,
-	"@rivet-dev/pi must not depend on rivetkit directly",
-);
-assert(
-	piPackage.peerDependencies?.rivetkit,
-	"@rivet-dev/pi must declare rivetkit as a peer dependency",
-);
-assert(
-	piPackage.devDependencies?.rivetkit,
-	"@rivet-dev/pi must pin rivetkit as a dev dependency for tests",
-);
-assert(
-	piPackage.dependencies?.["@rivet-dev/sandbox-adapter"] === "workspace:*",
-	"@rivet-dev/pi must depend on the workspace sandbox adapter so publishing pins the release version",
-);
+// Agent actors run inside the user's registry, so they must share their RivetKit.
+for (const manifest of [piPackage, nanocodexPackage]) {
+	assert(
+		!manifest.dependencies?.rivetkit,
+		`${manifest.name} must not depend on rivetkit directly`,
+	);
+	assert(
+		manifest.peerDependencies?.rivetkit,
+		`${manifest.name} must declare rivetkit as a peer dependency`,
+	);
+	assert(
+		manifest.devDependencies?.rivetkit,
+		`${manifest.name} must pin rivetkit as a dev dependency for tests`,
+	);
+	assert(
+		manifest.dependencies?.["@rivet-dev/sandbox-adapter"] === "workspace:*",
+		`${manifest.name} must depend on the workspace sandbox adapter so publishing pins the release version`,
+	);
+}
 
 // The sandbox adapter is runtime-agnostic and must not pull in RivetKit.
 for (const field of ["dependencies", "peerDependencies", "devDependencies"]) {
@@ -85,6 +88,7 @@ for (const path of await walk("packages/sandbox-adapter/src/")) {
 for (const [directory, manifest] of [
 	["packages/pi", piPackage],
 	["packages/sandbox-adapter", adapterPackage],
+	["packages/nanocodex", nanocodexPackage],
 ]) {
 	assert(
 		manifest.repository?.url === "https://github.com/rivet-dev/agents.git" &&
