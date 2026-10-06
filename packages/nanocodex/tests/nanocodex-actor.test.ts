@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Transport } from "nanocodex/node";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { nanocodex } from "../src/index.js";
+import { localSandboxProvider } from "./helpers/local-sandbox.js";
 import {
 	exec,
 	message,
@@ -13,6 +17,7 @@ import {
 import { createSleepCounter } from "./helpers/sleeps.js";
 
 let model: ResponsesServer;
+let sandboxRoot: string;
 let registry: ReturnType<typeof buildRegistry>;
 const sleeps = createSleepCounter();
 
@@ -34,7 +39,11 @@ function buildRegistry() {
 		options: { sleepGracePeriod: 2_000 },
 		actions: { nap },
 	});
-	return setup({ use: { coder, hasty } });
+	const sandboxed = nanocodex({
+		transport,
+		sandbox: localSandboxProvider(sandboxRoot),
+	});
+	return setup({ use: { coder, hasty, sandboxed } });
 }
 
 /** Resolves `release()` once a test lets the held model reply go. */
@@ -48,11 +57,13 @@ function gate() {
 
 beforeAll(async () => {
 	model = await startResponsesServer();
+	sandboxRoot = await mkdtemp(join(tmpdir(), "rivet-nanocodex-test-"));
 	registry = buildRegistry();
 });
 
 afterAll(async () => {
 	await model?.close();
+	if (sandboxRoot) await rm(sandboxRoot, { recursive: true, force: true });
 });
 
 describe("nanocodex actor", () => {
@@ -173,5 +184,37 @@ describe("nanocodex actor", () => {
 			(r) => !JSON.stringify(r.body.input).includes("step one done"),
 		);
 		expect(firstCalls).toHaveLength(1);
+	});
+
+	test("the agent's file tools and exec_command run in the sandbox", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.sandboxed.getOrCreate(["sandbox", randomUUID()]);
+		const input = `use the sandbox ${randomUUID()}`;
+		model.reply(input, (request) =>
+			request.step === 0
+				? [
+						exec(
+							'await tools.write_file({ path: "notes/hello.txt", content: "hi from nanocodex" }); const r = await tools.exec_command({ cmd: "cat notes/hello.txt" }); text(r.output)',
+						),
+					]
+				: [message("done")],
+		);
+		await handle.turn.prompt({ input });
+
+		const toolOutput = model.requests.find(
+			(r) => r.prompt === input && r.step === 1,
+		);
+		expect(JSON.stringify(toolOutput?.body.input)).toContain(
+			"hi from nanocodex",
+		);
+		const sandboxes = await readdir(sandboxRoot);
+		const contents = await Promise.all(
+			sandboxes.map((id) =>
+				readFile(join(sandboxRoot, id, "notes/hello.txt"), "utf8").catch(
+					() => undefined,
+				),
+			),
+		);
+		expect(contents).toContain("hi from nanocodex");
 	});
 });

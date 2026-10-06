@@ -228,8 +228,8 @@ export function nanocodex<
 	> &
 		NanocodexActions
 > {
-	const { transport, agent, ...appConfig } = config;
-	const options: NanocodexOptions = { transport, agent };
+	const { transport, sandbox, agent, ...appConfig } = config;
+	const options: NanocodexOptions = { transport, sandbox, agent };
 	// SAFETY: NanocodexActorConfigInput checked the app's config at the call
 	// site. TypeScript cannot relate RivetKit's generic hook and action types
 	// to the concrete shapes nanocodex() calls them with; they differ only in
@@ -305,14 +305,14 @@ export function nanocodex<
 			try {
 				await appOnSleep?.(c);
 			} finally {
-				await closeNanocodex(c, { reason: "sleep", drainUntil });
+				await closeNanocodex(c, options, { reason: "sleep", drainUntil });
 			}
 		},
 		onDestroy: async (c: NanocodexContext) => {
 			try {
 				await appOnDestroy?.(c);
 			} finally {
-				await closeNanocodex(c, { reason: "destroy" });
+				await closeNanocodex(c, options, { reason: "destroy" });
 			}
 		},
 		actions: {

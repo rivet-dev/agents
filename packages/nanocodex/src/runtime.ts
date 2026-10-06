@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import type {
 	AgentEvent,
 	DefaultAgent,
@@ -10,6 +11,13 @@ import type {
 import { Agent, type Transport } from "nanocodex/node";
 import { type ActorContext, UserError } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
+import {
+	type ConnectedSandbox,
+	closeSandbox,
+	connectSandbox,
+	execCommandTool,
+	sandboxWorkspace,
+} from "./sandbox.js";
 import { durabilityStore } from "./storage.js";
 
 /** `Omit` that keeps each member of a union, such as nanocodex's `mcp` and `toolMode` alternatives. */
@@ -22,7 +30,8 @@ export type NanocodexDatabaseProvider = DatabaseProvider<RawAccess>;
 
 /**
  * nanocodex's own `Agent.create` options, without the ones the actor owns:
- * the transport, the durable journal, and the session id.
+ * the transport, the durable journal, the session id, and the sandbox
+ * workspace.
  */
 export type NanocodexAgentOptions = DistributiveOmit<
 	Agent.create.Options,
@@ -30,6 +39,8 @@ export type NanocodexAgentOptions = DistributiveOmit<
 	| "durability"
 	| "durabilityId"
 	| "sessionId"
+	| "workspace"
+	| "filesystem"
 	| "resume"
 	| "module"
 >;
@@ -48,8 +59,14 @@ export interface NanocodexOptions {
 	/** How the agent reaches the model. */
 	transport: NanocodexTransport;
 	/**
+	 * Runs the agent's file tools and `exec_command` in a sandbox. Without one,
+	 * the agent has only the `tools` in `agent`.
+	 */
+	sandbox?: SandboxProvider;
+	/**
 	 * Passed to nanocodex's `Agent.create`, such as `instructions`, `model`,
-	 * `tools`, and `mcp`.
+	 * `tools`, and `mcp`. With a `sandbox`, `tools` must be a tool map or an
+	 * array, and `exec_command` is reserved.
 	 */
 	agent?: NanocodexAgentOptions;
 }
@@ -83,11 +100,12 @@ interface RunningTurn {
 /** Per-actor-generation state. */
 export interface NanocodexRuntime {
 	/**
-	 * The `onWake` context. The agent's journal and events use it,
+	 * The `onWake` context. The agent's journal, events, and sandbox use it,
 	 * because an action's context ends with the action.
 	 */
 	actor: NanocodexContext | undefined;
 	agent: Promise<OpenAgent> | undefined;
+	sandbox: Promise<ConnectedSandbox> | undefined;
 	/** Turns started in this generation, by id, until they settle. */
 	turns: Map<string, RunningTurn>;
 	/** Set when the actor starts to sleep or is destroyed. */
@@ -121,6 +139,7 @@ export function createNanocodexRuntime(): NanocodexRuntime {
 	return {
 		actor: undefined,
 		agent: undefined,
+		sandbox: undefined,
 		turns: new Map(),
 		closing: false,
 	};
@@ -147,6 +166,7 @@ export function ensureAgent(
 	if (runtime.agent !== undefined) return runtime.agent;
 	const opening: Promise<OpenAgent> = openAgent(
 		runtime.actor ?? c,
+		runtime,
 		options,
 	).catch((error: unknown) => {
 		if (runtime.agent === opening) runtime.agent = undefined;
@@ -158,19 +178,78 @@ export function ensureAgent(
 
 async function openAgent(
 	c: NanocodexContext,
+	runtime: NanocodexRuntime,
 	options: NanocodexOptions,
 ): Promise<OpenAgent> {
 	const sessionId = sessionUuid(c.actorId);
+	const sandbox = options.sandbox
+		? await connectRuntimeSandbox(c, runtime, options.sandbox)
+		: undefined;
 	const agent = await Agent.create({
 		...options.agent,
 		transport: await options.transport(c),
 		durability: durabilityStore(c.db),
 		durabilityId: sessionId,
 		sessionId,
+		...(sandbox
+			? {
+					workspace: sandbox.sandbox.cwd,
+					filesystem: sandboxWorkspace(sandbox.sandbox),
+					tools: withExecCommand(options.agent?.tools, sandbox),
+				}
+			: {}),
 	});
 	const events = agent.events.watch();
 	events.onEvent((event) => broadcastAgentEvent(c, event));
 	return { agent, events };
+}
+
+function connectRuntimeSandbox(
+	c: NanocodexContext,
+	runtime: NanocodexRuntime,
+	provider: SandboxProvider,
+): Promise<ConnectedSandbox> {
+	if (runtime.sandbox !== undefined) return runtime.sandbox;
+	const connecting: Promise<ConnectedSandbox> = connectSandbox(
+		c,
+		provider,
+	).catch((error: unknown) => {
+		if (runtime.sandbox === connecting) runtime.sandbox = undefined;
+		throw error;
+	});
+	runtime.sandbox = connecting;
+	return connecting;
+}
+
+/** nanocodex's own tool configuration: a tool map, an array, or a `Tools` set. */
+type AgentTools = NonNullable<NanocodexAgentOptions["tools"]>;
+
+/** Adds `exec_command` for the sandbox to the app's own tools. */
+function withExecCommand(
+	tools: AgentTools | undefined,
+	connected: ConnectedSandbox,
+): AgentTools {
+	const execCommand = execCommandTool(connected.sandbox);
+	if (tools === undefined) return { exec_command: execCommand };
+	if (Array.isArray(tools)) {
+		if (tools.some((tool) => "name" in tool && tool.name === "exec_command")) {
+			throw new Error(
+				"nanocodex() reserves the exec_command tool for the sandbox",
+			);
+		}
+		return [...tools, { ...execCommand, name: "exec_command" }];
+	}
+	if (Object.getPrototypeOf(tools) !== Object.prototype) {
+		throw new Error(
+			"nanocodex() with a sandbox takes tools as a tool map or an array",
+		);
+	}
+	if ("exec_command" in tools) {
+		throw new Error(
+			"nanocodex() reserves the exec_command tool for the sandbox",
+		);
+	}
+	return { ...tools, exec_command: execCommand };
 }
 
 /**
@@ -257,10 +336,11 @@ async function runTurn(
  * Closes the agent when the actor stops. A sleep first waits for running
  * turns until `drainUntil`; a turn still running then stays in nanocodex's
  * journal, and prompting the same id after the actor wakes resumes it. A
- * destroy cancels running turns.
+ * destroy cancels running turns. Then the sandbox is suspended or destroyed.
  */
 export async function closeNanocodex(
 	c: NanocodexContext,
+	options: NanocodexOptions,
 	stop: NanocodexStop,
 ): Promise<void> {
 	const runtime = nanocodexRuntime(c);
@@ -276,18 +356,26 @@ export async function closeNanocodex(
 			running.map(async (turn) => (await turn.turn).cancel()),
 		);
 	}
-	// An agent that failed to open has nothing to close.
-	const opened = await runtime.agent?.catch(() => undefined);
-	runtime.agent = undefined;
-	if (opened && stop.reason === "sleep" && runtime.turns.size > 0) {
-		// A clean shutdown cancels unfinished turns. Releasing the agent
-		// instead leaves them in the journal, as a crash would, so they resume.
-		releaseAgent(opened);
-	} else if (opened) {
-		try {
-			await opened.agent.session.shutdown();
-		} finally {
+	try {
+		// An agent that failed to open has nothing to close.
+		const opened = await runtime.agent?.catch(() => undefined);
+		runtime.agent = undefined;
+		if (opened && stop.reason === "sleep" && runtime.turns.size > 0) {
+			// A clean shutdown cancels unfinished turns. Releasing the agent
+			// instead leaves them in the journal, as a crash would, so they resume.
 			releaseAgent(opened);
+		} else if (opened) {
+			try {
+				await opened.agent.session.shutdown();
+			} finally {
+				releaseAgent(opened);
+			}
+		}
+	} finally {
+		if (options.sandbox) {
+			const connected = await runtime.sandbox?.catch(() => undefined);
+			runtime.sandbox = undefined;
+			await closeSandbox(c, options.sandbox, connected, stop.reason);
 		}
 	}
 }
