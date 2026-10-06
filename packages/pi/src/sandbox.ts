@@ -23,22 +23,34 @@ const IGNORED_DIRECTORIES = [".git", "node_modules"];
  * Builds Pi's seven built-in coding tools with every file and shell operation
  * routed into the sandbox. Passed as `customTools`, they replace the built-in
  * tools of the same names.
+ *
+ * The tools see the session's `root`. Each operation connects the sandbox on
+ * first use and runs at the same path under the sandbox's own working
+ * directory, so a replaced sandbox with another working directory still works.
  */
 export function createSandboxTools(
-	sandbox: Sandbox,
+	sessionRoot: string,
+	connect: () => Promise<Sandbox>,
 ): ToolDefinition<any, any, any>[] {
-	const root = normalizeRoot(sandbox.cwd);
-	const resolvePath = (path: string) => resolveSandboxPath(root, path);
+	const root = normalizeRoot(sessionRoot);
+	const inSandbox = async (path: string) => {
+		const sandbox = await connect();
+		return { sandbox, path: toSandboxPath(root, sandbox.cwd, path) };
+	};
 	const access = async (path: string) => {
-		const resolved = resolvePath(path);
-		if (!(await sandbox.exists(resolved))) {
-			throw new Error(`Path not found: ${resolved}`);
+		const target = await inSandbox(path);
+		if (!(await target.sandbox.exists(target.path))) {
+			throw new Error(`Path not found: ${resolveSandboxPath(root, path)}`);
 		}
 	};
-	const readFile = async (path: string) =>
-		Buffer.from(await sandbox.readFile(resolvePath(path)));
-	const writeFile = (path: string, content: string) =>
-		sandbox.writeFile(resolvePath(path), content);
+	const readFile = async (path: string) => {
+		const target = await inSandbox(path);
+		return Buffer.from(await target.sandbox.readFile(target.path));
+	};
+	const writeFile = async (path: string, content: string) => {
+		const target = await inSandbox(path);
+		await target.sandbox.writeFile(target.path, content);
+	};
 
 	const read = createReadToolDefinition(root, {
 		operations: {
@@ -50,33 +62,46 @@ export function createSandboxTools(
 	const write = createWriteToolDefinition(root, {
 		operations: {
 			writeFile,
-			mkdir: (path) => sandbox.mkdir(resolvePath(path)),
+			mkdir: async (path) => {
+				const target = await inSandbox(path);
+				await target.sandbox.mkdir(target.path);
+			},
 		},
 	});
 	const edit = createEditToolDefinition(root, {
 		operations: { access, readFile, writeFile },
 	});
 	const bash = createBashToolDefinition(root, {
-		operations: createSandboxBashOperations(sandbox),
+		operations: createSandboxBashOperations(root, connect),
 	});
 	const ls = createLsToolDefinition(root, {
 		operations: {
-			exists: (path) => sandbox.exists(resolvePath(path)),
-			readdir: (path) => sandbox.readdir(resolvePath(path)),
+			exists: async (path) => {
+				const target = await inSandbox(path);
+				return target.sandbox.exists(target.path);
+			},
+			readdir: async (path) => {
+				const target = await inSandbox(path);
+				return target.sandbox.readdir(target.path);
+			},
 			stat: async (path) => {
-				const stat = await sandbox.stat(resolvePath(path));
+				const target = await inSandbox(path);
+				const stat = await target.sandbox.stat(target.path);
 				return { isDirectory: () => stat.isDirectory };
 			},
 		},
 	});
 	const find = createFindToolDefinition(root, {
 		operations: {
-			exists: (path) => sandbox.exists(resolvePath(path)),
+			exists: async (path) => {
+				const target = await inSandbox(path);
+				return target.sandbox.exists(target.path);
+			},
 			glob: async (pattern, searchDirectory, options) => {
-				const searchRoot = resolvePath(searchDirectory);
-				const result = await sandbox.exec(
+				const target = await inSandbox(searchDirectory);
+				const result = await target.sandbox.exec(
 					`find . -type f ${IGNORED_DIRECTORIES.map((directory) => `-not -path ${shellQuote(`*/${directory}/*`)}`).join(" ")}`,
-					{ cwd: searchRoot },
+					{ cwd: target.path },
 				);
 				if (result.exitCode !== 0) {
 					throw new Error(
@@ -100,7 +125,7 @@ export function createSandboxTools(
 			params: GrepToolInput,
 			signal: AbortSignal | undefined,
 		) => {
-			const searchPath = resolvePath(params.path ?? ".");
+			const searchPath = resolveSandboxPath(root, params.path ?? ".");
 			const limit = Math.min(
 				Math.max(1, params.limit ?? 100),
 				MAX_GREP_MATCHES,
@@ -121,10 +146,11 @@ export function createSandboxTools(
 				"--",
 				posix.relative(root, searchPath) || ".",
 			);
-			const result = await sandbox.exec(
+			const target = await inSandbox(root);
+			const result = await target.sandbox.exec(
 				`grep ${args.map(shellQuote).join(" ")}`,
 				{
-					cwd: root,
+					cwd: target.path,
 					signal,
 				},
 			);
@@ -164,14 +190,19 @@ export function createSandboxTools(
  *
  * Pi passes the actor host's environment as `options.env`. It is not
  * forwarded, because it holds the host's provider keys; commands run with the
- * sandbox's own environment.
+ * sandbox's own environment. Paths map from `sessionRoot` as in
+ * `createSandboxTools`.
  */
-export function createSandboxBashOperations(sandbox: Sandbox): BashOperations {
-	const root = normalizeRoot(sandbox.cwd);
+export function createSandboxBashOperations(
+	sessionRoot: string,
+	connect: () => Promise<Sandbox>,
+): BashOperations {
+	const root = normalizeRoot(sessionRoot);
 	return {
 		async exec(command, requestedCwd, options) {
+			const sandbox = await connect();
 			const result = await sandbox.exec(command, {
-				cwd: resolveSandboxPath(root, requestedCwd),
+				cwd: toSandboxPath(root, sandbox.cwd, requestedCwd),
 				timeoutMs:
 					options.timeout === undefined ? undefined : options.timeout * 1000,
 				signal: options.signal,
@@ -194,6 +225,18 @@ export function resolveSandboxPath(root: string, path: string): string {
 		throw new Error(`Path escapes the sandbox working directory: ${path}`);
 	}
 	return resolved;
+}
+
+/**
+ * Maps `path`, resolved against the session's `root`, to the same place under
+ * the sandbox's working directory. Paths outside `root` are rejected.
+ */
+function toSandboxPath(root: string, sandboxCwd: string, path: string): string {
+	const relative = posix.relative(
+		normalizeRoot(root),
+		resolveSandboxPath(root, path),
+	);
+	return posix.join(normalizeRoot(sandboxCwd), relative);
 }
 
 function normalizeRoot(path: string): string {
@@ -232,6 +275,6 @@ function imageMimeType(path: string): string | undefined {
 	}[extension];
 }
 
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
 	return `'${value.replaceAll("'", `'"'"'`)}'`;
 }

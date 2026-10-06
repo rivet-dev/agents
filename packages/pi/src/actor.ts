@@ -1,8 +1,8 @@
-import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type {
+	AgentSession,
+	AgentSessionEvent,
+} from "@earendil-works/pi-coding-agent";
 import {
-	type Actions,
-	type ActorConfigInput,
-	type ActorDefinition,
 	actor,
 	type EventSchemaConfig,
 	event,
@@ -12,17 +12,27 @@ import {
 import { db } from "rivetkit/db";
 import { createPiActions, type PiActions } from "./actions.js";
 import {
+	assertNoReservedNames,
+	sharedActorConfig,
+	splitConfig,
+	wrapActions,
+} from "./actor-config.js";
+import type {
+	PiActorDefinition,
+	UserActions,
+	UserActorConfig,
+} from "./actor-types.js";
+import {
 	closePiSession,
 	createPiRuntime,
 	PI_RUNTIME,
 	type PiContext,
-	type PiDatabaseProvider,
 	type PiSessionOptions,
+	resumeInterruptedRun,
+	stopRunWhenLost,
+	withPiSession,
 } from "./runtime.js";
 import { migratePiTables } from "./storage.js";
-
-/** Ten minutes. Pi actions such as `waitForIdle` and `compact` outlive RivetKit's one-minute default. */
-const DEFAULT_ACTION_TIMEOUT_MS = 10 * 60_000;
 
 /** Every Pi `AgentSessionEvent`, in order, for connected clients. */
 export type PiEvents = {
@@ -52,6 +62,37 @@ const piOptionKeys = [
 	"sandbox",
 ] as const satisfies readonly (keyof PiSessionOptions)[];
 
+/**
+ * `c.pi`: the actor's Pi session, in the app's own actions and hooks. Reading
+ * it throws when the session cannot open, such as while the sandbox provider
+ * is down. In `onSleep` and `onDestroy` it is set only when the session is
+ * already open in this actor generation.
+ */
+export interface PiAccess {
+	readonly pi: AgentSession;
+}
+
+/** The app's own actions, which get `c.pi`. Nested objects become dotted action names. */
+export type PiUserActions<
+	TState,
+	TConnParams,
+	TConnState,
+	TVars,
+	TInput,
+	TEvents extends EventSchemaConfig,
+	TQueues extends QueueSchemaConfig,
+> = UserActions<
+	TState,
+	TConnParams,
+	TConnState,
+	TVars,
+	TInput,
+	TEvents,
+	TQueues,
+	PiAccess
+>;
+
+/** Ordinary actor config plus Pi's session options. The app's actions and lifecycle hooks get `c.pi`. */
 export type PiActorConfigInput<
 	TState = undefined,
 	TConnParams = undefined,
@@ -60,34 +101,27 @@ export type PiActorConfigInput<
 	TInput = undefined,
 	TEvents extends EventSchemaConfig = Record<never, never>,
 	TQueues extends QueueSchemaConfig = Record<never, never>,
-	TUserActions extends Actions<
+	TUserActions extends PiUserActions<
 		TState,
 		TConnParams,
 		TConnState,
 		TVars,
 		TInput,
-		PiDatabaseProvider,
 		TEvents,
 		TQueues
 	> = Record<never, never>,
-> = ActorConfigInput<
+> = UserActorConfig<
 	TState,
 	TConnParams,
 	TConnState,
 	TVars,
 	TInput,
-	PiDatabaseProvider,
 	TEvents,
 	TQueues,
-	TUserActions
-> &
-	PiSessionOptions;
-
-/**
- * The actions the user defined. With no `actions` option, TypeScript uses the
- * default, a record with an index signature, which would hide the Pi actions.
- */
-type UserActions<T> = string extends keyof T ? Record<never, never> : T;
+	TUserActions,
+	PiSessionOptions,
+	PiAccess
+>;
 
 /**
  * Defines a Rivet Actor that owns one Pi coding-agent session.
@@ -95,6 +129,7 @@ type UserActions<T> = string extends keyof T ? Record<never, never> : T;
  * The session transcript and settings live in the actor's SQLite database and
  * are restored when the actor wakes. Pi events are broadcast on `event`.
  * Ordinary actor config (state, vars, actions, events, hooks) is passed through.
+ * The app's own actions and lifecycle hooks get the session as `c.pi`.
  */
 export function pi<
 	TState,
@@ -104,22 +139,20 @@ export function pi<
 	TInput,
 	TEvents extends EventSchemaConfig = Record<never, never>,
 	TQueues extends QueueSchemaConfig = Record<never, never>,
-	TUserActions extends Actions<
+	TUserActions extends PiUserActions<
 		TState,
 		TConnParams,
 		TConnState,
 		TVars,
 		TInput,
-		PiDatabaseProvider,
 		TEvents,
 		TQueues
-	> = Actions<
+	> = PiUserActions<
 		TState,
 		TConnParams,
 		TConnState,
 		TVars,
 		TInput,
-		PiDatabaseProvider,
 		TEvents,
 		TQueues
 	>,
@@ -143,110 +176,72 @@ export function pi<
 		TQueues,
 		TUserActions
 	>,
-): ActorDefinition<
+): PiActorDefinition<
 	TState,
 	TConnParams,
 	TConnState,
 	TVars,
 	TInput,
-	PiDatabaseProvider,
-	TEvents & PiEvents,
+	TEvents,
 	TQueues,
-	UserActions<TUserActions> & PiActions
+	TUserActions,
+	PiEvents,
+	PiActions
 > {
-	const { actorConfig, sessionOptions } = splitConfig(config);
+	const { actorConfig, options: sessionOptions } =
+		splitConfig<PiSessionOptions>(config, piOptionKeys);
 	if (actorConfig.db !== undefined) {
 		throw new Error("pi() owns the actor database; remove the db option");
 	}
 	const actions = createPiActions(sessionOptions);
-	assertNoReservedKeys("action", actorConfig.actions, actions);
-	assertNoReservedKeys("event", actorConfig.events, piEvents);
+	assertNoReservedNames("pi()", actorConfig, {
+		action: actions,
+		event: piEvents,
+	});
 
-	const userVars = actorConfig.vars;
-	const userCreateVars = actorConfig.createVars;
-	const userOnSleep = actorConfig.onSleep;
-	const userOnDestroy = actorConfig.onDestroy;
-	delete actorConfig.vars;
+	const withPi = <TArgs extends unknown[]>(
+		hook: ((c: PiContext, ...args: TArgs) => unknown) | undefined,
+		opensSession = true,
+	) =>
+		hook &&
+		((c: PiContext, ...args: TArgs) =>
+			withPiSession(c, sessionOptions, () => hook(c, ...args), {
+				opensSession,
+			}));
+	const userOnWake = withPi(actorConfig.onWake);
 
+	// The config is built from untyped parts, so `actor()` cannot check it
+	// against the generics. The declared return type is the public contract.
 	return actor({
-		...actorConfig,
-		options: {
-			actionTimeout: DEFAULT_ACTION_TIMEOUT_MS,
-			...actorConfig.options,
-		},
+		...sharedActorConfig(
+			"pi()",
+			actorConfig,
+			{ slot: PI_RUNTIME, create: createPiRuntime },
+			(c, stop) => closePiSession(c, sessionOptions, stop),
+			{
+				onSleep: withPi(actorConfig.onSleep, false),
+				onDestroy: withPi(actorConfig.onDestroy, false),
+			},
+		),
 		db: db({ onMigrate: migratePiTables }),
 		events: { ...(actorConfig.events ?? {}), ...piEvents },
-		actions: { ...(actorConfig.actions ?? {}), ...actions },
-		createVars: async (c: unknown, driverCtx: unknown) => {
-			const vars = userCreateVars
-				? await userCreateVars(c, driverCtx)
-				: userVars === undefined
-					? undefined
-					: structuredClone(userVars);
-			return attachRuntime(vars);
+		actions: {
+			...wrapActions(actorConfig.actions ?? {}, (c: PiContext, action) =>
+				withPiSession(c, sessionOptions, action),
+			),
+			...actions,
 		},
-		onSleep: async (c: PiContext) => {
-			try {
-				await userOnSleep?.(c);
-			} finally {
-				await closePiSession(c, sessionOptions, "sleep");
-			}
+		onWake: async (c: PiContext) => {
+			stopRunWhenLost(c);
+			await userOnWake?.(c);
+			await resumeInterruptedRun(c, sessionOptions).catch((error: unknown) => {
+				c.log.error({
+					msg: "pi could not resume the run that was active when the actor stopped",
+					error,
+				});
+			});
 		},
-		onDestroy: async (c: PiContext) => {
-			try {
-				await userOnDestroy?.(c);
-			} finally {
-				await closePiSession(c, sessionOptions, "destroy");
-			}
-		},
-	} as any) as ActorDefinition<
-		TState,
-		TConnParams,
-		TConnState,
-		TVars,
-		TInput,
-		PiDatabaseProvider,
-		TEvents & PiEvents,
-		TQueues,
-		UserActions<TUserActions> & PiActions
-	>;
-}
-
-function splitConfig(config: object): {
-	actorConfig: Record<string, any>;
-	sessionOptions: PiSessionOptions;
-} {
-	const actorConfig: Record<string, any> = { ...config };
-	const sessionOptions: Record<string, unknown> = {};
-	for (const key of piOptionKeys) {
-		if (key in actorConfig) {
-			sessionOptions[key] = actorConfig[key];
-			delete actorConfig[key];
-		}
-	}
-	return { actorConfig, sessionOptions: sessionOptions as PiSessionOptions };
-}
-
-/** Adds the Pi runtime slot to the user's vars without changing their shape. */
-function attachRuntime(vars: unknown): object {
-	const runtime = createPiRuntime();
-	if (vars === undefined) {
-		return { [PI_RUNTIME]: runtime };
-	}
-	if (typeof vars !== "object" || vars === null) {
-		throw new Error("pi() requires actor vars to be an object");
-	}
-	return Object.assign(vars, { [PI_RUNTIME]: runtime });
-}
-
-function assertNoReservedKeys(
-	kind: string,
-	custom: object | undefined,
-	builtIns: object,
-): void {
-	for (const key of Object.keys(custom ?? {})) {
-		if (key in builtIns) {
-			throw new Error(`pi() ${kind} name is reserved: ${key}`);
-		}
-	}
+		onConnect: withPi(actorConfig.onConnect),
+		onDisconnect: withPi(actorConfig.onDisconnect),
+	} as any);
 }

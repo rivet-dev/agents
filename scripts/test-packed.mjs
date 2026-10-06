@@ -1,6 +1,6 @@
 // Packs the root workspace packages and installs them into a scratch project
-// the way a user would, then imports every entrypoint that has no optional
-// peer dependency. Run after `pnpm build`.
+// the way a user would, then imports every entrypoint except the ones that
+// need a sandbox provider's SDK. Run after `pnpm build`.
 import { execFile } from "node:child_process";
 import {
 	mkdir,
@@ -47,8 +47,7 @@ const sourceManifests = {
 	"@rivet-dev/pi": await readManifest("packages/pi"),
 	"@rivet-dev/sandbox-adapter": await readManifest("packages/sandbox-adapter"),
 };
-const rivetkitVersion =
-	sourceManifests["@rivet-dev/pi"].devDependencies.rivetkit;
+const piDevDependencies = sourceManifests["@rivet-dev/pi"].devDependencies;
 
 const fixture = await mkdtemp(join(tmpdir(), "rivet-agents-packed-"));
 await writeFile(
@@ -59,7 +58,11 @@ await writeFile(
 		dependencies: {
 			"@rivet-dev/pi": `file:${piTarball}`,
 			"@rivet-dev/sandbox-adapter": `file:${adapterTarball}`,
-			rivetkit: rivetkitVersion,
+			rivetkit: piDevDependencies.rivetkit,
+			// The peers of the `@rivet-dev/pi/durable` entrypoint.
+			"@earendil-works/chord": piDevDependencies["@earendil-works/chord"],
+			"@earendil-works/pi-durable":
+				piDevDependencies["@earendil-works/pi-durable"],
 		},
 	}),
 );
@@ -111,6 +114,8 @@ for (const entry of ["index.js", "agentos.js", "e2b.js", "daytona.js"]) {
 const script = [
 	'const pi = await import("@rivet-dev/pi");',
 	'if (typeof pi.pi !== "function") throw new Error("@rivet-dev/pi does not export pi()");',
+	'const durable = await import("@rivet-dev/pi/durable");',
+	'if (typeof durable.piDurable !== "function") throw new Error("@rivet-dev/pi/durable does not export piDurable()");',
 	'const adapter = await import("@rivet-dev/sandbox-adapter");',
 	'if (typeof adapter.runRemoteProcess !== "function") throw new Error("@rivet-dev/sandbox-adapter does not export runRemoteProcess()");',
 ].join("\n");

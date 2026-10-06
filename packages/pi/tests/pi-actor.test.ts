@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
@@ -15,6 +16,17 @@ import {
 	slowly,
 	toolCall,
 } from "./helpers/mock-model.js";
+
+/** About two seconds of tokens from a `slowly` reply. */
+const TWO_SECOND_ANSWER = "word ".repeat(50).trim();
+
+/** Makes the `sandboxed` actors' provider refuse every connect. Tests in a file run one at a time. */
+let sandboxProviderDown = false;
+/** Sleeps of the `sandboxed` actors by key, recorded in this process where they run. */
+const sandboxedSleeps = new Map<string, number>();
+
+/** What `c.pi` gave each `closing` actor's onDisconnect hook, by key, recorded in this process. */
+const disconnectOutcomes = new Map<string, string>();
 
 let mockModel: MockModel;
 let workdir: string;
@@ -41,16 +53,19 @@ function buildRegistry(mock: MockModel, root: string) {
 		providers: { mock: mock.providerConfig },
 		apiKeys: { mock: "mock" },
 		tools: ["write", "find", "bash"],
-		sandbox: localSandboxProvider(join(root, "sandboxes")),
+		sandbox: withOutage(localSandboxProvider(join(root, "sandboxes"))),
 		state: { sleeps: 0 },
 		onSleep: (c) => {
 			c.state.sleeps += 1;
+			const key = JSON.stringify(c.key);
+			sandboxedSleeps.set(key, (sandboxedSleeps.get(key) ?? 0) + 1);
 		},
 		actions: {
 			nap: (c) => {
 				c.sleep();
 			},
 			sleeps: (c) => c.state.sleeps,
+			sessionId: (c) => c.pi.sessionId,
 			destroySelf: (c) => {
 				c.destroy();
 			},
@@ -62,7 +77,26 @@ function buildRegistry(mock: MockModel, root: string) {
 		apiKeys: { mock: "mock" },
 		options: { actionTimeout: 1_000 },
 	});
-	return setup({ use: { agent, sandboxed, timed } });
+	const closing = pi({
+		model: "mock/mock-model",
+		providers: { mock: mock.providerConfig },
+		apiKeys: { mock: "mock" },
+		onDisconnect: (c) => {
+			let outcome: string;
+			try {
+				outcome = `open ${c.pi.sessionId}`;
+			} catch (error) {
+				outcome = (error as Error).message;
+			}
+			disconnectOutcomes.set(JSON.stringify(c.key), outcome);
+		},
+		actions: {
+			destroySelf: (c) => {
+				c.destroy();
+			},
+		},
+	});
+	return setup({ use: { agent, sandboxed, timed, closing } });
 }
 
 beforeAll(async () => {
@@ -74,6 +108,10 @@ beforeAll(async () => {
 	mockModel.reply(
 		"answer slowly",
 		slowly(fauxAssistantMessage("word ".repeat(400))),
+	);
+	mockModel.reply(
+		"answer for two seconds",
+		slowly(fauxAssistantMessage(TWO_SECOND_ANSWER)),
 	);
 	mockModel.reply(
 		"create hello.txt",
@@ -167,19 +205,26 @@ describe("pi actor", () => {
 		await conn.dispose();
 	});
 
-	test("a prompt that outlives the action timeout rejects and its run stops", async (c) => {
+	test("a prompt that outlives the action timeout rejects, and its run still finishes", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const handle = client.timed.getOrCreate(["times-out", randomUUID()]);
 
-		await expect(handle.prompt("answer slowly")).rejects.toMatchObject({
-			code: "action_timed_out",
-		});
+		await expect(handle.prompt("answer for two seconds")).rejects.toMatchObject(
+			{ code: "action_timed_out" },
+		);
 
-		await handle.waitForIdle();
+		// The run continues after the action ends, and waitForIdle has the same one-second timeout.
+		await vi.waitFor(
+			async () => expect((await handle.getSession()).isStreaming).toBe(false),
+			{
+				timeout: 10_000,
+			},
+		);
 		const messages = await handle.getMessages();
 		expect(messages.at(-1)).toMatchObject({
 			role: "assistant",
-			stopReason: "aborted",
+			stopReason: "stop",
+			content: [{ type: "text", text: TWO_SECOND_ANSWER }],
 		});
 	});
 
@@ -288,6 +333,65 @@ describe("pi actor", () => {
 		await conn.dispose();
 	});
 
+	test("a hook that runs after the session closed gets an error from c.pi instead of reopening it", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["closed", randomUUID()];
+		const conn = client.closing.getOrCreate(key).connect();
+		await conn.getSession();
+
+		await client.closing.getOrCreate(key).destroySelf();
+		// Destroy closes the session, then disconnects the connection; the hook records what c.pi gave in this process.
+		await vi.waitFor(() =>
+			expect(disconnectOutcomes.get(JSON.stringify(key))).toBe(
+				"The Pi session is closed because the actor is stopping.",
+			),
+		);
+		await conn.dispose();
+	});
+
+	test("while the sandbox provider is down, history stays readable and sandbox work fails until it is back", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["outage", randomUUID()];
+		const handle = client.sandboxed.getOrCreate(key);
+		await handle.executeBash("echo kept > kept.txt");
+		await handle.nap();
+		// Any action would wake the actor, so wait for the sleep hook in this process.
+		await vi.waitFor(() =>
+			expect(sandboxedSleeps.get(JSON.stringify(key))).toBe(1),
+		);
+
+		sandboxProviderDown = true;
+		try {
+			expect(await handle.getMessages()).toBeInstanceOf(Array);
+			await expect(handle.executeBash("cat kept.txt")).rejects.toThrow();
+		} finally {
+			sandboxProviderDown = false;
+		}
+		expect((await handle.executeBash("cat kept.txt")).output.trim()).toBe(
+			"kept",
+		);
+	});
+
+	test("while the sandbox provider is down, a new actor's own actions and hooks run, and only reading c.pi fails", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["new-outage", randomUUID()];
+		const handle = client.sandboxed.getOrCreate(key);
+
+		sandboxProviderDown = true;
+		try {
+			// A new session needs the sandbox for its working directory.
+			await expect(handle.sessionId()).rejects.toThrow();
+			await handle.nap();
+			// Any action would wake the actor, so wait for the sleep hook in this process.
+			await vi.waitFor(() =>
+				expect(sandboxedSleeps.get(JSON.stringify(key))).toBe(1),
+			);
+		} finally {
+			sandboxProviderDown = false;
+		}
+		expect(await handle.sessionId()).toEqual(expect.any(String));
+	});
+
 	test("the sandbox outlives sleep, is replaced when deleted, and is destroyed with the actor", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const handle = client.sandboxed.getOrCreate(["lifecycle", randomUUID()]);
@@ -311,15 +415,19 @@ describe("pi actor", () => {
 			expect(await handle.sleeps()).toBe(2);
 		});
 		await rm(first.cwd, { recursive: true, force: true });
-		const replaced = await handle.getSession();
-		expect(replaced.sessionId).toBe(first.sessionId);
-		expect(replaced.cwd).not.toBe(first.cwd);
+		// A new sandbox replaces the deleted one. The session keeps its id and working directory.
+		expect(await handle.getSession()).toMatchObject({
+			sessionId: first.sessionId,
+			cwd: first.cwd,
+		});
 		expect((await handle.executeBash("test -e kept.txt")).exitCode).toBe(1);
+		const replacedDirectory = (await handle.executeBash("pwd")).output.trim();
+		expect(replacedDirectory).not.toBe(first.cwd);
 
 		await handle.destroySelf();
 		// Destruction runs after the action returns; poll the sandbox directory.
 		await vi.waitFor(async () => {
-			expect(await exists(replaced.cwd)).toBe(false);
+			expect(await exists(replacedDirectory)).toBe(false);
 		});
 	});
 });
@@ -329,6 +437,16 @@ function toolResult(events: AgentSessionEvent[], toolName: string) {
 		(event) =>
 			event.type === "tool_execution_end" && event.toolName === toolName,
 	);
+}
+
+function withOutage(provider: SandboxProvider): SandboxProvider {
+	return {
+		...provider,
+		connect: async (c, id) => {
+			if (sandboxProviderDown) throw new Error("sandbox provider is down");
+			return provider.connect(c, id);
+		},
+	};
 }
 
 function exists(path: string): Promise<boolean> {
