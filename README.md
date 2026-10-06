@@ -11,11 +11,7 @@ Agent infrastructure from [Rivet](https://rivet.dev). Join us on [Discord](https
 
 ## Releases
 
-`just release <target> --version <version>` releases one target with the script in [`scripts/release/`](./scripts/release/):
-
-- `sandbox-agent`: crates, npm packages, binaries, and Docker images, tagged `v<version>`.
-- `pi`: `@rivet-dev/pi`, tagged `pi-v<version>`.
-- `sandbox-adapter`: `@rivet-dev/sandbox-adapter`, tagged `sandbox-adapter-v<version>`.
+Everything in this repository ships on one version line. `just release` runs the release script in [`scripts/release/`](./scripts/release/), which bumps every package, publishes crates and npm packages, uploads binaries, and tags `v<version>`.
 
 ## License
 

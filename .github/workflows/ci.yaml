@@ -61,7 +61,7 @@ jobs:
           pnpm exec lefthook run pre-commit --no-stage-fixed --fail-on-changes "${args[@]}"
       - run: npm install -g tsx
       - name: Run checks
-        run: ./scripts/release/main.ts sandbox-agent --version 0.0.0 --only-steps run-ci-checks
+        run: ./scripts/release/main.ts --version 0.0.0 --only-steps run-ci-checks
       - name: Run ACP v1 server tests
         working-directory: sandbox-agent
         run: |
