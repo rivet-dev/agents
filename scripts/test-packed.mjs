@@ -39,15 +39,10 @@ function tarball(prefix) {
 const piTarball = tarball("rivet-dev-pi-");
 const adapterTarball = tarball("rivet-dev-sandbox-adapter-");
 
-const readManifest = async (path) =>
-	JSON.parse(
-		await readFile(join(repositoryRoot, path, "package.json"), "utf8"),
-	);
-const sourceManifests = {
-	"@rivet-dev/pi": await readManifest("packages/pi"),
-	"@rivet-dev/sandbox-adapter": await readManifest("packages/sandbox-adapter"),
-};
-const piDevDependencies = sourceManifests["@rivet-dev/pi"].devDependencies;
+const piManifest = JSON.parse(
+	await readFile(join(repositoryRoot, "packages/pi/package.json"), "utf8"),
+);
+const piDevDependencies = piManifest.devDependencies;
 
 const fixture = await mkdtemp(join(tmpdir(), "rivet-agents-packed-"));
 await writeFile(
@@ -72,8 +67,7 @@ await execFileAsync(
 	{ cwd: fixture },
 );
 
-// Each root package releases on its own, at its own version.
-for (const [name, source] of Object.entries(sourceManifests)) {
+for (const name of ["@rivet-dev/pi", "@rivet-dev/sandbox-adapter"]) {
 	const manifest = JSON.parse(
 		await readFile(join(fixture, "node_modules", name, "package.json"), "utf8"),
 	);
@@ -81,9 +75,9 @@ for (const [name, source] of Object.entries(sourceManifests)) {
 	if (serialized.includes("workspace:") || serialized.includes("catalog:")) {
 		throw new Error(`${name} contains an unpublished dependency specifier`);
 	}
-	if (manifest.version !== source.version) {
+	if (manifest.version !== piManifest.version) {
 		throw new Error(
-			`packed ${name}@${manifest.version} does not match its package.json (${source.version})`,
+			`${name}@${manifest.version} is off the release line (${piManifest.version})`,
 		);
 	}
 }
@@ -94,10 +88,11 @@ const packedPi = JSON.parse(
 		"utf8",
 	),
 );
-const adapterVersion = sourceManifests["@rivet-dev/sandbox-adapter"].version;
-if (packedPi.dependencies["@rivet-dev/sandbox-adapter"] !== adapterVersion) {
+if (
+	packedPi.dependencies["@rivet-dev/sandbox-adapter"] !== piManifest.version
+) {
 	throw new Error(
-		`packed @rivet-dev/pi must pin the sandbox adapter to its version (${adapterVersion})`,
+		"packed @rivet-dev/pi must pin the sandbox adapter to the release version",
 	);
 }
 

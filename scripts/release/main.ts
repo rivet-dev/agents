@@ -17,20 +17,7 @@ import {
 	validateGit,
 } from "./git";
 import { promoteArtifacts } from "./promote-artifacts";
-import {
-	publishCrates,
-	publishNpmCli,
-	publishNpmLibraries,
-	publishRootPackage,
-} from "./sdk";
-import {
-	parseReleaseTarget,
-	RELEASE_TARGETS,
-	type ReleaseTarget,
-	releaseTag,
-	rootPackage,
-	tagPrefix,
-} from "./target";
+import { publishCrates, publishNpmCli, publishNpmLibraries } from "./sdk";
 import { updateVersion } from "./update_version";
 import {
 	assert,
@@ -40,9 +27,9 @@ import {
 } from "./utils";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-// The release script lives at the repository root and releases one target per
-// run: Sandbox Agent, or one root package. Sandbox Agent keeps its own
-// workspace (Cargo, pnpm, Docker) under `sandbox-agent/`.
+// The release script lives at the repository root and releases everything in
+// the repository on one version line. Sandbox Agent keeps its own workspace
+// (Cargo, pnpm, Docker) under `sandbox-agent/`.
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const SANDBOX_AGENT_ROOT = path.join(REPO_ROOT, "sandbox-agent");
 
@@ -51,8 +38,6 @@ export interface ReleaseOpts {
 	repoRoot: string;
 	/** Sandbox Agent workspace root: Cargo, `sdks/`, Docker, and its docs. */
 	sandboxAgentRoot: string;
-	/** What this run releases. */
-	target: ReleaseTarget;
 	version: string;
 	latest: boolean;
 	minorVersionChannel: string;
@@ -62,8 +47,7 @@ export interface ReleaseOpts {
 	reuseEngineVersion?: string;
 }
 
-/** Released versions of `target`, newest first, read from its git tags. */
-async function getAllGitVersions(target: ReleaseTarget): Promise<string[]> {
+async function getAllGitVersions(): Promise<string[]> {
 	try {
 		// Fetch tags to ensure we have the latest
 		// Use --force to overwrite local tags that conflict with remote
@@ -75,9 +59,8 @@ async function getAllGitVersions(target: ReleaseTarget): Promise<string[]> {
 			);
 		}
 
-		// Get all version tags of this target
-		const prefix = tagPrefix(target);
-		const result = await $`git tag -l ${`${prefix}*`}`;
+		// Get all version tags
+		const result = await $`git tag -l v*`;
 		const tags = result.stdout.trim().split("\n").filter(Boolean);
 
 		if (tags.length === 0) {
@@ -86,7 +69,7 @@ async function getAllGitVersions(target: ReleaseTarget): Promise<string[]> {
 
 		// Parse and sort all versions (newest first)
 		const versions = tags
-			.map((tag) => tag.slice(prefix.length))
+			.map((tag) => tag.replace(/^v/, ""))
 			.filter((v) => semver.valid(v))
 			.sort((a, b) => semver.rcompare(a, b));
 
@@ -97,10 +80,8 @@ async function getAllGitVersions(target: ReleaseTarget): Promise<string[]> {
 	}
 }
 
-async function getLatestGitVersion(
-	target: ReleaseTarget,
-): Promise<string | null> {
-	const versions = await getAllGitVersions(target);
+async function getLatestGitVersion(): Promise<string | null> {
+	const versions = await getAllGitVersions();
 
 	if (versions.length === 0) {
 		return null;
@@ -115,10 +96,7 @@ async function getLatestGitVersion(
 	return stableVersions[0] || null;
 }
 
-async function shouldTagAsLatest(
-	newVersion: string,
-	target: ReleaseTarget,
-): Promise<boolean> {
+async function shouldTagAsLatest(newVersion: string): Promise<boolean> {
 	// Check if version has prerelease identifier
 	const parsedVersion = semver.parse(newVersion);
 	if (!parsedVersion) {
@@ -131,7 +109,7 @@ async function shouldTagAsLatest(
 	}
 
 	// Get the latest version from git tags
-	const latestGitVersion = await getLatestGitVersion(target);
+	const latestGitVersion = await getLatestGitVersion();
 
 	// If no previous versions exist, this is the latest
 	if (!latestGitVersion) {
@@ -239,12 +217,6 @@ async function checkRootPackages(opts: ReleaseOpts) {
 async function runLocalChecks(opts: ReleaseOpts) {
 	console.log("Running local checks...");
 
-	if (rootPackage(opts.target)) {
-		await checkRootPackages(opts);
-		console.log("✅ All local checks passed");
-		return;
-	}
-
 	// Cargo check
 	console.log("Running cargo check...");
 	try {
@@ -278,17 +250,13 @@ async function runLocalChecks(opts: ReleaseOpts) {
 		throw err;
 	}
 
+	await checkRootPackages(opts);
+
 	console.log("✅ All local checks passed");
 }
 
 async function runCiChecks(opts: ReleaseOpts) {
 	console.log("Running CI checks...");
-
-	if (rootPackage(opts.target)) {
-		await checkRootPackages(opts);
-		console.log("✅ All CI checks passed");
-		return;
-	}
 
 	// TypeScript type check
 	console.log("Running TypeScript type check...");
@@ -300,18 +268,17 @@ async function runCiChecks(opts: ReleaseOpts) {
 		throw err;
 	}
 
+	await checkRootPackages(opts);
+
 	console.log("✅ All CI checks passed");
 }
 
-async function getVersionFromArgs(
-	target: ReleaseTarget,
-	opts: {
-		version?: string;
-		major?: boolean;
-		minor?: boolean;
-		patch?: boolean;
-	},
-): Promise<string> {
+async function getVersionFromArgs(opts: {
+	version?: string;
+	major?: boolean;
+	minor?: boolean;
+	patch?: boolean;
+}): Promise<string> {
 	// Check if explicit version is provided via --version flag
 	if (opts.version) {
 		return opts.version;
@@ -325,7 +292,7 @@ async function getVersionFromArgs(
 	}
 
 	// Get latest version from git tags and calculate new one
-	const latestVersion = await getLatestGitVersion(target);
+	const latestVersion = await getLatestGitVersion();
 	if (!latestVersion) {
 		throw new Error(
 			"No existing version tags found. Use --version to set an explicit version.",
@@ -364,7 +331,6 @@ const STEPS = [
 	"publish-crates",
 	"publish-npm-libraries",
 	"publish-npm-cli",
-	"publish-npm-package",
 	"tag-docker",
 	"promote-artifacts",
 	"push-tag",
@@ -376,8 +342,8 @@ const PHASES = ["setup-local", "setup-ci", "complete-ci"] as const;
 type Step = (typeof STEPS)[number];
 type Phase = (typeof PHASES)[number];
 
-// Map Sandbox Agent's phases to individual steps
-const SANDBOX_AGENT_PHASES: Record<Phase, Step[]> = {
+// Map phases to individual steps
+const PHASE_MAP: Record<Phase, Step[]> = {
 	// These steps modify the source code, so they need to be ran & committed
 	// locally. CI cannot push commits.
 	//
@@ -409,21 +375,6 @@ const SANDBOX_AGENT_PHASES: Record<Phase, Step[]> = {
 	],
 };
 
-// A root package builds and publishes only itself, so it has no artifacts,
-// crates, or Docker images.
-const ROOT_PACKAGE_PHASES: Record<Phase, Step[]> = {
-	"setup-local": [
-		"confirm-release",
-		"update-version",
-		"run-local-checks",
-		"git-commit",
-		"git-push",
-		"trigger-workflow",
-	],
-	"setup-ci": ["run-ci-checks"],
-	"complete-ci": ["publish-npm-package", "push-tag", "create-github-release"],
-};
-
 async function main() {
 	if (await configureVcs(REPO_ROOT)) {
 		const { stdout } = await $({ cwd: REPO_ROOT })`jj git root`;
@@ -434,8 +385,7 @@ async function main() {
 	// Setup commander
 	program
 		.name("release")
-		.description("Release Sandbox Agent or one root package")
-		.argument("<target>", `What to release: ${RELEASE_TARGETS.join(", ")}`)
+		.description("Release a new version of sandbox-agent")
 		.option("--major", "Bump major version")
 		.option("--minor", "Bump minor version")
 		.option("--patch", "Bump patch version")
@@ -462,11 +412,6 @@ async function main() {
 		.parse();
 
 	const opts = program.opts();
-	const target = parseReleaseTarget(program.args[0]);
-	const phaseMap = rootPackage(target)
-		? ROOT_PACKAGE_PHASES
-		: SANDBOX_AGENT_PHASES;
-	const targetSteps = new Set(Object.values(phaseMap).flat());
 
 	// Parse requested steps
 	if (!opts.phase && !opts.onlySteps) {
@@ -486,9 +431,6 @@ async function main() {
 					`Invalid step: ${step}. Available steps: ${STEPS.join(", ")}`,
 				);
 			}
-			if (!targetSteps.has(step as Step)) {
-				throw new Error(`Step ${step} does not apply to ${target}`);
-			}
 			requestedSteps.add(step as Step);
 		}
 	} else if (opts.phase) {
@@ -499,7 +441,7 @@ async function main() {
 					`Invalid phase: ${phase}. Available phases: ${PHASES.join(", ")}`,
 				);
 			}
-			const steps = phaseMap[phase as Phase];
+			const steps = PHASE_MAP[phase as Phase];
 			for (const step of steps) {
 				requestedSteps.add(step);
 			}
@@ -512,7 +454,7 @@ async function main() {
 	};
 
 	// Get version from arguments or calculate based on flags
-	const version = await getVersionFromArgs(target, {
+	const version = await getVersionFromArgs({
 		version: opts.version,
 		major: opts.major,
 		minor: opts.minor,
@@ -534,7 +476,7 @@ async function main() {
 		isLatest = opts.latest;
 	} else {
 		// Auto-determine based on version
-		isLatest = await shouldTagAsLatest(version, target);
+		isLatest = await shouldTagAsLatest(version);
 		console.log(
 			`Auto-determined latest flag: ${isLatest} (version: ${version})`,
 		);
@@ -557,7 +499,6 @@ async function main() {
 	const releaseOpts: ReleaseOpts = {
 		repoRoot: REPO_ROOT,
 		sandboxAgentRoot: SANDBOX_AGENT_ROOT,
-		target,
 		version: version,
 		latest: isLatest,
 		minorVersionChannel,
@@ -579,14 +520,6 @@ async function main() {
 	if (shouldRunStep("confirm-release")) {
 		console.log("==> Release Confirmation");
 		console.log(`\nRelease Details:`);
-		console.log(`  Target: ${releaseOpts.target}`);
-		const pkg = rootPackage(releaseOpts.target);
-		console.log(
-			`  Publishes: ${pkg ? `${pkg.name}@${releaseOpts.version}` : `Sandbox Agent ${releaseOpts.version} (crates, binaries, Docker images, npm packages)`}`,
-		);
-		console.log(
-			`  Tag: ${releaseTag(releaseOpts.target, releaseOpts.version)}`,
-		);
 		console.log(`  Version: ${releaseOpts.version}`);
 		console.log(`  Latest: ${releaseOpts.latest}`);
 		console.log(`  Minor channel: ${releaseOpts.minorVersionChannel}`);
@@ -602,7 +535,7 @@ async function main() {
 		console.log(`  Branch: ${branch}`);
 
 		// Get and display recent versions
-		const allVersions = await getAllGitVersions(releaseOpts.target);
+		const allVersions = await getAllGitVersions();
 
 		if (allVersions.length > 0) {
 			// Find the latest stable version (excluding prereleases)
@@ -669,7 +602,7 @@ async function main() {
 		const latestFlag = releaseOpts.latest ? "true" : "false";
 
 		// Build workflow command
-		let workflowCmd = `gh workflow run .github/workflows/release.yaml -f target=${releaseOpts.target} -f version=${releaseOpts.version} -f latest=${latestFlag}`;
+		let workflowCmd = `gh workflow run .github/workflows/release.yaml -f version=${releaseOpts.version} -f latest=${latestFlag}`;
 		if (releaseOpts.reuseEngineVersion) {
 			workflowCmd += ` -f reuse_engine_version=${releaseOpts.reuseEngineVersion}`;
 		}
@@ -717,11 +650,6 @@ async function main() {
 	if (shouldRunStep("publish-npm-cli")) {
 		console.log("==> Publishing NPM CLI");
 		await publishNpmCli(releaseOpts);
-	}
-
-	if (shouldRunStep("publish-npm-package")) {
-		console.log("==> Publishing NPM Package");
-		await publishRootPackage(releaseOpts);
 	}
 
 	if (shouldRunStep("tag-docker")) {
