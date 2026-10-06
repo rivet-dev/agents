@@ -47,11 +47,14 @@ export type NanocodexAgentOptions = DistributiveOmit<
 
 /**
  * Returns nanocodex's model transport, such as
- * `Transport.openAi({ apiKey })` from `nanocodex/node`. Called once per actor
- * generation, when the agent opens.
+ * `Transport.openAi({ apiKey })` from `nanocodex/node` or
+ * `chatGptSubscription(...)`. Called once per actor generation, when the agent
+ * opens. `closed` aborts when the agent closes, so the transport can release
+ * what it opened.
  */
 export type NanocodexTransport = (
 	c: NanocodexContext,
+	closed: AbortSignal,
 ) => Transport.ResponsesTransport | Promise<Transport.ResponsesTransport>;
 
 /** The nanocodex options of `nanocodex()`, beside the ordinary actor config. */
@@ -89,6 +92,8 @@ export interface NanocodexTurnResult {
 interface OpenAgent {
 	agent: DefaultAgent;
 	events: EventWatcher;
+	/** Aborts when the agent closes, which releases what the transport opened. */
+	closed: AbortController;
 }
 
 interface RunningTurn {
@@ -185,23 +190,30 @@ async function openAgent(
 	const sandbox = options.sandbox
 		? await connectRuntimeSandbox(c, runtime, options.sandbox)
 		: undefined;
-	const agent = await Agent.create({
-		...options.agent,
-		transport: await options.transport(c),
-		durability: durabilityStore(c.db),
-		durabilityId: sessionId,
-		sessionId,
-		...(sandbox
-			? {
-					workspace: sandbox.sandbox.cwd,
-					filesystem: sandboxWorkspace(sandbox.sandbox),
-					tools: withExecCommand(options.agent?.tools, sandbox),
-				}
-			: {}),
-	});
+	const closed = new AbortController();
+	let agent: DefaultAgent;
+	try {
+		agent = await Agent.create({
+			...options.agent,
+			transport: await options.transport(c, closed.signal),
+			durability: durabilityStore(c.db),
+			durabilityId: sessionId,
+			sessionId,
+			...(sandbox
+				? {
+						workspace: sandbox.sandbox.cwd,
+						filesystem: sandboxWorkspace(sandbox.sandbox),
+						tools: withExecCommand(options.agent?.tools, sandbox),
+					}
+				: {}),
+		});
+	} catch (error) {
+		closed.abort();
+		throw error;
+	}
 	const events = agent.events.watch();
 	events.onEvent((event) => broadcastAgentEvent(c, event));
-	return { agent, events };
+	return { agent, events, closed };
 }
 
 function connectRuntimeSandbox(
@@ -383,6 +395,7 @@ export async function closeNanocodex(
 function releaseAgent(opened: OpenAgent): void {
 	opened.events.off();
 	opened.agent.dispose();
+	opened.closed.abort();
 }
 
 async function untilDeadline(

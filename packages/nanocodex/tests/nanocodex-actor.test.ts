@@ -3,10 +3,15 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Transport } from "nanocodex/node";
-import { setup } from "rivetkit";
+import { type Registry, setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { nanocodex } from "../src/index.js";
+import {
+	chatGptCredentials,
+	chatGptSubscription,
+	nanocodex,
+} from "../src/index.js";
+import { jwt, startIssuer } from "./helpers/issuer.js";
 import { localSandboxProvider } from "./helpers/local-sandbox.js";
 import {
 	exec,
@@ -16,7 +21,12 @@ import {
 } from "./helpers/responses-server.js";
 import { createSleepCounter } from "./helpers/sleeps.js";
 
+const SECRET = "test-secret";
+// The engine keeps actor state between runs, so each run seeds its own credentials actor.
+const CREDENTIALS_KEY = [randomUUID()];
+
 let model: ResponsesServer;
+let issuer: Awaited<ReturnType<typeof startIssuer>>;
 let sandboxRoot: string;
 let registry: ReturnType<typeof buildRegistry>;
 const sleeps = createSleepCounter();
@@ -43,7 +53,30 @@ function buildRegistry() {
 		transport,
 		sandbox: localSandboxProvider(sandboxRoot),
 	});
-	return setup({ use: { coder, hasty, sandboxed } });
+	const chatgptCredentials = chatGptCredentials({
+		secret: SECRET,
+		issuer: issuer.url,
+		// Already expired, so the first model call refreshes it.
+		seed: {
+			accessToken: jwt({ exp: Math.floor(Date.now() / 1000) - 60 }),
+			refreshToken: "refresh-1",
+			accountId: "account-1",
+		},
+	});
+	const subscriber = nanocodex({
+		transport: chatGptSubscription(
+			(c) =>
+				c
+					.client<Registry<{ chatgptCredentials: typeof chatgptCredentials }>>()
+					.chatgptCredentials.getOrCreate(CREDENTIALS_KEY, {
+						params: { secret: SECRET },
+					}),
+			{ websocketUrl: model.url },
+		),
+	});
+	return setup({
+		use: { coder, hasty, sandboxed, chatgptCredentials, subscriber },
+	});
 }
 
 /** Resolves `release()` once a test lets the held model reply go. */
@@ -57,12 +90,14 @@ function gate() {
 
 beforeAll(async () => {
 	model = await startResponsesServer();
+	issuer = await startIssuer();
 	sandboxRoot = await mkdtemp(join(tmpdir(), "rivet-nanocodex-test-"));
 	registry = buildRegistry();
 });
 
 afterAll(async () => {
 	await model?.close();
+	await issuer?.close();
 	if (sandboxRoot) await rm(sandboxRoot, { recursive: true, force: true });
 });
 
@@ -216,5 +251,51 @@ describe("nanocodex actor", () => {
 			),
 		);
 		expect(contents).toContain("hi from nanocodex");
+	});
+
+	test("the credentials actor rejects a caller without its secret", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["rejects", randomUUID()];
+		await expect(
+			client.chatgptCredentials.getOrCreate(key).status(),
+		).rejects.toMatchObject({
+			code: "unauthorized",
+		});
+		await expect(
+			client.chatgptCredentials
+				.getOrCreate(key, { params: { secret: SECRET } })
+				.status(),
+		).resolves.toMatchObject({
+			state: "authenticated",
+			accountId: "account-1",
+		});
+	});
+
+	test("conversation actors that hit an expired ChatGPT token refresh it once", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const before = issuer.refreshes;
+		const input = `subscribed ${randomUUID()}`;
+		const results = await Promise.all(
+			[0, 1].map(() =>
+				client.subscriber
+					.getOrCreate(["subscriber", randomUUID()])
+					.turn.prompt({
+						input,
+					}),
+			),
+		);
+		expect(results.map((r) => r.finalMessage)).toEqual(["ok", "ok"]);
+		expect(issuer.refreshes - before).toBe(1);
+		for (const request of model.requests.filter((r) => r.prompt === input)) {
+			expect(request.headers["chatgpt-account-id"]).toBe("account-1");
+			const token = String(request.headers.authorization).replace(
+				"Bearer ",
+				"",
+			);
+			const claims = JSON.parse(
+				Buffer.from(token.split(".")[1] ?? "", "base64url").toString(),
+			);
+			expect(claims.generation).toBe(before + 1);
+		}
 	});
 });
