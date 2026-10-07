@@ -42,47 +42,25 @@ const PI_OAUTH_MIN_VALIDITY_MS = 5 * 60_000;
 
 /**
  * Adapts an application's credential source to Pi's credential store. It
- * reads only providers the source lists, keeps what it read until
- * `invalidate` runs, and never writes.
+ * reads only providers the source lists, asks the source each time Pi needs a
+ * credential, so logins and logouts apply to the next model call, and never
+ * writes.
  */
 export class SourceCredentialStore implements PiCredentialStore {
 	readonly #source: PiCredentialSource;
-	#listed: Promise<PiCredentialInfo[]> | undefined;
-	readonly #read = new Map<string, Promise<PiCredential | undefined>>();
 
 	constructor(source: PiCredentialSource) {
 		this.#source = source;
 	}
 
-	/** Drops what was read so the next read sees new logins and logouts. */
-	invalidate(): void {
-		this.#listed = undefined;
-		this.#read.clear();
-	}
-
 	list(): Promise<PiCredentialInfo[]> {
-		this.#listed ??= this.#source.list().catch((error: unknown) => {
-			this.#listed = undefined;
-			throw error;
-		});
-		return this.#listed;
+		return this.#source.list();
 	}
 
 	async read(providerId: string): Promise<PiCredential | undefined> {
 		if (!(await this.list()).some((entry) => entry.providerId === providerId))
 			return undefined;
-		let read = this.#read.get(providerId);
-		if (!read) {
-			read = this.#source
-				.read(providerId)
-				.then(toPiCredential)
-				.catch((error: unknown) => {
-					this.#read.delete(providerId);
-					throw error;
-				});
-			this.#read.set(providerId, read);
-		}
-		return read;
+		return toPiCredential(await this.#source.read(providerId));
 	}
 
 	/**
@@ -95,23 +73,16 @@ export class SourceCredentialStore implements PiCredentialStore {
 			current: PiCredential | undefined,
 		) => Promise<PiCredential | undefined>,
 	): Promise<PiCredential | undefined> {
-		const refreshed = this.#source.refresh(providerId).then((credential) => {
-			if (
-				credential?.type === "oauth" &&
-				credential.expires - Date.now() <= PI_OAUTH_MIN_VALIDITY_MS
-			) {
-				throw new Error(
-					`the credential source returned a ${providerId} token that expires within five minutes`,
-				);
-			}
-			return toPiCredential(credential);
-		});
-		this.#read.set(providerId, refreshed);
-		refreshed.catch(() => {
-			if (this.#read.get(providerId) === refreshed)
-				this.#read.delete(providerId);
-		});
-		const current = await refreshed;
+		const credential = await this.#source.refresh(providerId);
+		if (
+			credential?.type === "oauth" &&
+			credential.expires - Date.now() <= PI_OAUTH_MIN_VALIDITY_MS
+		) {
+			throw new Error(
+				`the credential source returned a ${providerId} token that expires within five minutes`,
+			);
+		}
+		const current = toPiCredential(credential);
 		if ((await fn(current)) !== undefined) {
 			throw new Error(
 				`pi actor cannot store credentials for ${providerId}; the credential source owns them`,
