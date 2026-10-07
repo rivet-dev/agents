@@ -1,35 +1,56 @@
 ---
 title: "Sandboxes"
-description: "Run an agent's file and shell tools in E2B, Daytona, or a sandbox provider you write."
+description: "Run an agent without a sandbox, or give it a shell in E2B, Daytona, agentOS, or a sandbox provider you write."
 ---
 
-An agent's file and shell tools run in a sandbox, not on your worker. [`@rivet-dev/sandbox-adapter`](https://github.com/rivet-dev/agents/tree/main/packages/sandbox-adapter) gives each Actor its own sandbox.
+An agent doesn't need a sandbox. Without one, its file tools work on files in the Actor's own database. Add a sandbox only when the agent needs a shell.
+
+| | Files | Shell | Setup |
+| --- | --- | --- | --- |
+| **No sandbox** | In the Actor's SQLite database | None. `bash` returns an error. | None |
+| **Sandbox** | In the sandbox | `bash` runs in the sandbox | A provider account or agentOS |
+
+## Without a sandbox
+
+Leave out the `sandbox` option. Pi's `read`, `write`, and `edit` tools then work on files stored in the Actor's own SQLite database:
+
+<CodeSnippet file="examples/docs/sandboxes/no-sandbox.ts" title="server.ts" />
+
+- **Nothing to provision.** There is no sandbox to create, pay for, pause, or delete.
+- **Files are durable.** They are saved with the conversation and survive sleep, crashes, and upgrades.
+- **No shell.** `bash` returns an error, so this agent installs only the file tools.
+
+See [Built-in Tools](/agents/docs/built-in-tools) for what each tool does.
+
+## With a sandbox
+
+When the agent needs to run commands, such as tests or a build, pass a sandbox provider. <a href="https://github.com/rivet-dev/agents/tree/main/packages/sandbox-adapter" target="_blank" rel="noopener noreferrer">`@rivet-dev/sandbox-adapter`</a> gives each Actor its own sandbox, and `CodingTools` run there.
 
 <div style="overflow-x:auto">
-<svg viewBox="0 0 676 190" role="img" aria-label="The agent Actor sends tool calls through the sandbox adapter, which creates and connects to one sandbox per Actor from a sandbox provider: E2B, Daytona, or your own provider." style="width:100%;min-width:520px;max-width:676px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+<svg viewBox="0 0 676 246" role="img" aria-label="The agent Actor sends tool calls through the sandbox adapter, which creates and connects to one sandbox per Actor from a sandbox provider: E2B, Daytona, or agentOS." style="width:100%;min-width:520px;max-width:676px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
   <defs>
     <marker id="sandboxes-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
   </defs>
-  <rect x="484" y="30" width="172" height="140" rx="10" style="fill:rgb(var(--site-paper-mid, 250 248 243));stroke:rgb(var(--site-pine, 46 64 52));stroke-width:1.4;stroke-dasharray:7 6"/>
+  <rect x="484" y="30" width="172" height="196" rx="10" style="fill:rgb(var(--site-paper-mid, 250 248 243));stroke:rgb(var(--site-pine, 46 64 52));stroke-width:1.4;stroke-dasharray:7 6"/>
   <text x="484" y="20" font-size="11" font-family="ui-monospace, monospace" font-weight="600" letter-spacing="0.14em" style="fill:rgb(var(--site-pine, 46 64 52))">SANDBOX PROVIDERS</text>
-  <rect x="20" y="72" width="140" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
-  <rect x="260" y="72" width="160" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="20" y="100" width="140" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="260" y="100" width="160" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
   <rect x="500" y="46" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
-  <rect x="500" y="110" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <rect x="500" y="106" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <rect x="500" y="166" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
   <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
-    <path d="M161 100 L258 100" marker-end="url(#sandboxes-arrow)"/>
-    <path d="M421 100 L482 100" marker-end="url(#sandboxes-arrow)"/>
+    <path d="M161 128 L258 128" marker-end="url(#sandboxes-arrow)"/>
+    <path d="M421 128 L482 128" marker-end="url(#sandboxes-arrow)"/>
   </g>
-  <text x="90" y="105" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
-  <text x="340" y="97" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox adapter</text>
-  <text x="340" y="114" text-anchor="middle" font-size="12" fill="#56524a">SandboxProvider</text>
+  <text x="90" y="133" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="340" y="125" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox adapter</text>
+  <text x="340" y="142" text-anchor="middle" font-size="12" fill="#56524a">SandboxProvider</text>
   <text x="570" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">E2B</text>
-  <text x="570" y="137" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Daytona</text>
-  <text x="209.5" y="91" text-anchor="middle" font-size="12" fill="#56524a">tool calls</text>
+  <text x="570" y="133" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Daytona</text>
+  <text x="570" y="193" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">agentOS</text>
+  <text x="209.5" y="119" text-anchor="middle" font-size="12" fill="#56524a">tool calls</text>
 </svg>
 </div>
-
-## Quickstart
 
 <Steps>
 
@@ -49,21 +70,20 @@ npm add @rivet-dev/sandbox-adapter e2b
 
 </Steps>
 
-Without a sandbox, Pi's built-in file and shell tools are turned off and the agent only has the `customTools` you pass. [Pi Durable](/agents/docs/pi-durable) takes the same providers as `sandbox`, and runs its `CodingTools` there.
-
 ## Providers
 
 | Provider | SDK | While the Actor sleeps | When the Actor is destroyed |
 | --- | --- | --- | --- |
-| [E2B](https://e2b.dev) | `e2b` | Paused | Deleted |
-| [Daytona](https://daytona.io) | `@daytonaio/sdk` | Stopped | Deleted |
+| <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer">E2B</a> | `e2b` | Paused | Deleted |
+| <a href="https://daytona.io" target="_blank" rel="noopener noreferrer">Daytona</a> | `@daytonaio/sdk` | Stopped | Deleted |
+| agentOS | None | Sleeps when idle, and keeps its files | Left in place |
 
 Provider credentials stay on your worker and never enter the sandbox.
 
 ### E2B
 
 ```sh
-npm add e2b
+npm add @rivet-dev/sandbox-adapter e2b
 ```
 
 <CodeSnippet file="examples/docs/sandboxes/e2b.ts" title="server.ts" />
@@ -79,7 +99,7 @@ E2B ends a sandbox when its timeout runs out, so the provider creates sandboxes 
 ### Daytona
 
 ```sh
-npm add @daytonaio/sdk
+npm add @rivet-dev/sandbox-adapter @daytonaio/sdk
 ```
 
 <CodeSnippet file="examples/docs/sandboxes/daytona.ts" title="server.ts" />
@@ -91,26 +111,42 @@ npm add @daytonaio/sdk
 
 The working directory is the sandbox's own working directory. A stopped sandbox is started again the next time the Actor uses it.
 
+### agentOS
+
+```sh
+npm add @rivet-dev/sandbox-adapter
+```
+
+<CodeSnippet file="examples/docs/sandboxes/agentos.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `cwd` | Working directory inside the VM. Defaults to `/workspace`. |
+| `software` | Packages installed when the VM is created, such as coreutils for `sh`. |
+
+The VM is an agentOS Actor in the `services` pool, with the key `["sandbox", <agent Actor id>]`. It keeps its files in its own SQLite database, so they persist while the agent sleeps. The VM sleeps on its own when idle. Destroying the agent leaves the VM and its files in place.
+
 ## How the sandbox is managed
 
 - The sandbox is created the first time the agent needs it.
-- After a wake, the Actor reconnects to the same sandbox the first time a tool or `executeBash` needs it. If it no longer exists, a new one is created and the old files are lost.
+- After a wake, the Actor reconnects to the same sandbox the first time a tool needs it. If it no longer exists, a new one is created and the old files are lost.
 - Actions that don't touch the sandbox keep working while the provider is down.
 - An existing Actor cannot switch to a different provider.
 - Commands run with the sandbox's environment, not your worker's. File tools reject paths outside the working directory, but shell commands can reach anything inside the sandbox.
+- Binary file writes aren't supported yet.
 
 ## Write your own provider
 
-Any sandbox can back an agent. Implement [`SandboxProvider`](https://github.com/rivet-dev/agents/blob/main/packages/sandbox-adapter/src/index.ts) and pass it as `sandbox`. One provider object is shared by every Actor of a definition, so keep no per-Actor state in it; the Actor stores the sandbox id.
+Any sandbox can back an agent. Implement <a href="https://github.com/rivet-dev/agents/blob/main/packages/sandbox-adapter/src/index.ts" target="_blank" rel="noopener noreferrer">`SandboxProvider`</a> and pass it as `sandbox`. One provider object is shared by every Actor of a definition, so keep no per-Actor state in it. The Actor stores the sandbox id.
 
 | Member | Description |
 | --- | --- |
 | `name` | Stored next to the sandbox id, so a changed provider is detected on wake. |
 | `create(c)` | Provisions a new sandbox and returns its id. |
-| `connect(c, id)` | Connects to an existing sandbox and returns a `Sandbox`. Returns `undefined` when the sandbox no longer exists. |
-| `suspend(c, id)` | Optional. Releases resources while the Actor sleeps. When omitted, the sandbox stops itself when idle or keeps running, depending on the provider. |
-| `destroy(c, id)` | Optional. Deletes the sandbox when the Actor is destroyed. When omitted, the sandbox is left in place. |
+| `connect(c, id)` | Connects to an existing sandbox and returns a `Sandbox`. Returns `undefined` when the sandbox no longer exists. |
+| `suspend(c, id)` | Optional. Releases resources while the Actor sleeps. When omitted, the sandbox stops itself when idle or keeps running, depending on the provider. |
+| `destroy(c, id)` | Optional. Deletes the sandbox when the Actor is destroyed. When omitted, the sandbox is left in place. |
 
-The `Sandbox` that `connect` returns has a `cwd` and the operations the tools run: `exec`, `readFile`, `writeFile`, `mkdir`, `stat`, `readdir`, and `exists`. All paths are absolute paths inside the sandbox. See the [E2B provider](https://github.com/rivet-dev/agents/blob/main/packages/sandbox-adapter/src/e2b.ts) for a complete example.
+The context `c` carries the owning Actor's `actorId` and a `client()` for your registry. The `Sandbox` that `connect` returns has a `cwd` and the operations the tools run: `exec`, `readFile`, `writeFile`, `mkdir`, `stat`, `readdir`, and `exists`. All paths are absolute paths inside the sandbox. See the <a href="https://github.com/rivet-dev/agents/blob/main/packages/sandbox-adapter/src/e2b.ts" target="_blank" rel="noopener noreferrer">E2B provider</a> for a complete example.
 
 **Next:** [Custom Tools](/agents/docs/custom-tools), tools that run in your backend.

@@ -1,13 +1,18 @@
+import { createRegistry, defineExtension } from "@earendil-works/pi-durable";
+import { createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-durable/tools";
 import { pi } from "@rivet-dev/pi";
-import { e2bProvider } from "@rivet-dev/sandbox-adapter/e2b";
 import { setup } from "rivetkit";
 
-const reviewer = pi({
+// This agent has no sandbox, so its files live in the Actor's own database.
+// There is no shell, so it gets read, write, and edit without bash.
+const extensions = createRegistry();
+extensions.install(defineExtension({ name: "files", tools: [createReadTool(), createWriteTool(), createEditTool()] }));
+
+const writer = pi({
 	model: "anthropic/claude-opus-5-5",
-	sandbox: e2bProvider(),
-	excludeTools: ["bash", "edit", "write"],
+	registry: extensions,
 });
 
-export const registry = setup({ use: { reviewer } });
+export const registry = setup({ use: { writer } });
 
 registry.start();

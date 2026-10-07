@@ -33,7 +33,7 @@ description: "Mention an agent in a Linear issue comment."
 
 <Step title="Create an API key">
 
-Create a Linear user for the agent, or use your own, and a [personal API key](https://linear.app/settings/account/security) for it with read and create-comments access.
+Create a Linear user for the agent, or use your own, and a <a href="https://linear.app/settings/account/security" target="_blank" rel="noopener noreferrer">personal API key</a> for it with read and create-comments access.
 
 </Step>
 
@@ -74,9 +74,11 @@ In Linear's **Settings > Administration > API**, which needs admin rights, creat
 ## How it works
 
 - The route verifies the `Linear-Signature` HMAC against the raw body and rejects deliveries older than a minute.
-- Each Linear issue gets its own agent. Every comment with the trigger continues the same session.
+- Each Linear issue gets its own agent. Every comment with the trigger continues the same conversation.
 - The route never answers the agent's own comments, so replies do not loop.
-- The route only hands the comment to the agent's `receive` action and returns. The `receive` action adds the message to the agent's queue and schedules `drain`, which prompts the agent with the oldest message and posts the answer as a comment with the Linear SDK. A message that arrives while the agent is answering waits in the queue. The queue is saved with the agent, so replies still run if the request that delivered a message goes away.
+- The route only hands the comment to the agent's `receive` action and returns. The `receive` action schedules `reply`, which prompts the agent and posts the answer as a comment with the Linear SDK. The schedule is saved with the agent, so the reply still runs if the request that delivered the message goes away.
+- A message that arrives while the agent is answering waits as a follow-up, and gets its own reply when its run ends.
+- The prompt's `requestId` is the comment's id, so a comment that Linear delivers twice runs the agent only once.
 
 ## Configure
 
@@ -91,4 +93,4 @@ In Linear's **Settings > Administration > API**, which needs admin rights, creat
 
 | Linear event | Webhook path | What the route does |
 | --- | --- | --- |
-| [`Comment`](https://linear.app/developers/webhooks), `create` | `/linear/webhook` | Hands the comment to the issue's agent, which replies with a comment. |
+| <a href="https://linear.app/developers/webhooks" target="_blank" rel="noopener noreferrer">`Comment`</a>, `create` | `/linear/webhook` | Hands the comment to the issue's agent, which replies with a comment. |

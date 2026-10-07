@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { createClient } from "rivetkit/client";
 import type { registry } from "./server";
 
-export type SlackThread = { channel: string; threadTs: string; text: string };
+export type SlackThread = { eventId: string; channel: string; threadTs: string; text: string };
 
 const web = new WebClient(process.env.SLACK_BOT_TOKEN);
 const client = createClient<typeof registry>();
@@ -26,7 +26,7 @@ slack.post("/events", async (c) => {
 	if (payload.type === "event_callback" && event?.type === "app_mention") {
 		const threadTs = event.thread_ts ?? event.ts;
 		const agent = client.agent.getOrCreate([payload.team_id, event.channel, threadTs]);
-		await agent.receive({ channel: event.channel, threadTs, text: event.text });
+		await agent.receive({ eventId: payload.event_id, channel: event.channel, threadTs, text: event.text });
 	}
 	return c.body(null, 200);
 });

@@ -1,3 +1,4 @@
+import { createRegistry } from "@earendil-works/pi-durable";
 import { pi } from "@rivet-dev/pi";
 import { Hono } from "hono";
 import { setup } from "rivetkit";
@@ -5,29 +6,18 @@ import { postReply, slack, type SlackThread } from "./slack";
 
 const agent = pi({
 	model: "anthropic/claude-opus-5-5",
-	state: { pending: [] as SlackThread[] },
-	vars: { replying: false },
+	registry: createRegistry(),
 	actions: {
+		// Schedules the answer and returns, so the route can respond in time.
 		receive: async (c, thread: SlackThread) => {
-			c.state.pending.push(thread);
-			await c.schedule.after(0, "drain");
+			await c.schedule.after(0, "reply", thread);
 		},
-		// Answers the oldest message. Messages that arrive mid-run wait their turn.
-		drain: async (c): Promise<void> => {
-			const thread = c.state.pending[0];
-			if (!thread || c.vars.replying) return;
-			c.vars.replying = true;
-			try {
-				const self = c.client<typeof registry>().agent.getForId(c.actorId);
-				await self.prompt(thread.text);
-				await postReply(thread, await self.getLastAssistantText());
-			} catch (error) {
-				c.log.error({ msg: "reply failed", error });
-			} finally {
-				c.state.pending.shift();
-				c.vars.replying = false;
-			}
-			if (c.state.pending.length > 0) await c.schedule.after(0, "drain");
+		reply: async (c, thread: SlackThread): Promise<void> => {
+			const self = c.client<typeof registry>().agent.getForId(c.actorId);
+			// A message sent during a run waits as a follow-up.
+			// The requestId stops a duplicate delivery from running twice.
+			const result = await self.prompt(thread.text, { requestId: thread.eventId });
+			await postReply(thread, result.status === "done" ? result.text : undefined);
 		},
 	},
 });

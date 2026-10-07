@@ -3,7 +3,7 @@ title: "Client SDK"
 description: "Call an agent from your backend, scripts, or any JavaScript runtime, and stream its events."
 ---
 
-Call an agent from your backend, a script, or any JavaScript runtime with `rivetkit/client`.
+The client is the `rivetkit/client` package. It calls actions on the agent and gets the agent's events over a connection. A browser connects with a short-lived token from your backend.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 640 300" role="img" aria-label="client.ts calls actions on the agent and receives its events over a connection. A browser fetches a short-lived token from token.ts, then connects to the agent with it." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -42,19 +42,30 @@ Call an agent from your backend, a script, or any JavaScript runtime with `rivet
 ## Handles and connections
 
 - With no options, `createClient()` reads `RIVET_ENDPOINT`, `RIVET_NAMESPACE`, and `RIVET_TOKEN` from the environment, and defaults to a local Rivet at `localhost:6420`.
-- The `getOrCreate` method returns a handle to the agent with that key, and creates the agent on first use. Actions called on the handle, like `getMessages`, are single requests.
-- Calling `connect()` opens a live connection that receives the session's events. Actions called before it opens wait until it does.
+- The `getOrCreate` method returns a handle to the agent with that key, and creates the agent on first use. Actions called on the handle, like `conversation.context`, are single requests.
+- An agent starts with one root conversation. The `harness.root()` action returns its id, and `prompt` uses it unless you pass a `conversationId`.
+- Calling `connect()` opens a live connection that can receive events. Actions called before it opens wait until it does.
 - A dropped connection reconnects on its own. The `onStatusChange` callback reports `connecting`, `connected`, and `disconnected`, and `idle` after `dispose()` closes the connection for good.
 
 ## Events
 
-A listener added with `on("event", ...)` receives every event of the session as the agent works. See [Session Lifecycle](/agents/docs/session-lifecycle#events) for the event types.
+Events go only to a connection that asks for them. Call `conversation.watchEvents(id)` on the connection. It returns a `snapshot` of the conversation, including any answer in progress, and then the connection receives `pi.events` with `{ conversationId, seq, events }` as the agent works.
+
+- Events from before the call are not sent again. Read them from the snapshot.
+- A short answer can arrive whole in `message_end`, with no `text_delta` before it, so print the rest of the text there.
+- The `seq` number goes up by one for each batch. If a number is missing, call `watchEvents` again to get a new snapshot.
+- To stop listening, call the function that `on` returns, or `conversation.unwatchEvents(id)`.
+
+See [Session Lifecycle](/agents/docs/session-lifecycle#events) for the event types.
 
 ## Results and errors
 
-- The `prompt` action resolves when the run ends. Read the reply with `getLastAssistantText` or `getMessages`.
-- The `prompt` action rejects with an `ActorError` when the action itself fails. For example, another prompt is already running (pass `streamingBehavior` to queue it instead), the model has no credential (`model_unavailable`), or the run passes the ten-minute action timeout (`action_timed_out`). A timeout only stops the wait. The run keeps going until it finishes or `abort` stops it.
-- A model error doesn't reject. The run ends with an assistant message whose `stopReason` is `"error"`, and `errorMessage` explains why.
+- The `prompt` action resolves when the run ends. The result is `{ status: "done", text }` with the answer, or `{ status: "unanswered", reason }`.
+- A model error doesn't reject. The status is `"unanswered"`, and `reason` explains why.
+- Pass a `requestId` to make retries safe. A second `prompt` with the same `requestId` returns the first one's result and doesn't run the agent again.
+- While a run is in progress, a new prompt waits as a follow-up. Pass `whenBusy: "steer"` to send it into the current run, or `"reject"` to make `prompt` reject with the `ConversationBusy` code.
+- The `prompt` action rejects with an `ActorError` when the action itself fails. For example, the run passes the ten-minute action timeout (`action_timed_out`). A timeout only stops the wait. The run keeps going until it finishes or `conversation.abort(id)` stops it.
+- To start a run without waiting for it, call `conversation.submit(id, { type: "input", content })`. Follow its progress with events.
 
 ## Browsers
 

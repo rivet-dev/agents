@@ -33,7 +33,7 @@ description: "Mention an agent in a GitHub issue or pull request comment."
 
 <Step title="Create a bot account and token">
 
-Create a GitHub account for the agent, or use your own, and a [fine-grained personal access token](https://github.com/settings/personal-access-tokens) for the repository with the **Issues** permission set to read and write. It covers comments on pull requests too.
+Create a GitHub account for the agent, or use your own, and a <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener noreferrer">fine-grained personal access token</a> for the repository with the **Issues** permission set to read and write. It covers comments on pull requests too.
 
 </Step>
 
@@ -74,9 +74,11 @@ In the repository's **Settings > Webhooks**, add a webhook with the payload URL 
 ## How it works
 
 - The route verifies GitHub's `X-Hub-Signature-256` signature against the raw body.
-- Each issue or pull request gets its own agent, keyed by owner, repository, and number. Every mention in the thread continues the same session.
+- Each issue or pull request gets its own agent, keyed by owner, repository, and number. Every mention in the thread continues the same conversation.
 - The route only answers new comments that mention the bot, and never the bot's own comments, so replies do not loop.
-- GitHub times out a delivery after ten seconds, so the route only hands the comment to the agent's `receive` action and returns. The `receive` action adds the message to the agent's queue and schedules `drain`, which prompts the agent with the oldest message and posts the answer as a comment with Octokit. A message that arrives while the agent is answering waits in the queue. The queue is saved with the agent, so replies still run if the request that delivered a message goes away.
+- GitHub times out a delivery after ten seconds, so the route only hands the comment to the agent's `receive` action and returns. The `receive` action schedules `reply`, which prompts the agent and posts the answer as a comment with Octokit. The schedule is saved with the agent, so the reply still runs if the request that delivered the message goes away.
+- A message that arrives while the agent is answering waits as a follow-up, and gets its own reply when its run ends.
+- The prompt's `requestId` is the comment's id, so a redelivered webhook runs the agent only once.
 
 ## Configure
 
@@ -91,4 +93,4 @@ In the repository's **Settings > Webhooks**, add a webhook with the payload URL 
 
 | GitHub event | Webhook path | What the route does |
 | --- | --- | --- |
-| [`issue_comment`](https://docs.github.com/en/webhooks/webhook-events-and-payloads#issue_comment), `created` | `/github/webhook` | Hands the comment to the issue's agent, which replies with a comment. Covers pull request conversations too. |
+| <a href="https://docs.github.com/en/webhooks/webhook-events-and-payloads#issue_comment" target="_blank" rel="noopener noreferrer">`issue_comment`</a>, `created` | `/github/webhook` | Hands the comment to the issue's agent, which replies with a comment. Covers pull request conversations too. |

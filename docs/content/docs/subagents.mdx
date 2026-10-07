@@ -33,9 +33,11 @@ A subagent is a specialist that a lead agent hands one focused task to. It has i
 <CodeSnippet file="examples/docs/subagents/client.ts" title="client.ts" />
 </CodeGroup>
 
-`get-order.ts` is the `get_order` tool from [Custom Tools](/agents/docs/custom-tools).
+The `get_order` tool in `get-order.ts` is the one from [Custom Tools](/agents/docs/custom-tools).
 
 - The model picks the specialist and writes the question. The question has to carry everything the specialist needs, because the specialist can't see the lead's conversation.
 - Each specialist has only the tools for its job: `orders` has `get_order`, and `engineering` has a sandbox to read and run code. The support agent has neither.
-- Specialists are keyed by the lead's session id, so a follow-up question on the same ticket continues the same specialist session.
+- Each question goes to a new specialist with an empty conversation. The tool keys it by an id that `api.memo` saves with the tool call.
+- The tool has `replay: "safe"`, so Pi runs it again after a crash. The rerun gets the same id and passes it as the `requestId`, so it waits for the run already in progress instead of asking again.
+- If the lead's run is cancelled, the tool cancels the specialist's run too.
 - The tool waits for the answer and returns it as the tool result. To hand work off without waiting, see [Agent-to-Agent Messages](/agents/docs/agent-to-agent).

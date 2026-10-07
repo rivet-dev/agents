@@ -16,5 +16,5 @@ const client = createClient<typeof registry>({
 });
 
 const conn = client.agent.getForId(agentId).connect();
-await conn.prompt("Clone https://github.com/honojs/hono and summarize its README.");
-console.log(await conn.getLastAssistantText());
+const result = await conn.prompt("Clone https://github.com/honojs/hono and summarize its README.");
+console.log(result.status === "done" ? result.text : `No answer: ${result.reason}`);

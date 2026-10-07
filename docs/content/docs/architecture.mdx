@@ -3,11 +3,11 @@ title: "Architecture"
 description: "The states an agent moves through, and what survives sleep, crashes, and upgrades."
 ---
 
-This page describes [`pi()`](/agents/docs/pi). A [`piDurable()`](/agents/docs/pi-durable) agent sleeps and drains the same way, and differs where noted in [Pi Durable](#pi-durable).
+A [`pi()`](/agents/docs/pi) agent runs <a href="https://earendil.com/posts/pi-durable/" target="_blank" rel="noopener noreferrer">Pi Durable</a>, Earendil's durable agent harness, inside a Rivet Actor. Pi saves each step of a run to the Actor's SQLite database before the next step starts.
 
 ## States
 
-An agent is idle until a prompt starts a run, and goes back to idle when the run ends or is cancelled. When the context fills up during a run, the agent compacts it and keeps going.
+A conversation is idle until a prompt starts a run, and goes back to idle when the run ends or is cancelled. When the context fills up during a run, the agent compacts it and keeps going.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 640 300" role="img" aria-label="Agent states: a prompt moves Idle to Running, and the run ending or being cancelled moves it back. Running moves to Compacting when the context is full and back when compaction is done. Idle moves to Sleeping when idle, and the next action wakes it back to Idle. Running sends tool calls to the sandbox." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -49,7 +49,9 @@ An agent is idle until a prompt starts a run, and goes back to idle when the run
 
 ## Sleep
 
-An idle agent sleeps and frees its memory. The next action on its key wakes it: the agent reloads its session, and reconnects to the same sandbox the first time a tool needs it, so clients don't do anything different. While the agent sleeps, its sandbox is suspended.
+An idle agent sleeps and frees its memory. The next action on its key wakes it: the agent opens Pi from SQLite, resumes interrupted work, and reconnects to the same sandbox the first time a tool needs it, so clients don't do anything different. While the agent sleeps, its sandbox is suspended.
+
+During a retry or poll wait longer than a minute, the Actor also sleeps, and a scheduled wake resumes the work when the wait ends.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 640 280" role="img" aria-label="The agent loop runs in memory and saves each step to the Actor&#x27;s SQLite database, which also holds the sandbox id. On wake, the loop is restored from SQLite and reconnects to the same sandbox. Sleep, a crash, or an upgrade clears memory, and SQLite is kept." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -71,7 +73,7 @@ An idle agent sleeps and frees its memory. The next action on its key wakes it: 
   <text x="235" y="91" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent loop</text>
   <text x="235" y="108" text-anchor="middle" font-size="12" fill="#56524a">in memory</text>
   <text x="235" y="197" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">SQLite</text>
-  <text x="235" y="214" text-anchor="middle" font-size="12" fill="#56524a">session, sandbox id</text>
+  <text x="235" y="214" text-anchor="middle" font-size="12" fill="#56524a">conversations, sandbox id</text>
   <text x="550" y="99" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox</text>
   <text x="197" y="150.5" text-anchor="end" font-size="12" fill="#56524a">save each step</text>
   <text x="273" y="151.5" text-anchor="start" font-size="12" fill="#56524a">restore on wake</text>
@@ -83,41 +85,37 @@ An idle agent sleeps and frees its memory. The next action on its key wakes it: 
 
 ## What survives
 
-| | Session | Sandbox |
+| | Conversations | Sandbox |
 | --- | --- | --- |
-| Sleep | Every message so far. | Reconnected on first use. |
-| Crash | Every message written before the crash. A run in progress resumes on wake if Pi can continue it. | Reconnected on first use. |
-| Upgrade | Every message so far. A run in progress gets time to finish first. See [Upgrades](#upgrades). | Reconnected on first use. |
+| Sleep | Every step so far. | Reconnected on first use. |
+| Crash | Every step saved before the crash. A run in progress resumes on wake from the step it reached. | Reconnected on first use. |
+| Upgrade | Every step so far. A run in progress gets time to finish first. See [Upgrades](#upgrades). | Reconnected on first use. |
 | Destroy | Deleted. | Deleted. |
 
-A model chosen with `setModel` is restored too, if it's still allowed. If the sandbox no longer exists when the agent wakes, a new one is created and the old files are lost.
+A model or instructions set with `conversation.configure` are part of the conversation, so they are kept too. Without a sandbox, files live in the Actor's SQLite database and survive the same way as conversations. If the sandbox no longer exists when the agent wakes, a new one is created and the old files are lost.
 
-Actions that don't touch the sandbox, such as `getMessages` or `setModel`, don't connect to it. They keep working while the sandbox provider is down.
+Actions that don't run a tool, such as `conversation.context` or `conversation.configure`, don't connect to the sandbox. They keep working while the sandbox provider is down.
+
+## Resuming a run
+
+After a crash or a cut-off upgrade, the agent reads the saved steps on wake and carries on from the step it reached:
+
+| Stopped while | On wake |
+| --- | --- |
+| The model was answering | The model call is sent again from the start. The partial answer is lost. |
+| A tool marked `replay: "safe"` ran | The tool runs again. |
+| Any other tool ran | The tool isn't run again. Its result tells the model the call stopped partway. |
+| A task phase ran | The phase runs again, and earlier phases are kept. |
+| The run was cancelled with `abort` | Nothing resumes. |
+
+Nothing runs while a crashed Actor is down. The run resumes when the Actor starts again. A client that is still connected gets a fresh snapshot on its event stream.
 
 ## Upgrades
 
-When you ship new code, an agent in the middle of a run lets it finish, for up to `sleepGracePeriod` (15 minutes by default), before it restarts on the new version. See [Versions](/docs/versions).
+When you ship new code, running work gets up to `sleepGracePeriod` (15 minutes by default) to finish before the Actor restarts on the new version. See [Versions](/docs/versions). Work still running when the grace period ends resumes on wake, after your `onWake` runs.
 
-A run that is still going when the grace period ends, or that a crash cuts off, resumes when the agent wakes if Pi can continue it from the saved messages:
+A client waiting on `prompt` gets an error if the Actor stops first. It can send the prompt again with the same `requestId` to get the first prompt's result instead of a second run. Actions wait up to ten minutes, and a timed-out wait leaves the run going.
 
-| Stopped while | Resumes? |
-| --- | --- |
-| The model was answering | Yes. The model is asked again, and the partial answer is lost. |
-| Parallel tool calls ran and at least one finished | Yes. Calls that didn't finish get a "No result provided" result. |
-| A tool call ran and none finished | No. |
-| The run was cancelled with `abort` | No. |
+Destroying the Actor stops running work at once, without a grace period.
 
-A run that doesn't resume is left as if it had been cancelled, and the next prompt continues the conversation. A client that was waiting on `prompt` gets an error. It can follow the resumed run through events, or read it with `getMessages`.
-
-Nothing runs while a crashed Actor is down. The run resumes when the Actor starts again.
-
-## Pi Durable
-
-A [`piDurable()`](/agents/docs/pi-durable) agent saves every step of a run, so it doesn't depend on what the saved messages look like:
-
-- **Runs carry on from the last saved step.** Model calls, tool calls, and tasks your tools launch each save their progress. After a crash, the Actor reads that record and carries on. A plain tool call that was running isn't rerun unless it's marked `replay: "safe"`, and the model learns it never completed.
-- **Long waits don't keep the Actor awake.** During a long retry or poll wait, the Actor sleeps and wakes when the wait ends.
-- **Streams come back on wake.** A client that is still connected gets a fresh snapshot.
-- **Destroy stops at once**, without waiting for running work.
-
-See [Known limitations](/agents/docs/pi-durable#known-limitations) for what this doesn't cover.
+Roll forward only. An older version of Pi Durable can't open data that a newer version wrote, so don't roll back after an upgrade has run.

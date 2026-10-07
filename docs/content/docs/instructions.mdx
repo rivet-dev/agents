@@ -3,40 +3,68 @@ title: "Instructions"
 description: "Set an agent's system prompt and project rules, and add context to a single prompt."
 ---
 
-An agent's system prompt is the default prompt, which describes its tools, plus your instructions and project rules. Set them with a resource loader when you define the agent.
+An agent's system prompt is built from prompt sections. Your extensions add sections that every conversation gets, and a conversation can add its own `instructions` after them. The agent renders the system prompt again before every model call.
 
 <div style="overflow-x:auto">
-<svg viewBox="0 0 620 214" role="img" aria-label="The default prompt, appendSystemPrompt, and the inline AGENTS.md combine into the agent&#x27;s system prompt, which goes with every model call." style="width:100%;min-width:520px;max-width:620px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+<svg viewBox="0 0 620 214" role="img" aria-label="Extension sections, for every conversation, and instructions, for one conversation, combine into the conversation&#x27;s system prompt, which goes with every model call." style="width:100%;min-width:520px;max-width:620px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
   <defs>
     <marker id="instructions-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
   </defs>
-  <rect x="20" y="30" width="180" height="44" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
-  <rect x="20" y="86" width="180" height="44" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
-  <rect x="20" y="142" width="180" height="44" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="20" y="40" width="180" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="20" y="124" width="180" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
   <rect x="270" y="80" width="140" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
   <rect x="480" y="82" width="120" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
   <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
-    <path d="M201 52 L268 98.7" marker-end="url(#instructions-arrow)"/>
-    <path d="M201 108 L268 108" marker-end="url(#instructions-arrow)"/>
-    <path d="M201 164 L268 117.3" marker-end="url(#instructions-arrow)"/>
+    <path d="M201 66 L268 100" marker-end="url(#instructions-arrow)"/>
+    <path d="M201 150 L268 116" marker-end="url(#instructions-arrow)"/>
     <path d="M411 108 L478 108" marker-end="url(#instructions-arrow)"/>
   </g>
-  <text x="110" y="57" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Default prompt</text>
-  <text x="110" y="113" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916" font-family="ui-monospace,monospace">appendSystemPrompt</text>
-  <text x="110" y="169" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916" font-family="ui-monospace,monospace">AGENTS.md</text>
-  <text x="340" y="105" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent</text>
+  <text x="110" y="63" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916" font-family="ui-monospace,monospace">section()</text>
+  <text x="110" y="80" text-anchor="middle" font-size="12" fill="#56524a">every conversation</text>
+  <text x="110" y="147" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916" font-family="ui-monospace,monospace">instructions</text>
+  <text x="110" y="164" text-anchor="middle" font-size="12" fill="#56524a">one conversation</text>
+  <text x="340" y="105" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Conversation</text>
   <text x="340" y="122" text-anchor="middle" font-size="12" fill="#56524a">system prompt</text>
   <text x="540" y="113" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Model</text>
   <text x="444.5" y="101" text-anchor="middle" font-size="12" fill="#56524a">every call</text>
 </svg>
 </div>
 
+## Sections for every conversation
+
+Add sections with an extension. Sections come in the order the extensions are installed.
+
 <CodeSnippet file="examples/docs/instructions/server.ts" title="server.ts" />
 
-The resource loader's `appendSystemPrompt` adds your instructions after the default prompt. Its `agentsFilesOverride` supplies project rules as an inline `AGENTS.md`, so the agent gets the same rules wherever it runs. Call `reload()` before passing the loader. Every session of this agent gets the same instructions.
+The model gets the `payments-team` sections as tagged blocks:
+
+```text
+<role>
+You review pull requests for the payments team. Be brief and cite file paths.
+</role>
+<project-rules>
+Run `npm test` before proposing a fix. Never edit files in `migrations/`.
+</project-rules>
+<skills>
+The `skills/` folder has one folder per skill. Read a skill's SKILL.md before you start a task it covers.
+</skills>
+```
+
+The agent runs each section's function again before every model call. A section can return text that changes, such as the current date or a value from your database.
+
+## Instructions for one conversation
+
+Call `conversation.configure(id, { instructions })` to give one conversation its own instructions. They go after every extension section, and they apply from the next model call. Pass `instructions: null` to remove them.
 
 ## Context for one prompt
 
-Put context for a single turn in the prompt text, or attach images with `prompt(text, { images })`. Each image is `{ type: "image", data, mimeType }`, with the image base64-encoded in `data`. The system prompt stays the same.
+Put context for a single turn in the prompt itself. The `prompt` action takes a string, or an array of text and image blocks. Each image is `{ type: "image", data, mimeType }`, with the image base64-encoded in `data`. The system prompt stays the same.
 
 <CodeSnippet file="examples/docs/instructions/client.ts" title="client.ts" />
+
+## AGENTS.md and skills
+
+Pi doesn't support `AGENTS.md` files or skills yet. Use these workarounds:
+
+- **Project rules:** put the rules of your `AGENTS.md` in a section, as `project-rules` does above, or in a conversation's `instructions`.
+- **Skills:** put the skill files in the agent's workspace, such as the [sandbox](/agents/docs/sandboxes) or the files in the Actor's database. Then add a section that tells the model where the skills are and to read one before it acts, as `skills` does above.

@@ -3,7 +3,7 @@ title: "Observability"
 description: "Trace every agent run with OpenTelemetry."
 ---
 
-Each Pi run is traced as an `invoke_agent pi` span, a child of the `prompt` action span that started it, with [OpenTelemetry GenAI attributes](https://opentelemetry.io/docs/specs/semconv/gen-ai/). To export it, [set up OpenTelemetry for your Actors](/docs/tracing).
+Each `prompt` is traced as an `invoke_agent pi` span, from the moment its input is saved until its run settles. The span is a child of the `prompt` action span and has <a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" target="_blank" rel="noopener noreferrer">OpenTelemetry GenAI attributes</a>. To export it, [set up OpenTelemetry for your Actors](/docs/tracing).
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 600 200" role="img" aria-label="Each prompt action span contains an invoke_agent pi span with GenAI attributes. Both are exported to your OpenTelemetry backend." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -31,10 +31,10 @@ Each Pi run is traced as an `invoke_agent pi` span, a child of the `prompt` acti
 | --- | --- |
 | `gen_ai.operation.name` | `invoke_agent` |
 | `gen_ai.agent.name` | `pi` |
-| `gen_ai.conversation.id` | The Pi session id. |
-| `gen_ai.request.model` | The model id. |
+| `gen_ai.conversation.id` | The Pi conversation id. |
+| `gen_ai.request.model` | The conversation's model, as `provider/modelId`. |
 | `rivet.actor.id` | The Actor's id. |
 
-A failed run sets the span status to error, with `error.type` set to `model_error` when the model returns an error or `run_error` when the run throws. Prompt text, tool arguments, and tool results are never recorded.
+A run that ends without an answer, such as after a model error, sets the span status to error with `error.type` set to `unanswered`. A `prompt` that throws sets `error.type` to `run_error`. Prompt text, tool arguments, and tool results are never recorded.
 
-A prompt queued with `streamingBehavior` joins the run in progress, so it doesn't get a span of its own.
+Only `prompt` creates this span. A run started with `conversation.submit` has no `invoke_agent pi` span, so use `prompt` for runs you want to trace.

@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { createClient } from "rivetkit/client";
 import type { registry } from "./server";
 
-export type LinearComment = { issueId: string; text: string };
+export type LinearComment = { commentId: string; issueId: string; text: string };
 
 const trigger = process.env.LINEAR_TRIGGER ?? "@agent";
 const linear = new LinearClient({ apiKey: process.env.LINEAR_API_KEY });
@@ -31,7 +31,7 @@ linearRoutes.post("/webhook", async (c) => {
 		comment.userId !== (await agentUserId)
 	) {
 		const agent = client.agent.getOrCreate(["linear", comment.issueId]);
-		await agent.receive({ issueId: comment.issueId, text: comment.body });
+		await agent.receive({ commentId: comment.id, issueId: comment.issueId, text: comment.body });
 	}
 	return c.body(null, 200);
 });

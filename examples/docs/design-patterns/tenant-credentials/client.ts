@@ -10,7 +10,6 @@ export async function saveTeamKey(tenantId: string, anthropicKey: string) {
 
 // Every agent keyed under the tenant uses that key, and never sees another tenant's.
 export async function ask(tenantId: string, userId: string, text: string) {
-	const agent = client.agent.getOrCreate([tenantId, userId]);
-	await agent.prompt(text);
-	return agent.getLastAssistantText();
+	const result = await client.agent.getOrCreate([tenantId, userId]).prompt(text);
+	return result.status === "done" ? result.text : undefined;
 }

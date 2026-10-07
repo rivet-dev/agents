@@ -1,3 +1,4 @@
+import { createRegistry } from "@earendil-works/pi-durable";
 import { pi } from "@rivet-dev/pi";
 import { Hono } from "hono";
 import { setup } from "rivetkit";
@@ -5,29 +6,18 @@ import { type DiscordCommand, discord, postReply } from "./discord";
 
 const agent = pi({
 	model: "anthropic/claude-opus-5-5",
-	state: { pending: [] as DiscordCommand[] },
-	vars: { replying: false },
+	registry: createRegistry(),
 	actions: {
+		// Schedules the answer and returns, so the route can respond in time.
 		receive: async (c, command: DiscordCommand) => {
-			c.state.pending.push(command);
-			await c.schedule.after(0, "drain");
+			await c.schedule.after(0, "reply", command);
 		},
-		// Answers the oldest message. Messages that arrive mid-run wait their turn.
-		drain: async (c): Promise<void> => {
-			const command = c.state.pending[0];
-			if (!command || c.vars.replying) return;
-			c.vars.replying = true;
-			try {
-				const self = c.client<typeof registry>().agent.getForId(c.actorId);
-				await self.prompt(command.prompt);
-				await postReply(command, await self.getLastAssistantText());
-			} catch (error) {
-				c.log.error({ msg: "reply failed", error });
-			} finally {
-				c.state.pending.shift();
-				c.vars.replying = false;
-			}
-			if (c.state.pending.length > 0) await c.schedule.after(0, "drain");
+		reply: async (c, command: DiscordCommand): Promise<void> => {
+			const self = c.client<typeof registry>().agent.getForId(c.actorId);
+			// A message sent during a run waits as a follow-up.
+			// The requestId stops a duplicate delivery from running twice.
+			const result = await self.prompt(command.prompt, { requestId: command.interactionId });
+			await postReply(command, result.status === "done" ? result.text : undefined);
 		},
 	},
 });

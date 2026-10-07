@@ -4,7 +4,6 @@ import type { registry } from "./agent-per-key/server";
 const client = createClient<typeof registry>();
 
 export async function answer(message: string) {
-	const assistant = client.assistant.getOrCreate([crypto.randomUUID()]);
-	await assistant.prompt(message);
-	return assistant.getLastAssistantText();
+	const result = await client.assistant.getOrCreate([crypto.randomUUID()]).prompt(message);
+	return result.status === "done" ? result.text : undefined;
 }

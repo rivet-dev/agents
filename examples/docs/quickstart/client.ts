@@ -4,9 +4,9 @@ import type { registry } from "./server";
 const client = createClient<typeof registry>();
 const agent = client.agent.getOrCreate(["user-123"]);
 
-const conn = agent.connect();
+const result = await agent.prompt(
+	"Write a hello-world Rivet Actor to counter.ts, then read the file back to me.",
+	{ requestId: crypto.randomUUID() },
+);
 
-await conn.prompt("Write a Python script that prints the first 20 prime numbers, run it, and show me the output.");
-console.log(await conn.getLastAssistantText());
-
-await conn.dispose();
+console.log(result.status === "done" ? result.text : `Unanswered: ${result.reason}`);
