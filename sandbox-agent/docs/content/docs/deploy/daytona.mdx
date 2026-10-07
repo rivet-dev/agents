@@ -44,7 +44,7 @@ try {
 }
 ```
 
-The `daytona` provider uses the `rivetdev/sandbox-agent:0.5.0-full` image by default and starts the server automatically.
+The `daytona` provider uses the `rivetdev/sandbox-agent:0.5.1-full` image by default and starts the server automatically.
 
 ## Using snapshots for faster startup
 

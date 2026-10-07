@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/cli-shared",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Shared helpers for sandbox-agent CLI and SDK",
   "license": "Apache-2.0",
   "repository": {
