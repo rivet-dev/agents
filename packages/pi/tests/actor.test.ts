@@ -45,6 +45,11 @@ const sleeps = createSleepCounter();
 const STORY_ONE = "alpha ".repeat(40).trim();
 const STORY_TWO = "omega ".repeat(40).trim();
 
+/** A log larger than one read of the database env, so a scan reads it in parts. */
+const LOG = Array.from({ length: 20_000 }, (_, i) => `line ${i + 1}`).join(
+	"\n",
+);
+
 /** Tool calls of the crash test. A tool's first run blocks until the stop aborts it; a rerun returns at once. */
 const toolRuns = { safe: 0, unsafe: 0 };
 
@@ -161,6 +166,20 @@ function buildRegistry(mock: MockModel, root: string) {
 		})(),
 		sandbox: localSandboxProvider(join(root, "sandboxes")),
 	});
+	const files = pi({
+		...models,
+		registry: (() => {
+			const coding = createRegistry();
+			coding.install(CodingTools);
+			return coding;
+		})(),
+		onSleep: sleeps.record,
+		actions: {
+			nap: (c) => {
+				c.sleep();
+			},
+		},
+	});
 	const backoff = pi({
 		...models,
 		registry: createRegistry(),
@@ -245,6 +264,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		use: {
 			agent,
 			coder,
+			files,
 			backoff,
 			backoffWithoutSchedules,
 			jobRunner,
@@ -290,6 +310,21 @@ beforeAll(async () => {
 		"read line two of hello.txt",
 		toolCall("read", { path: "hello.txt", offset: 2, limit: 1 }),
 		fauxAssistantMessage("read it"),
+	);
+	mockModel.reply(
+		"write the log",
+		toolCall("write", { path: "logs/app.log", content: LOG }),
+		fauxAssistantMessage("written"),
+	);
+	mockModel.reply(
+		"read two lines of the log",
+		toolCall("read", { path: "logs/app.log", offset: 15_000, limit: 2 }),
+		fauxAssistantMessage("read it"),
+	);
+	mockModel.reply(
+		"list the logs",
+		toolCall("bash", { command: "ls logs" }),
+		fauxAssistantMessage("tried"),
 	);
 	mockModel.reply(
 		"write outside the sandbox",
@@ -486,6 +521,29 @@ describe("pi actor", () => {
 		expect(read).toMatchObject({ isError: false });
 		expect(JSON.stringify(read?.content)).toContain("line two");
 		expect(JSON.stringify(read?.content)).not.toContain("hi from pi");
+	});
+
+	test("without a sandbox, files live in the actor's database: they outlast sleep, a ranged read returns its lines, and there is no shell", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["files", randomUUID()];
+		const handle = client.files.getOrCreate(key);
+		await handle.prompt("write the log");
+		await handle.nap();
+		await sleeps.waitFor(key, 1);
+
+		await handle.prompt("read two lines of the log");
+		await handle.prompt("list the logs");
+
+		const root = await handle.harness.root();
+		const { messages } = await handle.conversation.context(root.id);
+		const results = messages.filter((message) => message.role === "toolResult");
+		const read = results.find((result) => result.toolName === "read");
+		expect(read).toMatchObject({ isError: false });
+		expect(JSON.stringify(read?.content)).toContain("line 15000\\nline 15001");
+		expect(JSON.stringify(read?.content)).not.toContain("line 15002");
+		expect(results.find((result) => result.toolName === "bash")).toMatchObject({
+			isError: true,
+		});
 	});
 
 	test("sandbox tools cannot write outside the sandbox or read the actor host's environment", async (c) => {
