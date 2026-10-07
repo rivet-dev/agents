@@ -1,6 +1,6 @@
 /**
  * Fifteen minutes, so a running model call or tool call can finish before a
- * deploy moves the actor. The engine's stop threshold still bounds it.
+ * an upgrade restarts the actor. The engine's stop threshold still bounds it.
  */
 export const DEFAULT_SLEEP_GRACE_PERIOD_MS = 15 * 60_000;
 

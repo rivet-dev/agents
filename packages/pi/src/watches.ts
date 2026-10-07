@@ -12,7 +12,7 @@ import {
 	type WatchHandle,
 	watchEvents,
 } from "@earendil-works/pi-durable";
-import type { PiContext } from "../runtime.js";
+import type { PiContext } from "./runtime.js";
 import {
 	deleteConnectionWatches,
 	deleteWatch,
@@ -333,7 +333,7 @@ async function startDoc(
 	const token = documents.get(spec.docKind);
 	if (!token)
 		throw new Error(
-			`document ${spec.docKind} is not listed in piDurable({ documents })`,
+			`document ${spec.docKind} is not listed in pi({ documents })`,
 		);
 	const { docKind: kind, conversationId } = spec;
 	const conversation = conversationId as ConversationId;

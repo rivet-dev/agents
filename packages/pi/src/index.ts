@@ -1,8 +1,10 @@
 export type {
 	PiActions,
-	PiBashResult,
+	PiAgentChange,
+	PiAgentInfo,
+	PiCreateConversationOptions,
 	PiPromptOptions,
-	PiSessionInfo,
+	PiPromptResult,
 } from "./actions.js";
 export {
 	type PiAccess,
@@ -16,9 +18,12 @@ export type {
 	PiCredentialSource,
 	PiProviderCredential,
 } from "./credentials.js";
+export type { PiModelOptions, PiProviderConfig } from "./models.js";
+export type { PiOptions } from "./runtime.js";
 export type {
-	PiModelInfo,
-	PiModelOptions,
-	PiProviderConfig,
-} from "./models.js";
-export type { PiSessionOptions } from "./runtime.js";
+	PiDocFrame,
+	PiEventsFrame,
+	PiTaskGraphFrame,
+	PiViewFrame,
+	PiWatchEvents,
+} from "./watches.js";

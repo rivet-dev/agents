@@ -14,7 +14,6 @@ import {
 	toError,
 } from "@earendil-works/pi-durable/env";
 import type { Sandbox } from "@rivet-dev/sandbox-adapter";
-import { resolveSandboxPath, shellQuote } from "../sandbox.js";
 
 /**
  * Pi Durable's `ExecutionEnv` inside a sandbox, for Pi's built-in tools
@@ -248,4 +247,28 @@ async function exec(
 		const code = context.abortSignal?.aborted ? "aborted" : "spawn_error";
 		return err(new ExecutionError(code, cause.message, cause));
 	}
+}
+
+/** Resolves `path` against `root` and rejects anything outside it. */
+function resolveSandboxPath(root: string, path: string): string {
+	const normalizedRoot = normalizeRoot(root);
+	const resolved = posix.resolve(normalizedRoot, path);
+	const prefix = normalizedRoot === "/" ? "/" : `${normalizedRoot}/`;
+	if (resolved !== normalizedRoot && !resolved.startsWith(prefix)) {
+		throw new Error(`Path escapes the sandbox working directory: ${path}`);
+	}
+	return resolved;
+}
+
+function normalizeRoot(path: string): string {
+	if (!posix.isAbsolute(path)) {
+		throw new Error(
+			`sandbox cwd must be an absolute POSIX path, received ${path}`,
+		);
+	}
+	return posix.normalize(path);
+}
+
+function shellQuote(value: string): string {
+	return `'${value.replaceAll("'", `'"'"'`)}'`;
 }

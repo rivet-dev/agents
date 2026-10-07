@@ -16,7 +16,7 @@ import type { SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { piDurable } from "../src/durable/index.js";
+import { pi } from "../src/index.js";
 import { localSandboxProvider } from "./helpers/local-sandbox.js";
 import {
 	createMockModel,
@@ -171,7 +171,7 @@ function buildRegistry(mock: MockModel, root: string) {
 			tools: [deployTool, shipTool, blockingTool],
 		}),
 	);
-	const drainer = piDurable({
+	const drainer = pi({
 		...models,
 		...lifecycle,
 		registry: tools,
@@ -219,10 +219,25 @@ function buildRegistry(mock: MockModel, root: string) {
 		}) => {
 			await c.db.execute("UPDATE durable_schema SET version = version + 1");
 		},
+		// What the earlier session-based pi() stored: its own session table and
+		// `pi_sandbox`, and none of this pi()'s tables.
+		storeAsSessionActor: async (c: {
+			db: { execute: (sql: string) => Promise<unknown> };
+		}) => {
+			await c.db.execute("DROP TABLE pi_durable_watch");
+			await c.db.execute("DROP TABLE pi_durable_schema_version");
+			await c.db.execute(
+				"CREATE TABLE pi_session (session_id TEXT PRIMARY KEY) STRICT",
+			);
+			await c.db.execute("INSERT INTO pi_session VALUES ('old-session')");
+		},
+		storedSessions: (c: {
+			db: { execute: (sql: string) => Promise<unknown> };
+		}) => c.db.execute("SELECT session_id FROM pi_session"),
 	};
 	// The job runs until the stop interrupts it, so a short grace period ends the drain.
 	const options = { sleepGracePeriod: 1_000 };
-	const migrating = piDurable({
+	const migrating = pi({
 		...models,
 		...lifecycle,
 		options,
@@ -231,7 +246,7 @@ function buildRegistry(mock: MockModel, root: string) {
 	});
 	const coding = createRegistry();
 	coding.install(CodingTools);
-	const slowSleeper = piDurable({
+	const slowSleeper = pi({
 		...models,
 		registry: coding,
 		sandbox: recordingSuspend(localSandboxProvider(join(root, "sandboxes"))),
@@ -303,7 +318,7 @@ afterAll(async () => {
 	if (workdir) await rm(workdir, { recursive: true, force: true });
 });
 
-describe("piDurable drain and upgrades", () => {
+describe("pi drain and upgrades", () => {
 	test("a forced stop lets the run finish, and input sent during the stop is answered once after wake", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["drain", randomUUID()];
@@ -451,6 +466,23 @@ describe("piDurable drain and upgrades", () => {
 		});
 		await handle.nap();
 		await sleeps.waitFor(key, 2);
+	});
+
+	test("an actor stored by the earlier session-based pi() starts, and its stored session stays", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["session-actor", randomUUID()];
+		const handle = client.migrating.getOrCreate(key);
+		await handle.harness.root();
+		await handle.storeAsSessionActor();
+		await handle.nap();
+		await sleeps.waitFor(key, 1);
+
+		await expect(handle.harness.root()).resolves.toEqual({
+			id: ROOT_CONVERSATION_ID,
+		});
+		expect(await handle.storedSessions()).toEqual([
+			{ session_id: "old-session" },
+		]);
 	});
 
 	test("the app's onDisconnect runs after a destroy closed Pi Durable, and only reading c.pi fails", async (c) => {

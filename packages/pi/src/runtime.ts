@@ -1,41 +1,37 @@
-import { isAbsolute } from "node:path";
+import type { Context, JsonValue } from "@earendil-works/chord";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import type { Models, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import {
-	type AgentSession,
-	type AgentSessionEvent,
-	type BashOperations,
-	type CreateAgentSessionOptions,
-	createAgentSession,
-	DefaultResourceLoader,
-	getAgentDir,
-	SessionManager,
-	SettingsManager,
-} from "@earendil-works/pi-coding-agent";
+	AgentDoc,
+	type ConversationDocToken,
+	configure,
+	Harness,
+	type HarnessInspection,
+	type HarnessOptions,
+	type HarnessSettings,
+	type ModelRef,
+} from "@earendil-works/pi-durable";
+import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
+import { SqliteStorage } from "@earendil-works/pi-durable/storage/sqlite";
 import type { Sandbox, SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import { type ActorContext, UserError } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
+import { actorSqlite } from "./actor-sqlite.js";
 import { SourceCredentialStore } from "./credentials.js";
+import { sandboxEnv } from "./env.js";
+import { toClientError } from "./errors.js";
 import {
 	createActorModelRuntime,
 	emptyCredentialStore,
-	openingModel,
 	type PiModelOptions,
 } from "./models.js";
-import { createSandboxBashOperations, createSandboxTools } from "./sandbox.js";
+import { loadPiSandbox, savePiSandbox } from "./storage.js";
 import {
-	appendPiEntry,
-	createPiSession,
-	loadPiInterruptedRun,
-	loadPiSandbox,
-	loadPiSession,
-	migratePiSession,
-	type PiQueue,
-	type PiSettings,
-	savePiIdle,
-	savePiRunning,
-	savePiSandbox,
-	savePiSettings,
-	toFileEntries,
-} from "./storage.js";
+	type ConnectionWatches,
+	createConnectionWatches,
+	reattachWatches,
+	stopAllWatches,
+} from "./watches.js";
 
 export type PiDatabaseProvider = DatabaseProvider<RawAccess>;
 
@@ -56,43 +52,7 @@ export type PiStop =
 	| { reason: "sleep"; drainUntil: number }
 	| { reason: "destroy" };
 
-/** Pi options accepted by `pi()` on top of ordinary actor config. */
-export interface PiSessionOptions
-	extends Omit<
-			CreateAgentSessionOptions,
-			| "sessionManager"
-			| "settingsManager"
-			| "modelRuntime"
-			| "model"
-			| "scopedModels"
-		>,
-		PiModelOptions {
-	/** Initial Pi settings for a brand-new session. Later changes persist per actor. */
-	settings?: Partial<PiSettings>;
-	/**
-	 * Runs Pi's built-in file and shell tools in a sandbox. Without one, Pi has
-	 * no file or shell tools and only the `customTools` passed in.
-	 */
-	sandbox?: SandboxProvider;
-}
-
-/** One open Pi session for a live actor generation. */
-export interface PiSession {
-	session: AgentSession;
-	settingsManager: SettingsManager;
-	cwd: string;
-	sandbox: LazySandbox | undefined;
-	/** Command execution for `executeBash`. Undefined when there is no sandbox. */
-	bashOperations: BashOperations | undefined;
-	/** JSON of the settings last written to SQLite, to skip no-op writes. */
-	persistedSettings: string;
-	/** Entries (header excluded) already written to SQLite, in Pi's append order. */
-	persistedEntryCount: number;
-	/** The application's credentials, when `pi({ credentials })` is set. */
-	credentials: SourceCredentialStore | undefined;
-}
-
-/** The sandbox a session's tools run in for this actor generation. */
+/** The sandbox Pi's tools run in for this actor generation. */
 export interface ConnectedSandbox {
 	provider: SandboxProvider;
 	id: string;
@@ -100,40 +60,65 @@ export interface ConnectedSandbox {
 }
 
 /**
- * The actor's sandbox, connected on first use in this generation. Opening a
- * session never needs it, so actions that touch no files cost no connect.
+ * Options accepted by `pi()` on top of ordinary actor config. The Pi
+ * Durable options keep the names and types of `HarnessOptions`.
  */
-interface LazySandbox {
-	connect(): Promise<ConnectedSandbox>;
-	/** The connection of this generation, if one was made. */
-	current: Promise<ConnectedSandbox> | undefined;
+export interface PiOptions extends PiModelOptions {
+	/** Pi Durable's extension registry: tools, hooks, sections, tasks, and documents. */
+	registry: HarnessOptions["registry"];
+	/** pi-ai model access. Without it, the actor builds it from `model`, `providers`, `apiKeys`, and `credentials`. */
+	models?: Models;
+	settings?: HarnessSettings;
+	/** Builds a conversation's environment. Without it, the actor builds one from `sandbox`. */
+	env?: HarnessOptions["env"];
+	conversationCreated?: HarnessOptions["conversationCreated"];
+	now?: HarnessOptions["now"];
+	onReport?: HarnessOptions["onReport"];
+	/** The starting thinking level of every new conversation. */
+	thinkingLevel?: ModelThinkingLevel;
+	/** Runs the tools of Pi's `CodingTools` extension in a sandbox. Used only when `env` is omitted. */
+	sandbox?: SandboxProvider;
+	/** App documents that clients may read by `kind` with `harness.snapshot`. */
+	documents?: readonly ConversationDocToken<any>[];
 }
 
-function lazySandbox(c: PiContext, provider: SandboxProvider): LazySandbox {
-	const lazy: LazySandbox = {
-		current: undefined,
-		connect: () =>
-			(lazy.current ??= connectSandbox(c, provider).catch((error: unknown) => {
-				lazy.current = undefined;
-				throw error;
-			})),
-	};
-	return lazy;
+/**
+ * One minute, as in Cloudflare's Pi harness. A retry or poll wait longer than
+ * this lets the actor sleep, and a scheduled wake reopens Pi Durable at the
+ * deadline.
+ */
+const LONG_WAIT_MS = 60_000;
+
+/** The internal action a scheduled wake calls. */
+const WAKE_ACTION = "pi.wake";
+
+interface OpenHarness {
+	harness: Harness;
+	stopBusyWatch: () => void;
+	isBusy: () => Promise<boolean>;
 }
 
-/** Per-actor-generation runtime state, stored on `c.vars` under `PI_RUNTIME`. */
+/** Per-actor-generation state, stored on `c.vars` under `PI_RUNTIME`. */
 export interface PiRuntime {
-	ready?: Promise<PiSession>;
-	/** Serializes SQLite entry writes so entries keep their append order. Never rejects. */
-	writes: Promise<void>;
-	/** Set once the session closes for sleep or destroy. It never reopens in this generation. */
+	/** The open harness, or the open in progress. */
+	harness?: Promise<OpenHarness>;
+	sandbox?: Promise<ConnectedSandbox>;
+	/** Set when the actor starts to sleep or is destroyed. */
 	closing: boolean;
+	/**
+	 * The `onWake` context. Background work (keep-awake, scheduled wakes, the
+	 * sandbox, reopening) uses it, because an action's context is cancelled
+	 * with the action.
+	 */
+	actor?: PiContext;
+	/** Open Pi watches of connections, for this generation. */
+	watches: ConnectionWatches;
 }
 
 export const PI_RUNTIME: unique symbol = Symbol.for("@rivet-dev/pi/runtime");
 
 export function createPiRuntime(): PiRuntime {
-	return { writes: Promise.resolve(), closing: false };
+	return { closing: false, watches: createConnectionWatches() };
 }
 
 export function piRuntime(c: PiContext): PiRuntime {
@@ -148,69 +133,510 @@ export function piRuntime(c: PiContext): PiRuntime {
 	return runtime;
 }
 
-/** Returns the actor's Pi session, opening it from SQLite on first use. */
-export function ensurePiSession(
+/**
+ * Opens the harness on wake without resuming interrupted work, so the app's
+ * `onWake` runs first. The caller calls `harness.resume()` after it. The wake
+ * context becomes the context of all background work.
+ */
+export async function openOnWake(
 	c: PiContext,
-	options: PiSessionOptions,
-): Promise<PiSession> {
+	options: PiOptions,
+): Promise<Harness> {
+	piRuntime(c).actor = c;
+	return ensureHarness(c, options, { resume: false });
+}
+
+/** Returns the actor's Pi Durable harness, opening it from SQLite on first use. */
+async function ensureHarness(
+	c: PiContext,
+	options: PiOptions,
+	open: { resume: boolean } = { resume: true },
+): Promise<Harness> {
 	const runtime = piRuntime(c);
-	if (runtime.closing) {
-		return Promise.reject(sessionClosed());
-	}
-	if (!runtime.ready) {
-		runtime.ready = openPiSession(c, runtime, options).catch((error) => {
-			runtime.ready = undefined;
-			throw error;
-		});
-	}
-	return runtime.ready;
+	if (runtime.closing) throw harnessClosed();
+	runtime.harness ??= openHarness(
+		runtime.actor ?? c,
+		runtime,
+		options,
+		open,
+	).catch((error: unknown) => {
+		runtime.harness = undefined;
+		throw toClientError(error);
+	});
+	return (await runtime.harness).harness;
 }
 
 /**
- * Runs the app's own action or hook with `c.pi` set to the session, then
- * saves what it changed, such as the model, as the built-in actions do. Code
- * that never reads `c.pi` runs even when the session cannot open; reading
- * `c.pi` throws the open error. Shutdown hooks pass `opensSession: false`, so
- * they use a session that is already open and never create a session or a
- * sandbox only to close it.
+ * Runs an action against the harness. A failed call that left Pi Durable
+ * unusable reopens it before the error reaches the client, so the next call
+ * works. Calls use `BACKGROUND_CONTEXT`, so a wait such as `prompt` lasts
+ * until the run settles or the action times out, including while a stopping
+ * actor drains the run. RivetKit's action signal also fires when the actor
+ * starts to stop, so it cannot cancel a wait.
  */
-export async function withPiSession<T>(
+export async function withHarness<T>(
 	c: PiContext,
-	options: PiSessionOptions,
+	options: PiOptions,
+	run: (harness: Harness, context: Context) => Promise<T>,
+): Promise<T> {
+	const harness = await ensureHarness(c, options);
+	try {
+		return await run(harness, BACKGROUND_CONTEXT);
+	} catch (error) {
+		const runtime = piRuntime(c);
+		await recoverHarness(runtime.actor ?? c, runtime, options);
+		throw toClientError(error);
+	}
+}
+
+/**
+ * Runs one of the app's own actions or hooks with the harness on `c.pi`. A
+ * failure that left Pi Durable unusable reopens it. The error reaches the
+ * client as from a built-in action. Code that never reads `c.pi` runs even
+ * when Pi Durable is closed or cannot open; reading `c.pi` throws the cause.
+ * Shutdown hooks pass `opensHarness: false`, so they use a harness that is
+ * already open and never open and resume one only to close it.
+ */
+export async function withPiAccess<T>(
+	c: PiContext,
+	options: PiOptions,
 	body: () => T | Promise<T>,
-	{ opensSession = true }: { opensSession?: boolean } = {},
+	{ opensHarness = true }: { opensHarness?: boolean } = {},
 ): Promise<T> {
 	const runtime = piRuntime(c);
-	// Hooks such as onDisconnect still run after the session closed; only using c.pi fails.
-	if (runtime.closing) return withUnavailablePi(c, sessionClosed(), body);
-	if (!opensSession && !runtime.ready) {
-		return withUnavailablePi(c, sessionNotOpen(), body);
+	// Hooks such as onDisconnect still run after Pi Durable closed; only using c.pi fails.
+	if (runtime.closing) return withUnavailablePi(c, harnessClosed(), body);
+	if (!opensHarness && !runtime.harness) {
+		return withUnavailablePi(c, harnessNotOpen(), body);
 	}
-	let handle: PiSession;
+	let harness: Harness;
 	try {
-		handle = await ensurePiSession(c, options);
+		harness = await ensureHarness(c, options);
 	} catch (error) {
 		c.log.warn({
-			msg: "pi session could not open; reading c.pi throws this error",
+			msg: "pi durable could not open; reading c.pi throws this error",
 			error,
 		});
 		return withUnavailablePi(c, error, body);
 	}
-	Object.defineProperty(c, "pi", { value: handle.session, configurable: true });
-	let result: T;
+	Object.defineProperty(c, "pi", { value: harness, configurable: true });
 	try {
-		result = await body();
+		return await body();
 	} catch (error) {
-		await persistPiState(c, handle).catch((writeError: unknown) => {
-			c.log.error({
-				msg: "pi state write failed after an app action error",
-				error: writeError,
-			});
-		});
-		throw error;
+		await recoverHarness(runtime.actor ?? c, runtime, options);
+		throw toClientError(error);
 	}
-	await persistPiState(c, handle);
-	return result;
+}
+
+function harnessNotOpen() {
+	return new UserError(
+		"Pi Durable is not open in this actor generation, so this shutdown hook cannot use c.pi.",
+	);
+}
+
+function harnessClosed() {
+	return new UserError("Pi Durable is closed because the actor is stopping.");
+}
+
+async function openHarness(
+	c: PiContext,
+	runtime: PiRuntime,
+	options: PiOptions,
+	open: { resume: boolean } = { resume: true },
+): Promise<OpenHarness> {
+	const storage = await SqliteStorage.open(actorSqlite(c.db));
+	const now = options.now ?? Date.now;
+	const harness = await Harness.open(
+		storage,
+		{
+			models: options.models ?? (await createModels(c, options)),
+			registry: options.registry,
+			settings: options.settings,
+			env:
+				options.env ??
+				(options.sandbox
+					? sandboxEnvBuilder(c, runtime, options.sandbox)
+					: undefined),
+			conversationCreated: startingAgent(options),
+			now: options.now,
+			onReport: (error) => {
+				// A commit that failed after storage admitted it leaves Pi Durable
+				// unusable. Background work reports it here, with no action to catch it.
+				queueMicrotask(() => void recoverHarness(c, runtime, options));
+				options.onReport?.(error);
+			},
+		},
+		BACKGROUND_CONTEXT,
+	);
+	reportBlockedTasks(c, await harness.inspect(BACKGROUND_CONTEXT));
+	if (open.resume) harness.resume();
+	const isBusy = async () =>
+		busyState(await harness.inspect(BACKGROUND_CONTEXT), now(), LONG_WAIT_MS)
+			.kind === "busy";
+	const stopBusyWatch = watchBusy(c, harness, now, LONG_WAIT_MS);
+	await reattachWatches(c, runtime.watches, harness, documentsByKind(options));
+	return { harness, stopBusyWatch, isBusy };
+}
+
+/** App documents by `kind`, for clients that name a document. */
+export function documentsByKind(
+	options: PiOptions,
+): ReadonlyMap<string, ConversationDocToken<any>> {
+	return new Map(
+		(options.documents ?? []).map((doc) => [doc.definition.kind, doc]),
+	);
+}
+
+/** Pi Durable refuses every call once a commit failed after storage admitted it. */
+function isUsable(harness: Harness): boolean {
+	try {
+		harness.subscribeClose(() => {})();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** Closes and reopens a harness that Pi Durable refuses to use. The reopened harness resumes from storage. */
+async function recoverHarness(
+	c: PiContext,
+	runtime: PiRuntime,
+	options: PiOptions,
+): Promise<void> {
+	const current = runtime.harness;
+	if (!current || runtime.closing) return;
+	let open: OpenHarness;
+	try {
+		open = await current;
+	} catch {
+		return;
+	}
+	if (runtime.harness !== current || runtime.closing || isUsable(open.harness))
+		return;
+
+	c.log.warn({
+		msg: "pi durable stopped after a failed commit, reopening it from storage",
+	});
+	const reopened = (async () => {
+		await closeOpenHarness(open, runtime.watches);
+		return openHarness(c, runtime, options);
+	})().catch((error: unknown) => {
+		if (runtime.harness === reopened) runtime.harness = undefined;
+		c.log.error({
+			msg: "pi durable could not reopen after a failed commit",
+			error,
+		});
+		throw toClientError(error);
+	});
+	runtime.harness = reopened;
+	await reopened.catch(() => {});
+}
+
+async function closeOpenHarness(
+	open: OpenHarness,
+	watches: ConnectionWatches,
+): Promise<void> {
+	open.stopBusyWatch();
+	await stopAllWatches(watches);
+	await open.harness.close(BACKGROUND_CONTEXT);
+}
+
+async function createModels(c: PiContext, options: PiOptions): Promise<Models> {
+	const credentials = options.credentials
+		? new SourceCredentialStore(options.credentials(c))
+		: emptyCredentialStore;
+	return createActorModelRuntime(
+		{ providers: options.providers, apiKeys: options.apiKeys },
+		credentials,
+	);
+}
+
+/** Parses `provider/modelId`. */
+export function parseModelRef(name: string): ModelRef {
+	const slash = name.indexOf("/");
+	if (slash <= 0 || slash === name.length - 1) {
+		throw new Error(`pi() model must be provider/modelId, received ${name}`);
+	}
+	return { provider: name.slice(0, slash), modelId: name.slice(slash + 1) };
+}
+
+/**
+ * `model` and `thinkingLevel` start every new conversation: root, created, and
+ * forked. A fork already has its parent's agent, so it keeps it. The app's own
+ * `conversationCreated` runs after this.
+ */
+function startingAgent(
+	options: PiOptions,
+): HarnessOptions["conversationCreated"] {
+	const model =
+		options.model === undefined ? undefined : parseModelRef(options.model);
+	const thinkingLevel = options.thinkingLevel;
+	const created = options.conversationCreated;
+	if (model === undefined && thinkingLevel === undefined) return created;
+	return async (tx, conversation) => {
+		const agent = await tx.doc(AgentDoc, conversation.id);
+		await configure(tx, conversation.id, {
+			model: agent.model === undefined ? model : undefined,
+			thinkingLevel:
+				agent.thinkingLevel === undefined ? thinkingLevel : undefined,
+		});
+		await created?.(tx, conversation);
+	};
+}
+
+/** Connects the sandbox on the first tool call that needs it. */
+function sandboxEnvBuilder(
+	c: PiContext,
+	runtime: PiRuntime,
+	provider: SandboxProvider,
+): NonNullable<HarnessOptions["env"]> {
+	return async (target): Promise<ExecutionEnv> => {
+		runtime.sandbox ??= connectSandbox(c, provider).catch((error: unknown) => {
+			runtime.sandbox = undefined;
+			throw error;
+		});
+		const connected = await runtime.sandbox;
+		return sandboxEnv(
+			`${provider.name}:${connected.id}`,
+			connected.sandbox,
+			target.cwd,
+		);
+	};
+}
+
+function reportBlockedTasks(c: PiContext, inspection: HarnessInspection): void {
+	for (const task of inspection.tasks) {
+		if (task.state.kind !== "blocked") continue;
+		c.log.warn({
+			msg: "pi durable task is blocked and does not keep the actor awake; inspect it with harness.inspect",
+			taskId: task.record.id,
+			kind: task.record.kind,
+			reason: task.state.reason,
+			error: task.state.error,
+		});
+	}
+}
+
+type BusyState =
+	| { kind: "busy" }
+	| { kind: "idle" }
+	/** Every live task waits for a deadline further away than the long wait threshold. */
+	| { kind: "waiting"; until: number };
+
+/**
+ * Whether live work should keep the actor awake. Tasks that run or are ready
+ * to run do. A task in a retry or poll wait longer than `longWaitMs` does not;
+ * the actor sleeps and a scheduled wake reopens it at the deadline. Waiting
+ * and completing tasks depend on other tasks, which decide. Blocked tasks
+ * never run, so they never keep the actor awake.
+ */
+function busyState(
+	inspection: HarnessInspection,
+	now: number,
+	longWaitMs: number,
+): BusyState {
+	let until: number | undefined;
+	for (const task of inspection.tasks) {
+		switch (task.state.kind) {
+			case "running":
+			case "ready": {
+				const deadline = waitDeadline(task.record.state.checkpoint);
+				if (deadline === undefined || deadline - now <= longWaitMs)
+					return { kind: "busy" };
+				until = Math.min(until ?? deadline, deadline);
+				break;
+			}
+			case "waiting":
+			case "completing":
+			case "blocked":
+				break;
+		}
+	}
+	return until === undefined ? { kind: "idle" } : { kind: "waiting", until };
+}
+
+/** The deadline of a task checkpoint in Pi's retry or poll phase. */
+function waitDeadline(checkpoint: JsonValue | undefined): number | undefined {
+	if (
+		typeof checkpoint !== "object" ||
+		checkpoint === null ||
+		Array.isArray(checkpoint)
+	)
+		return undefined;
+	if (checkpoint.phase === "retry" && typeof checkpoint.until === "number")
+		return checkpoint.until;
+	if (checkpoint.phase === "poll" && typeof checkpoint.pollAt === "number")
+		return checkpoint.pollAt;
+	return undefined;
+}
+
+/**
+ * Keeps the actor awake while Pi Durable has live work, rechecking after
+ * every commit. Returns a function that stops watching.
+ */
+function watchBusy(
+	c: PiContext,
+	harness: Harness,
+	now: () => number,
+	longWaitMs: number,
+): () => void {
+	let release: (() => void) | undefined;
+	let scheduledWakeAt: number | undefined;
+	let checking = false;
+	let dirty = false;
+	let stopped = false;
+
+	const stayAwake = () => {
+		if (release) return;
+		const { promise, resolve } = Promise.withResolvers<void>();
+		release = resolve;
+		void c.keepAwake(promise);
+	};
+	const letGo = () => {
+		release?.();
+		release = undefined;
+	};
+	const check = async () => {
+		if (checking) {
+			dirty = true;
+			return;
+		}
+		checking = true;
+		try {
+			do {
+				dirty = false;
+				const busy = busyState(
+					await harness.inspect(BACKGROUND_CONTEXT),
+					now(),
+					longWaitMs,
+				);
+				if (stopped) return;
+				if (busy.kind === "waiting" && busy.until !== scheduledWakeAt) {
+					// The actor may sleep through a long wait only once its wake is written.
+					stayAwake();
+					try {
+						await c.schedule.at(busy.until, WAKE_ACTION);
+						scheduledWakeAt = busy.until;
+					} catch (error) {
+						// Pi's own timer then ends the wait, and its commit checks again.
+						c.log.warn({
+							msg: "pi durable could not schedule its wake, so the actor stays awake through the wait",
+							error,
+						});
+					}
+					if (stopped) return;
+				}
+				const canSleep =
+					busy.kind === "idle" ||
+					(busy.kind === "waiting" && busy.until === scheduledWakeAt);
+				if (canSleep) letGo();
+				else stayAwake();
+			} while (dirty && !stopped);
+		} catch (error) {
+			if (!stopped) c.log.warn({ msg: "pi durable busy check failed", error });
+		} finally {
+			checking = false;
+		}
+	};
+
+	// Commit listeners must not call Pi Durable, so the check runs after the listener returns.
+	const unsubscribe = harness.subscribeCommits(() =>
+		queueMicrotask(() => void check()),
+	);
+	const stop = () => {
+		stopped = true;
+		unsubscribe();
+		letGo();
+	};
+	// Keep-awake only blocks idle sleep. Once shutdown starts it would only delay it.
+	c.abortSignal.addEventListener("abort", stop, { once: true });
+	void check();
+	return () => {
+		c.abortSignal.removeEventListener("abort", stop);
+		stop();
+	};
+}
+
+/**
+ * Waits until no run is active, or until `drainUntil` passes. Idle sleep
+ * never has live work, so this only waits on a forced stop, such as an upgrade.
+ * The deadline ends before RivetKit's, so closing still fits in the grace
+ * period. Pi's records are already stored, and the next wake resumes the work.
+ */
+async function drain(
+	c: PiContext,
+	open: OpenHarness,
+	drainUntil: number,
+): Promise<void> {
+	let changed = () => {};
+	let timedOut = false;
+	const unsubscribe = open.harness.subscribeCommits(() => changed());
+	const timer = setTimeout(
+		() => {
+			timedOut = true;
+			changed();
+		},
+		Math.max(0, drainUntil - Date.now()),
+	);
+	try {
+		while (!timedOut) {
+			// Armed before the check, so a commit during the check is not missed.
+			const next = new Promise<void>((resolve) => {
+				changed = resolve;
+			});
+			if (!(await open.isBusy())) return;
+			await next;
+		}
+		c.log.warn({
+			msg: "pi durable run still active at the end of the grace period; it resumes on wake",
+		});
+	} finally {
+		clearTimeout(timer);
+		unsubscribe();
+	}
+}
+
+/**
+ * Closes Pi Durable for this actor generation. On sleep it drains first. On
+ * destroy it stops running work at once. Records of interrupted work stay
+ * running, and the next open resumes them. Then suspends the sandbox on
+ * sleep, or destroys it on destroy.
+ */
+export async function closeHarness(
+	c: PiContext,
+	options: PiOptions,
+	stop: PiStop,
+): Promise<void> {
+	const runtime = piRuntime(c);
+	const errors: unknown[] = [];
+	let open: OpenHarness | undefined;
+	try {
+		open = await runtime.harness;
+	} catch {}
+	// Destroy has no next generation to resume in, so it stops running work at once.
+	if (open && stop.reason === "sleep") {
+		await drain(c, open, stop.drainUntil).catch((error: unknown) =>
+			errors.push(error),
+		);
+	}
+	runtime.closing = true;
+	runtime.harness = undefined;
+	if (open) {
+		await closeOpenHarness(open, runtime.watches).catch((error: unknown) =>
+			errors.push(error),
+		);
+	}
+
+	const provider = options.sandbox;
+	if (provider) {
+		await closeSandbox(c, provider, runtime.sandbox, stop).catch(
+			(error: unknown) => errors.push(error),
+		);
+	}
+
+	if (errors.length === 1) throw errors[0];
+	if (errors.length > 1)
+		throw new AggregateError(errors, "pi durable shutdown failed");
 }
 
 /** Runs `body` with a `c.pi` that throws `error` when read. */
@@ -228,172 +654,12 @@ export function withUnavailablePi<T>(
 	return body();
 }
 
-function sessionNotOpen() {
-	return new UserError(
-		"The Pi session is not open in this actor generation, so this shutdown hook cannot use c.pi.",
-	);
-}
-
-function sessionClosed() {
-	return new UserError(
-		"The Pi session is closed because the actor is stopping.",
-	);
-}
-
-/** Pi's built-in tools, which all run on the actor host. */
-const PI_BUILT_IN_TOOLS = [
-	"read",
-	"bash",
-	"powershell",
-	"edit",
-	"write",
-	"grep",
-	"find",
-	"ls",
-];
-
-async function openPiSession(
-	c: PiContext,
-	runtime: PiRuntime,
-	options: PiSessionOptions,
-): Promise<PiSession> {
-	const {
-		settings,
-		sandbox: sandboxProvider,
-		providers,
-		apiKeys,
-		model,
-		scopedModels,
-		credentials: credentialSource,
-		...sessionOptions
-	} = options;
-	const loaded = await loadPiSession(c.db);
-	const stored = loaded && (await migratePiSession(c.db, loaded));
-	const sandbox = sandboxProvider ? lazySandbox(c, sandboxProvider) : undefined;
-	// A new session takes its working directory from the sandbox, so only its first open connects.
-	const firstSandbox =
-		sandbox && !stored ? (await sandbox.connect()).sandbox : undefined;
-	const cwd =
-		firstSandbox?.cwd ?? stored?.cwd ?? sessionOptions.cwd ?? process.cwd();
-	if (!isAbsolute(cwd)) {
-		throw new Error(`pi() cwd must be an absolute path, received ${cwd}`);
-	}
-	const connect = sandbox && (async () => (await sandbox.connect()).sandbox);
-
-	const settingsManager = SettingsManager.inMemory(
-		stored?.settings ?? settings ?? {},
-	);
-	const sessionManager = stored
-		? SessionManager.inMemory(cwd, undefined, toFileEntries(stored))
-		: SessionManager.inMemory(cwd);
-	const credentials = credentialSource
-		? new SourceCredentialStore(credentialSource(c))
-		: undefined;
-	const modelRuntime = await createActorModelRuntime(
-		{ providers, apiKeys },
-		credentials ?? emptyCredentialStore,
-	);
-	const resourceLoader =
-		sessionOptions.resourceLoader ??
-		(await isolatedResourceLoader(
-			cwd,
-			sessionOptions.agentDir,
-			settingsManager,
-		));
-
-	const { session, modelFallbackMessage } = await createAgentSession({
-		...sessionOptions,
-		cwd,
-		modelRuntime,
-		model: openingModel(
-			{ model, scopedModels },
-			modelRuntime,
-			sessionManager.buildSessionContext().model,
-		),
-		settingsManager,
-		sessionManager,
-		resourceLoader,
-		customTools: connect
-			? [
-					...(sessionOptions.customTools ?? []),
-					...createSandboxTools(cwd, connect),
-				]
-			: sessionOptions.customTools,
-		excludeTools: [
-			...new Set([
-				...(sessionOptions.excludeTools ?? []),
-				...(sandbox ? ["powershell"] : PI_BUILT_IN_TOOLS),
-			]),
-		],
-	});
-	if (modelFallbackMessage) {
-		c.log.warn({ msg: "pi model fallback", detail: modelFallbackMessage });
-	}
-
-	const handle: PiSession = {
-		session,
-		settingsManager,
-		cwd,
-		sandbox,
-		bashOperations: connect
-			? createSandboxBashOperations(cwd, connect)
-			: undefined,
-		persistedSettings: JSON.stringify(settingsManager.getGlobalSettings()),
-		persistedEntryCount: stored?.entries.length ?? 0,
-		credentials,
-	};
-
-	if (!stored) {
-		const header = sessionManager.getHeader();
-		if (!header) {
-			throw new Error("Pi did not create a session header");
-		}
-		await createPiSession(c.db, {
-			header,
-			cwd,
-			settings: JSON.parse(handle.persistedSettings) as PiSettings,
-		});
-	}
-	await flushPiEntries(c, runtime, handle);
-	session.subscribe((event) => {
-		broadcastSessionEvent(c, event);
-		if (!isStreamingDelta(event)) {
-			flushPiEntries(c, runtime, handle).catch((error: unknown) => {
-				c.log.error({
-					msg: "pi session entry write failed, retrying on the next flush",
-					error,
-				});
-			});
-		}
-		// The run state tells the next wake whether a run was cut off.
-		if (
-			event.type === "agent_start" ||
-			(event.type === "queue_update" && session.isStreaming)
-		) {
-			void writeInOrder(c, runtime, () =>
-				savePiRunning(c.db, queuedMessages(session)),
-			);
-		} else if (event.type === "agent_settled") {
-			void writeInOrder(c, runtime, () => savePiIdle(c.db));
-		}
-	});
-
-	c.log.info({
-		msg: "pi session opened",
-		sessionId: session.sessionId,
-		restored: stored !== undefined,
-		entryCount: sessionManager.getEntries().length,
-		messageCount: session.messages.length,
-	});
-	return handle;
-}
-
 /**
  * Connects to the actor's sandbox, creating one when none is stored or the
  * provider reports the stored one no longer exists. A new sandbox id is saved
  * as soon as `create` returns, so a failure later in the start reuses it. Any
  * other connect failure is thrown, so a temporary outage never replaces a
- * sandbox. `pi()` and `piDurable()` both store the id in `pi_sandbox`.
+ * sandbox.
  */
 export async function connectSandbox(
 	c: PiContext,
@@ -426,310 +692,6 @@ export async function connectSandbox(
 }
 
 /**
- * Pi's resource discovery reads the actor host's filesystem and loads host
- * code as extensions. Extensions, skills, prompt templates, context files, and
- * themes stay off unless the developer passes a loader.
- */
-async function isolatedResourceLoader(
-	cwd: string,
-	agentDir: string | undefined,
-	settingsManager: SettingsManager,
-): Promise<DefaultResourceLoader> {
-	const loader = new DefaultResourceLoader({
-		cwd,
-		agentDir: agentDir ?? getAgentDir(),
-		settingsManager,
-		noExtensions: true,
-		noSkills: true,
-		noPromptTemplates: true,
-		noContextFiles: true,
-		noThemes: true,
-	});
-	await loader.reload();
-	return loader;
-}
-
-/** Token and output deltas never append entries, so they skip the entry diff. */
-function isStreamingDelta(event: AgentSessionEvent): boolean {
-	return (
-		event.type === "message_update" ||
-		event.type === "tool_execution_update" ||
-		event.type === "bash_execution_update"
-	);
-}
-
-/**
- * Writes every entry Pi appended since the last successful write, in append
- * order. The count only advances after an insert succeeds, so a failed write
- * is retried by the next flush. Returns the write so actions can await it.
- */
-function flushPiEntries(
-	c: PiContext,
-	runtime: PiRuntime,
-	handle: PiSession,
-): Promise<void> {
-	const write = runtime.writes.then(async () => {
-		const entries = handle.session.sessionManager.getEntries();
-		while (handle.persistedEntryCount < entries.length) {
-			await appendPiEntry(c.db, entries[handle.persistedEntryCount]!);
-			handle.persistedEntryCount += 1;
-		}
-	});
-	runtime.writes = write.catch(() => {});
-	return write;
-}
-
-/** Runs a SQLite write after the entry writes queued before it. */
-function writeInOrder(
-	c: PiContext,
-	runtime: PiRuntime,
-	write: () => Promise<void>,
-): Promise<void> {
-	const next = runtime.writes.then(write);
-	runtime.writes = next.catch((error: unknown) => {
-		c.log.error({ msg: "pi run state write failed", error });
-	});
-	return next;
-}
-
-function queuedMessages(session: AgentSession): PiQueue {
-	return {
-		steering: [...session.getSteeringMessages()],
-		followUp: [...session.getFollowUpMessages()],
-	};
-}
-
-/**
- * Continues the run that was active when the actor stopped, when Pi's own
- * `Agent.continue()` accepts the transcript: its last message is a user or a
- * tool result message. Otherwise the chat stays as Pi left it, as after an
- * abort. The run continues in the background and keeps the actor awake.
- */
-export async function resumeInterruptedRun(
-	c: PiContext,
-	options: PiSessionOptions,
-): Promise<void> {
-	const queue = await loadPiInterruptedRun(c.db);
-	if (!queue) return;
-	const handle = await ensurePiSession(c, options);
-	const lastRole = handle.session.messages.at(-1)?.role;
-	if (lastRole !== "user" && lastRole !== "toolResult") {
-		c.log.info({
-			msg: "pi run stopped where Pi cannot continue it, leaving the chat as is",
-			lastRole,
-		});
-		await writeInOrder(c, piRuntime(c), () => savePiIdle(c.db));
-		return;
-	}
-	c.log.info({
-		msg: "resuming the pi run that was active when the actor stopped",
-		lastRole,
-	});
-	const run = continueRun(handle.session, queue)
-		.then(() => persistPiState(c, handle))
-		.catch((error: unknown) => {
-			c.log.error({ msg: "resumed pi run failed", error });
-		});
-	void c.keepAwake(run);
-}
-
-/** The private `AgentSession` methods that resume uses. */
-interface AgentSessionInternals {
-	_runAgentPrompt(messages: unknown[]): Promise<void>;
-	_queueSteer(text: string): Promise<void>;
-	_queueFollowUp(text: string): Promise<void>;
-}
-
-/**
- * Runs `AgentSession`'s own run loop from the stored transcript, so retry,
- * compaction, and queued messages work as in any run. The loop starts with
- * `agent.prompt`; for that one call it continues instead. `pi-coding-agent`
- * is pinned exactly, and the resume test fails if these methods change.
- */
-async function continueRun(
-	session: AgentSession,
-	queue: PiQueue,
-): Promise<void> {
-	const internals = session as unknown as AgentSessionInternals;
-	for (const text of queue.steering) await internals._queueSteer(text);
-	for (const text of queue.followUp) await internals._queueFollowUp(text);
-	const agent = session.agent;
-	Object.defineProperty(agent, "prompt", {
-		configurable: true,
-		value: async () => {
-			Reflect.deleteProperty(agent, "prompt");
-			await agent.continue();
-		},
-	});
-	try {
-		await internals._runAgentPrompt([]);
-	} finally {
-		Reflect.deleteProperty(agent, "prompt");
-	}
-}
-
-function broadcastSessionEvent(c: PiContext, event: AgentSessionEvent): void {
-	try {
-		c.broadcast("event", event);
-	} catch (error) {
-		if (isActorStoppingError(error)) return;
-		c.log.error({ msg: "failed to broadcast pi session event", error });
-	}
-}
-
-function isActorStoppingError(error: unknown): boolean {
-	if (!error || typeof error !== "object") return false;
-	const candidate = error as { group?: unknown; code?: unknown };
-	return candidate.group === "actor" && candidate.code === "stopping";
-}
-
-/**
- * Queues entries appended since the last flush and writes Pi's mutable settings
- * when they changed. Called after every action and on shutdown.
- */
-export async function persistPiState(
-	c: PiContext,
-	handle: PiSession,
-): Promise<void> {
-	await flushPiEntries(c, piRuntime(c), handle);
-	const settings = handle.settingsManager.getGlobalSettings();
-	const encoded = JSON.stringify(settings);
-	if (encoded === handle.persistedSettings) return;
-	await savePiSettings(c.db, settings);
-	handle.persistedSettings = encoded;
-}
-
-/**
- * Aborts the run in memory when RivetKit declares this actor generation lost.
- * The engine may already run the next generation, which resumes the run, so
- * the lost one must stop calling the model and running tools. A lost
- * generation skips `onSleep`, and its storage rejects writes, so nothing is
- * stored here. A normal stop fires the same signal and drains in `onSleep`.
- * Takes the wake context, whose signal is the actor's, not one action's.
- */
-export function stopRunWhenLost(c: PiContext): void {
-	const runtime = piRuntime(c);
-	c.abortSignal.addEventListener(
-		"abort",
-		() => {
-			if (!isLost(c)) return;
-			runtime.closing = true;
-			const ready = runtime.ready;
-			runtime.ready = undefined;
-			void ready
-				?.then((handle) => handle.session.abort())
-				.catch((error: unknown) =>
-					c.log.error({ msg: "pi could not abort the lost run", error }),
-				);
-			c.log.warn({
-				msg: "pi actor generation lost, aborting its run; the next generation resumes it",
-			});
-		},
-		{ once: true },
-	);
-}
-
-/**
- * RivetKit releases that stop lost generations expose `isLost` on the actor
- * context. Older releases still run `onSleep` for a lost generation, so the
- * drain handles it there.
- */
-function isLost(c: PiContext): boolean {
-	return (c as { isLost?: unknown }).isLost === true;
-}
-
-/**
- * Waits until the session is idle, or until `drainUntil` passes. Idle sleep
- * never has a run, so this only waits on a forced stop, such as a deploy. The
- * deadline ends before RivetKit's, so closing still fits in the grace period.
- * Pi stores each message as it ends, and the next wake resumes the run.
- */
-async function drain(
-	c: PiContext,
-	session: AgentSession,
-	drainUntil: number,
-): Promise<void> {
-	if (session.isIdle) return;
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	const gracePeriodEnded = new Promise<true>((resolve) => {
-		timer = setTimeout(
-			() => resolve(true),
-			Math.max(0, drainUntil - Date.now()),
-		);
-	});
-	try {
-		const idle = session.waitForIdle().then(() => false as const);
-		if (await Promise.race([idle, gracePeriodEnded])) {
-			c.log.warn({
-				msg: "pi run still active at the end of the grace period; it resumes on wake when Pi can continue it",
-			});
-		}
-	} finally {
-		clearTimeout(timer);
-	}
-}
-
-/**
- * Stops the Pi session for this actor generation. On sleep it first waits,
- * until `drainUntil`, for a run to finish. A run still active then is not
- * aborted: the transcript ends at the last message Pi stored, and the next
- * wake resumes it. On destroy it aborts the run at once, since nothing would
- * resume it. Then lets extensions shut down, flushes settings and entries,
- * and suspends the sandbox on sleep, or destroys it on destroy.
- */
-export async function closePiSession(
-	c: PiContext,
-	options: PiSessionOptions,
-	stop: PiStop,
-): Promise<void> {
-	const runtime = piRuntime(c);
-	const ready = runtime.ready;
-	const errors: unknown[] = [];
-	let handle: PiSession | undefined;
-	try {
-		handle = await ready;
-	} catch {}
-
-	if (handle) {
-		const open = handle;
-		await attempt(errors, () =>
-			stop.reason === "sleep"
-				? drain(c, open.session, stop.drainUntil)
-				: open.session.abort(),
-		);
-	}
-	runtime.closing = true;
-	runtime.ready = undefined;
-
-	if (handle) {
-		const open = handle;
-		await attempt(errors, async () => {
-			if (open.session.hasExtensionHandlers("session_shutdown")) {
-				await open.session.extensionRunner.emit({
-					type: "session_shutdown",
-					reason: "quit",
-				});
-			}
-		});
-		await attempt(errors, () => persistPiState(c, open));
-		open.session.dispose();
-		c.log.info({ msg: "pi session closed", sessionId: open.session.sessionId });
-	}
-
-	const provider = options.sandbox;
-	if (provider) {
-		await attempt(errors, () =>
-			closeSandbox(c, provider, handle?.sandbox?.current, stop),
-		);
-	}
-
-	if (errors.length === 1) throw errors[0];
-	if (errors.length > 1) {
-		throw new AggregateError(errors, "pi session shutdown failed");
-	}
-}
-
-/**
  * Suspends the sandbox this generation connected when the actor sleeps. On
  * destroy it destroys the actor's sandbox, also one stored by an earlier
  * generation that this one never connected.
@@ -751,15 +713,4 @@ export async function closeSandbox(
 		connected?.id ??
 		(stored?.provider === provider.name ? stored.id : undefined);
 	if (id !== undefined) await provider.destroy(c, id);
-}
-
-async function attempt(
-	errors: unknown[],
-	operation: () => void | Promise<void>,
-): Promise<void> {
-	try {
-		await operation();
-	} catch (error) {
-		errors.push(error);
-	}
 }

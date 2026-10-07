@@ -1,7 +1,4 @@
-import type {
-	AgentSession,
-	AgentSessionEvent,
-} from "@earendil-works/pi-coding-agent";
+import type { Harness } from "@earendil-works/pi-durable";
 import {
 	actor,
 	type EventSchemaConfig,
@@ -23,53 +20,48 @@ import type {
 	UserActorConfig,
 } from "./actor-types.js";
 import {
-	closePiSession,
+	closeHarness,
 	createPiRuntime,
+	openOnWake,
 	PI_RUNTIME,
 	type PiContext,
-	type PiSessionOptions,
-	resumeInterruptedRun,
-	stopRunWhenLost,
-	withPiSession,
+	type PiOptions,
+	piRuntime,
+	withPiAccess,
+	withUnavailablePi,
 } from "./runtime.js";
 import { migratePiTables } from "./storage.js";
+import {
+	type PiDocFrame,
+	type PiEventsFrame,
+	type PiTaskGraphFrame,
+	type PiViewFrame,
+	unwatchConnection,
+} from "./watches.js";
 
-/** Every Pi `AgentSessionEvent`, in order, for connected clients. */
+/** Watch frames, sent only to the connection that asked. See `PiWatchEvents`. */
 export type PiEvents = {
-	event: Type<AgentSessionEvent>;
+	"pi.events": Type<PiEventsFrame>;
+	"pi.view": Type<PiViewFrame>;
+	"pi.taskGraph": Type<PiTaskGraphFrame>;
+	"pi.doc": Type<PiDocFrame>;
 };
 
 const piEvents: PiEvents = {
-	event: event<AgentSessionEvent>(),
+	"pi.events": event<PiEventsFrame>(),
+	"pi.view": event<PiViewFrame>(),
+	"pi.taskGraph": event<PiTaskGraphFrame>(),
+	"pi.doc": event<PiDocFrame>(),
 };
 
-const piOptionKeys = [
-	"cwd",
-	"agentDir",
-	"providers",
-	"apiKeys",
-	"credentials",
-	"model",
-	"thinkingLevel",
-	"scopedModels",
-	"noTools",
-	"tools",
-	"excludeTools",
-	"customTools",
-	"resourceLoader",
-	"sessionStartEvent",
-	"settings",
-	"sandbox",
-] as const satisfies readonly (keyof PiSessionOptions)[];
-
 /**
- * `c.pi`: the actor's Pi session, in the app's own actions and hooks. Reading
- * it throws when the session cannot open, such as while the sandbox provider
- * is down. In `onSleep` and `onDestroy` it is set only when the session is
- * already open in this actor generation.
+ * `c.pi`: the actor's Pi Durable harness, in the app's own actions and hooks.
+ * Reading it throws when Pi Durable cannot open, such as after a rollback to
+ * an older schema. In `onSleep` and `onDestroy` it is set only when Pi Durable
+ * is already open in this actor generation.
  */
 export interface PiAccess {
-	readonly pi: AgentSession;
+	readonly pi: Harness;
 }
 
 /** The app's own actions, which get `c.pi`. Nested objects become dotted action names. */
@@ -92,7 +84,7 @@ export type PiUserActions<
 	PiAccess
 >;
 
-/** Ordinary actor config plus Pi's session options. The app's actions and lifecycle hooks get `c.pi`. */
+/** Ordinary actor config plus the Pi Durable options. The app's actions and lifecycle hooks get `c.pi`. */
 export type PiActorConfigInput<
 	TState = undefined,
 	TConnParams = undefined,
@@ -119,17 +111,35 @@ export type PiActorConfigInput<
 	TEvents,
 	TQueues,
 	TUserActions,
-	PiSessionOptions,
+	PiOptions,
 	PiAccess
 >;
 
+const piOptionKeys = [
+	"registry",
+	"models",
+	"settings",
+	"env",
+	"conversationCreated",
+	"now",
+	"onReport",
+	"model",
+	"thinkingLevel",
+	"scopedModels",
+	"providers",
+	"apiKeys",
+	"credentials",
+	"sandbox",
+	"documents",
+] as const satisfies readonly (keyof PiOptions)[];
+
 /**
- * Defines a Rivet Actor that owns one Pi coding-agent session.
+ * Defines a Rivet Actor that owns one Pi Durable harness.
  *
- * The session transcript and settings live in the actor's SQLite database and
- * are restored when the actor wakes. Pi events are broadcast on `event`.
- * Ordinary actor config (state, vars, actions, events, hooks) is passed through.
- * The app's own actions and lifecycle hooks get the session as `c.pi`.
+ * Pi Durable stores conversations, tasks, and documents in the actor's SQLite
+ * database. Runs survive sleep, upgrades, and crashes, and resume when the
+ * actor wakes. The actions match Pi Durable's API one to one. The app's own
+ * actions and lifecycle hooks get the harness as `c.pi`.
  */
 export function pi<
 	TState,
@@ -166,15 +176,6 @@ export function pi<
 		TEvents,
 		TQueues,
 		TUserActions
-	> = {} as PiActorConfigInput<
-		TState,
-		TConnParams,
-		TConnState,
-		TVars,
-		TInput,
-		TEvents,
-		TQueues,
-		TUserActions
 	>,
 ): PiActorDefinition<
 	TState,
@@ -188,12 +189,19 @@ export function pi<
 	PiEvents,
 	PiActions
 > {
-	const { actorConfig, options: sessionOptions } =
-		splitConfig<PiSessionOptions>(config, piOptionKeys);
+	const { actorConfig, options: piOptions } = splitConfig<PiOptions>(
+		config,
+		piOptionKeys,
+	);
+	if (!piOptions.registry) {
+		throw new Error(
+			"pi() needs a registry; pass createRegistry() from @earendil-works/pi-durable",
+		);
+	}
 	if (actorConfig.db !== undefined) {
 		throw new Error("pi() owns the actor database; remove the db option");
 	}
-	const actions = createPiActions(sessionOptions);
+	const actions = createPiActions(piOptions);
 	assertNoReservedNames("pi()", actorConfig, {
 		action: actions,
 		event: piEvents,
@@ -201,14 +209,15 @@ export function pi<
 
 	const withPi = <TArgs extends unknown[]>(
 		hook: ((c: PiContext, ...args: TArgs) => unknown) | undefined,
-		opensSession = true,
+		opensHarness = true,
 	) =>
 		hook &&
 		((c: PiContext, ...args: TArgs) =>
-			withPiSession(c, sessionOptions, () => hook(c, ...args), {
-				opensSession,
+			withPiAccess(c, piOptions, () => hook(c, ...args), {
+				opensHarness,
 			}));
-	const userOnWake = withPi(actorConfig.onWake);
+	const userOnWake = actorConfig.onWake;
+	const userOnDisconnect = withPi(actorConfig.onDisconnect);
 
 	// The config is built from untyped parts, so `actor()` cannot check it
 	// against the generics. The declared return type is the public contract.
@@ -217,7 +226,7 @@ export function pi<
 			"pi()",
 			actorConfig,
 			{ slot: PI_RUNTIME, create: createPiRuntime },
-			(c, stop) => closePiSession(c, sessionOptions, stop),
+			(c, stop) => closeHarness(c, piOptions, stop),
 			{
 				onSleep: withPi(actorConfig.onSleep, false),
 				onDestroy: withPi(actorConfig.onDestroy, false),
@@ -227,21 +236,39 @@ export function pi<
 		events: { ...(actorConfig.events ?? {}), ...piEvents },
 		actions: {
 			...wrapActions(actorConfig.actions ?? {}, (c: PiContext, action) =>
-				withPiSession(c, sessionOptions, action),
+				withPiAccess(c, piOptions, action),
 			),
 			...actions,
 		},
+		// Opening on wake resumes interrupted work, after the app's own onWake.
 		onWake: async (c: PiContext) => {
-			stopRunWhenLost(c);
-			await userOnWake?.(c);
-			await resumeInterruptedRun(c, sessionOptions).catch((error: unknown) => {
+			let harness: Harness;
+			try {
+				harness = await openOnWake(c, piOptions);
+			} catch (error) {
+				// The actor stays up so actions can report the cause, such as a
+				// schema newer than the code. Using c.pi throws it.
 				c.log.error({
-					msg: "pi could not resume the run that was active when the actor stopped",
+					msg: "pi durable could not open on wake; actions will retry",
 					error,
 				});
-			});
+				return withUnavailablePi(c, error, () => userOnWake?.(c));
+			}
+			Object.defineProperty(c, "pi", { value: harness, configurable: true });
+			try {
+				await userOnWake?.(c);
+			} finally {
+				harness.resume();
+			}
 		},
 		onConnect: withPi(actorConfig.onConnect),
-		onDisconnect: withPi(actorConfig.onDisconnect),
+		onDisconnect: async (c: PiContext, conn: { id: string }) => {
+			try {
+				await userOnDisconnect?.(c, conn);
+			} finally {
+				const runtime = piRuntime(c);
+				await unwatchConnection(runtime.actor ?? c, runtime.watches, conn.id);
+			}
+		},
 	} as any);
 }
