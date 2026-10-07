@@ -100,7 +100,7 @@ async function promptOnce(handle: { prompt(text: string): Promise<unknown> }) {
 }
 
 describe("pi application credentials", () => {
-	test("a key the application supplies is used", async (c) => {
+	test("a key the application supplies is used, and a logout applies from the next prompt", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const owner = `alice-${randomUUID()}`;
 		stored.set(
@@ -110,6 +110,15 @@ describe("pi application credentials", () => {
 		const agent = client.agent.getOrCreate([owner]);
 
 		expect(await promptOnce(agent)).toEqual(["alice-key"]);
+
+		stored.get(owner)!.delete("mock");
+		const before = mockModel.requests.length;
+		await expect(agent.prompt("say hello")).resolves.toMatchObject({
+			status: "unanswered",
+		});
+		expect(
+			mockModel.requests.slice(before).map((request) => request.apiKey),
+		).not.toContain("alice-key");
 	});
 
 	test("a subscription token that expires soon is refreshed by the application before the model call", async (c) => {
