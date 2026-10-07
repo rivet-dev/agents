@@ -21,7 +21,7 @@ import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { piDurable } from "../src/durable/index.js";
+import { pi } from "../src/index.js";
 import { localSandboxProvider } from "./helpers/local-sandbox.js";
 import {
 	createMockModel,
@@ -113,7 +113,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		}),
 	);
 
-	const agent = piDurable({
+	const agent = pi({
 		...models,
 		registry: tools,
 		documents: [Todos],
@@ -148,7 +148,7 @@ function buildRegistry(mock: MockModel, root: string) {
 			},
 		},
 	});
-	const coder = piDurable({
+	const coder = pi({
 		...models,
 		registry: (() => {
 			const coding = createRegistry();
@@ -157,7 +157,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		})(),
 		sandbox: localSandboxProvider(join(root, "sandboxes")),
 	});
-	const backoff = piDurable({
+	const backoff = pi({
 		...models,
 		registry: createRegistry(),
 		// A retry wait just past the one-minute threshold, so the actor sleeps through it.
@@ -166,14 +166,14 @@ function buildRegistry(mock: MockModel, root: string) {
 		onSleep: sleeps.record,
 	});
 	// Every schedule write fails, so a long wait cannot get its wake.
-	const backoffWithoutSchedules = piDurable({
+	const backoffWithoutSchedules = pi({
 		...models,
 		registry: createRegistry(),
 		settings: { retry: { baseDelayMs: 61_000, maxAgentDelayMs: 61_000 } },
 		options: { sleepTimeout: 300, maxSchedules: 0 },
 		onSleep: sleeps.record,
 	});
-	const jobRunner = piDurable({
+	const jobRunner = pi({
 		...models,
 		registry: jobsRegistry,
 		// The job runs until the stop interrupts it, so a short grace period ends the drain.
@@ -201,7 +201,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		},
 	});
 	// Neither `model` nor `scopedModels`, so clients may not choose a model.
-	const unscoped = piDurable({
+	const unscoped = pi({
 		providers: models.providers,
 		apiKeys: models.apiKeys,
 		registry: createRegistry(),
@@ -268,7 +268,7 @@ afterAll(async () => {
 	if (workdir) await rm(workdir, { recursive: true, force: true });
 });
 
-describe("piDurable actor", () => {
+describe("pi actor", () => {
 	test("a run stopped at the end of the grace period resumes on wake: safe tools rerun, unsafe tools report the interruption", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["crash", randomUUID()];

@@ -34,8 +34,8 @@
 			"default": "./dist/index.js"
 		},
 		"./durable": {
-			"types": "./dist/durable/index.d.ts",
-			"default": "./dist/durable/index.js"
+			"types": "./dist/durable.d.ts",
+			"default": "./dist/durable.js"
 		}
 	},
 	"main": "./dist/index.js",
@@ -54,14 +54,6 @@
 		"@earendil-works/chord": "^1.0.2",
 		"@earendil-works/pi-durable": "^1.0.2",
 		"rivetkit": ">=2.3.23 <2.4.0"
-	},
-	"peerDependenciesMeta": {
-		"@earendil-works/chord": {
-			"optional": true
-		},
-		"@earendil-works/pi-durable": {
-			"optional": true
-		}
 	},
 	"devDependencies": {
 		"@earendil-works/chord": "1.0.2",

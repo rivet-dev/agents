@@ -54,7 +54,7 @@ await writeFile(
 			"@rivet-dev/pi": `file:${piTarball}`,
 			"@rivet-dev/sandbox-adapter": `file:${adapterTarball}`,
 			rivetkit: piDevDependencies.rivetkit,
-			// The peers of the `@rivet-dev/pi/durable` entrypoint.
+			// The peers of `@rivet-dev/pi`.
 			"@earendil-works/chord": piDevDependencies["@earendil-works/chord"],
 			"@earendil-works/pi-durable":
 				piDevDependencies["@earendil-works/pi-durable"],
@@ -110,7 +110,7 @@ const script = [
 	'const pi = await import("@rivet-dev/pi");',
 	'if (typeof pi.pi !== "function") throw new Error("@rivet-dev/pi does not export pi()");',
 	'const durable = await import("@rivet-dev/pi/durable");',
-	'if (typeof durable.piDurable !== "function") throw new Error("@rivet-dev/pi/durable does not export piDurable()");',
+	'if (durable.piDurable !== pi.pi) throw new Error("@rivet-dev/pi/durable does not export piDurable() as pi()");',
 	'const adapter = await import("@rivet-dev/sandbox-adapter");',
 	'if (typeof adapter.runRemoteProcess !== "function") throw new Error("@rivet-dev/sandbox-adapter does not export runRemoteProcess()");',
 ].join("\n");

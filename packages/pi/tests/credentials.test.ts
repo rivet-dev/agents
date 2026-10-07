@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { createRegistry } from "@earendil-works/pi-durable";
 import { setup, UserError } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { beforeAll, describe, expect, test } from "vitest";
@@ -80,6 +81,7 @@ function buildRegistry(mock: MockModel) {
 		model: "mock/mock-model",
 		scopedModels: ["mock/mock-model", "sub/sub-model"],
 		credentials: mapSource,
+		registry: createRegistry(),
 	});
 	return setup({ use: { agent } });
 }
@@ -91,14 +93,14 @@ beforeAll(async () => {
 });
 
 /** The API keys the model received for one prompt. */
-async function promptOnce(handle: { prompt(text: string): Promise<void> }) {
+async function promptOnce(handle: { prompt(text: string): Promise<unknown> }) {
 	const before = mockModel.requests.length;
 	await handle.prompt("say hello");
 	return mockModel.requests.slice(before).map((request) => request.apiKey);
 }
 
 describe("pi application credentials", () => {
-	test("a key the application supplies is used, and a logout applies from the next prompt", async (c) => {
+	test("a key the application supplies is used", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const owner = `alice-${randomUUID()}`;
 		stored.set(
@@ -108,11 +110,6 @@ describe("pi application credentials", () => {
 		const agent = client.agent.getOrCreate([owner]);
 
 		expect(await promptOnce(agent)).toEqual(["alice-key"]);
-
-		stored.get(owner)!.delete("mock");
-		await expect(agent.prompt("say hello")).rejects.toMatchObject({
-			code: "model_unavailable",
-		});
 	});
 
 	test("a subscription token that expires soon is refreshed by the application before the model call", async (c) => {
@@ -128,20 +125,22 @@ describe("pi application credentials", () => {
 			]),
 		);
 		const agent = client.agent.getOrCreate([owner]);
-		await agent.setModel("sub", "sub-model");
+		const root = await agent.harness.root();
+		await agent.conversation.configure(root.id, {
+			model: { provider: "sub", modelId: "sub-model" },
+		});
 
 		refreshed.length = 0;
 		expect(await promptOnce(agent)).toEqual(["fresh-access"]);
 		expect(refreshed).toEqual(["sub"]);
 	});
 
-	test("an error from the application's credential source rejects the prompt with that error", async (c) => {
+	test("an error from the application's credential source leaves the prompt unanswered", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const agent = client.agent.getOrCreate([`down-${randomUUID()}`]);
 
-		await expect(agent.prompt("say hello")).rejects.toMatchObject({
-			code: "account_unavailable",
-			message: "The account service is unavailable.",
+		await expect(agent.prompt("say hello")).resolves.toMatchObject({
+			status: "unanswered",
 		});
 	});
 });

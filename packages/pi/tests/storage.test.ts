@@ -10,7 +10,7 @@ import { actor, setup } from "rivetkit";
 import { db, type RawAccess } from "rivetkit/db";
 import { setupTest } from "rivetkit/test";
 import { describe, expect, test } from "vitest";
-import { actorSqlite } from "../src/durable/actor-sqlite.js";
+import { actorSqlite } from "../src/actor-sqlite.js";
 
 function storageConformance(withStorage: StorageConformanceProvider) {
 	return createStorageConformance({

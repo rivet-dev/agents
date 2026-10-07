@@ -1,5 +1,4 @@
 import {
-	type AgentSession,
 	type CreateModelRuntimeOptions,
 	ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
@@ -20,17 +19,13 @@ export type PiCredential = NonNullable<
 /** A custom provider, the same shape as one entry of Pi's `models.json` `providers`. */
 export type PiProviderConfig = Parameters<ModelRuntime["registerProvider"]>[1];
 
-/** A model from Pi's catalog. */
-export type PiModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
-
 /** Model and credential options accepted by `pi()`. */
 export interface PiModelOptions {
-	/** The model for a new session, as `provider/modelId`, such as `anthropic/claude-opus-5-5`. */
+	/** The model of every new conversation, as `provider/modelId`, such as `anthropic/claude-opus-5-5`. */
 	model?: string;
 	/**
-	 * Models a client may switch to with `setModel`, as `provider/modelId`.
-	 * Without it, only `model`. Unlike Pi's scoped models, which only limit
-	 * cycling, this is a hard limit.
+	 * Models a client may choose with `conversation.configure`, as `provider/modelId`.
+	 * Without it, only `model`.
 	 */
 	scopedModels?: string[];
 	/** Custom providers registered on the actor's model runtime. */
@@ -45,17 +40,6 @@ export interface PiModelOptions {
 	 * logins. Called once per actor generation with the actor's context.
 	 */
 	credentials?: (c: PiContext) => PiCredentialSource;
-}
-
-/** A model a client may switch to. */
-export interface PiModelInfo {
-	provider: string;
-	id: string;
-	name: string;
-	reasoning: boolean;
-	input: PiModel["input"];
-	contextWindow: number;
-	maxTokens: number;
 }
 
 /** The model options that decide which models a client may use. */
@@ -125,104 +109,4 @@ export function assertModelAllowed(
 			{ code: "model_not_allowed" },
 		);
 	}
-}
-
-/** Looks up a `provider/modelId` in the actor's catalog. */
-function catalogModel(runtime: ModelRuntime, name: string): PiModel {
-	const slash = name.indexOf("/");
-	const model =
-		slash > 0
-			? runtime.getModel(name.slice(0, slash), name.slice(slash + 1))
-			: undefined;
-	if (!model) {
-		throw new Error(
-			`pi() model ${name} is not in Pi's model catalog; add it with providers`,
-		);
-	}
-	return model;
-}
-
-/**
- * The model a session opens with: the model saved in the session when it is
- * still allowed, otherwise the configured default. Undefined lets Pi choose,
- * which only happens when no model is configured.
- */
-export function openingModel(
-	options: AllowlistOptions,
-	runtime: ModelRuntime,
-	saved: { provider: string; modelId: string } | null,
-): PiModel | undefined {
-	if (saved && isAllowed(options, saved.provider, saved.modelId)) {
-		const model = runtime.getModel(saved.provider, saved.modelId);
-		if (model) return model;
-	}
-	const fallback = options.model ?? allowedModels(options)[0];
-	return fallback ? catalogModel(runtime, fallback) : undefined;
-}
-
-/** Allowed models that have a credential, for a client's model picker. */
-export function availableModels(
-	options: AllowlistOptions,
-	session: AgentSession,
-): PiModelInfo[] {
-	return session.modelRuntime
-		.getAvailableSnapshot()
-		.filter((model) => isAllowed(options, model.provider, model.id))
-		.map((model) => ({
-			provider: model.provider,
-			id: model.id,
-			name: model.name,
-			reasoning: model.reasoning,
-			input: model.input,
-			contextWindow: model.contextWindow,
-			maxTokens: model.maxTokens,
-		}));
-}
-
-/** Throws `model_unavailable` when the session's model has no credential, for example after a logout. */
-export function requireCredential(session: AgentSession): void {
-	const model = session.model;
-	if (!model) return;
-	const available = session.modelRuntime
-		.getAvailableSnapshot()
-		.some(
-			(candidate) =>
-				candidate.provider === model.provider && candidate.id === model.id,
-		);
-	if (!available) {
-		throw new UserError(
-			`No credential is configured for ${model.provider}/${model.id}.`,
-			{
-				code: "model_unavailable",
-			},
-		);
-	}
-}
-
-/**
- * Switches the session to an allowed model. The model object comes from the
- * runtime's catalog, so a client can never choose the URL a key is sent to.
- */
-export async function switchModel(
-	options: AllowlistOptions,
-	session: AgentSession,
-	provider: string,
-	modelId: string,
-): Promise<void> {
-	assertModelAllowed(options, provider, modelId);
-	const model = session.modelRuntime
-		.getAvailableSnapshot()
-		.find(
-			(candidate) =>
-				candidate.provider === provider && candidate.id === modelId,
-		);
-	if (!model) {
-		throw new UserError(
-			`No credential is configured for ${provider}/${modelId}.`,
-			{
-				code: "model_unavailable",
-			},
-		);
-	}
-	await session.setModel(model);
 }

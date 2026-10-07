@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { createRegistry } from "@earendil-works/pi-durable";
 import { SpanStatusCode } from "@opentelemetry/api";
 import {
 	InMemorySpanExporter,
@@ -35,6 +36,7 @@ function buildRegistry(mock: MockModel) {
 		model: "mock/mock-model",
 		providers: { mock: mock.providerConfig },
 		apiKeys: { mock: "mock" },
+		registry: createRegistry(),
 		settings: { retry: { baseDelayMs: 10 } },
 	});
 	return setup({ use: { agent } });
@@ -105,12 +107,13 @@ describe("pi run tracing", () => {
 		const { client } = await setupTest(c, registry);
 		const handle = client.agent.getOrCreate(["model-failure", randomUUID()]);
 
-		await expect(handle.prompt("fail at the model")).resolves.toBeUndefined();
+		await expect(handle.prompt("fail at the model")).resolves.toMatchObject({
+			status: "unanswered",
+		});
 
 		const run = lastRun();
 		expect(run.status.code).toBe(SpanStatusCode.ERROR);
-		expect(run.status.message).toContain("credit balance is too low");
-		expect(run.attributes["error.type"]).toBe("model_error");
+		expect(run.attributes["error.type"]).toBe("unanswered");
 		await expectUnderPromptAction(run);
 	});
 

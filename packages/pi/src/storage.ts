@@ -1,144 +1,104 @@
-import {
-	CURRENT_SESSION_VERSION,
-	type FileEntry,
-	migrateSessionEntries,
-	type SessionEntry,
-	type SessionHeader,
-	type SettingsManager,
-} from "@earendil-works/pi-coding-agent";
 import type { RawAccess } from "rivetkit/db";
 import { migrations } from "rivetkit/unstable/migrations";
 
 export type PiDatabase = Pick<RawAccess, "execute">;
 
-export type PiSettings = ReturnType<SettingsManager["getGlobalSettings"]>;
-
-/** A Pi session as stored in the actor's SQLite database. */
-export interface StoredPiSession {
-	sessionId: string;
-	cwd: string;
-	header: SessionHeader;
-	entries: SessionEntry[];
-	settings: PiSettings | undefined;
-}
-
 /**
- * The sandbox a Pi actor's tools run in. It is stored on its own row, written
- * as soon as the provider creates it, so a failed first start never loses it.
- */
-export interface StoredSandbox {
-	provider: string;
-	id: string;
-}
-
-/**
- * One row per Pi session entry, inserted as Pi appends them. The rows are Pi's
- * own JSON, so `SessionManager.inMemory(cwd, { id }, [header, ...entries])`
- * restores the session and Pi migrates old entry versions itself.
+ * `pi()`'s own tables. Pi Durable creates its tables in the same database
+ * itself. The `pi_durable` names are stored in actors' databases, so they stay.
  */
 export const migratePiTables = migrations({
-	tableName: "pi_schema_version",
+	tableName: "pi_durable_schema_version",
 	migrations: [
 		{
 			version: 1,
+			// Actors of the earlier session-based pi() already have this table, with the same columns.
 			sql: `
-				CREATE TABLE pi_session (
-					singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-					session_id TEXT NOT NULL CHECK (length(session_id) > 0),
-					cwd TEXT NOT NULL CHECK (substr(cwd, 1, 1) = '/'),
-					header_json TEXT NOT NULL CHECK (json_valid(header_json)),
-					settings_json TEXT CHECK (
-						settings_json IS NULL OR json_valid(settings_json)
-					),
-					created_at INTEGER NOT NULL,
-					updated_at INTEGER NOT NULL
-				) STRICT;
-
-				CREATE TABLE pi_sandbox (
+				CREATE TABLE IF NOT EXISTS pi_sandbox (
 					singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
 					provider TEXT NOT NULL,
 					sandbox_id TEXT NOT NULL,
 					created_at INTEGER NOT NULL
-				) STRICT;
-
-				CREATE TABLE pi_entry (
-					seq INTEGER PRIMARY KEY,
-					entry_id TEXT NOT NULL UNIQUE,
-					entry_json TEXT NOT NULL CHECK (json_valid(entry_json))
 				) STRICT;
 			`,
 		},
 		{
 			version: 2,
 			sql: `
-				ALTER TABLE pi_session ADD COLUMN run_state TEXT NOT NULL DEFAULT 'idle'
-					CHECK (run_state IN ('idle', 'running'));
-				ALTER TABLE pi_session ADD COLUMN queued_json TEXT
-					CHECK (queued_json IS NULL OR json_valid(queued_json));
+				CREATE TABLE pi_durable_watch (
+					conn_id TEXT NOT NULL,
+					watch_key TEXT NOT NULL,
+					spec_json TEXT NOT NULL CHECK (json_valid(spec_json)),
+					PRIMARY KEY (conn_id, watch_key)
+				) STRICT, WITHOUT ROWID;
 			`,
 		},
 	],
 });
 
-/** Messages Pi queued during a run, as `AgentSession` lists them. */
-export interface PiQueue {
-	steering: string[];
-	followUp: string[];
-}
+/** A watch a connection asked for. Stored so a connection that survives sleep gets its watches back on wake. */
+export type StoredWatch = {
+	connId: string;
+	key: string;
+	spec: WatchSpec;
+};
 
-export async function loadPiSession(
+export type WatchSpec =
+	| { kind: "events"; conversationId: number }
+	| { kind: "view"; conversationId: number }
+	| { kind: "taskGraph" }
+	| { kind: "doc"; docKind: string; conversationId: number };
+
+export async function saveWatch(
 	db: PiDatabase,
-): Promise<StoredPiSession | undefined> {
-	const rows = await db.execute<{
-		session_id: string;
-		cwd: string;
-		header_json: string;
-		settings_json: string | null;
-	}>(
-		`SELECT session_id, cwd, header_json, settings_json
-		 FROM pi_session
-		 WHERE singleton = 1`,
-	);
-	const row = rows[0];
-	if (!row) return undefined;
-
-	const entryRows = await db.execute<{ entry_json: string }>(
-		`SELECT entry_json FROM pi_entry ORDER BY seq`,
-	);
-	return {
-		sessionId: row.session_id,
-		cwd: row.cwd,
-		header: JSON.parse(row.header_json) as SessionHeader,
-		entries: entryRows.map(
-			(entry) => JSON.parse(entry.entry_json) as SessionEntry,
-		),
-		settings:
-			row.settings_json === null
-				? undefined
-				: (JSON.parse(row.settings_json) as PiSettings),
-	};
-}
-
-export async function createPiSession(
-	db: PiDatabase,
-	session: {
-		header: SessionHeader;
-		cwd: string;
-		settings: PiSettings;
-	},
+	watch: StoredWatch,
 ): Promise<void> {
-	const now = Date.now();
 	await db.execute(
-		`INSERT INTO pi_session (
-			singleton, session_id, cwd, header_json, settings_json, created_at, updated_at
-		 ) VALUES (1, ?, ?, ?, ?, ?, ?)`,
-		session.header.id,
-		session.cwd,
-		JSON.stringify(session.header),
-		JSON.stringify(session.settings),
-		now,
-		now,
+		`INSERT INTO pi_durable_watch (conn_id, watch_key, spec_json) VALUES (?, ?, ?)
+		 ON CONFLICT (conn_id, watch_key) DO NOTHING`,
+		watch.connId,
+		watch.key,
+		JSON.stringify(watch.spec),
 	);
+}
+
+export async function deleteWatch(
+	db: PiDatabase,
+	connId: string,
+	key: string,
+): Promise<void> {
+	await db.execute(
+		`DELETE FROM pi_durable_watch WHERE conn_id = ? AND watch_key = ?`,
+		connId,
+		key,
+	);
+}
+
+export async function deleteConnectionWatches(
+	db: PiDatabase,
+	connId: string,
+): Promise<void> {
+	await db.execute(`DELETE FROM pi_durable_watch WHERE conn_id = ?`, connId);
+}
+
+export async function loadWatches(db: PiDatabase): Promise<StoredWatch[]> {
+	const rows = await db.execute<{
+		conn_id: string;
+		watch_key: string;
+		spec_json: string;
+	}>(`SELECT conn_id, watch_key, spec_json FROM pi_durable_watch`);
+	return rows.map((row) => ({
+		connId: row.conn_id,
+		key: row.watch_key,
+		// Only `saveWatch` writes this column, from a `WatchSpec`.
+		spec: JSON.parse(row.spec_json) as WatchSpec,
+	}));
+}
+
+/** The sandbox an actor created, stored so the actor reconnects to it on wake. */
+export interface StoredSandbox {
+	provider: string;
+	id: string;
 }
 
 export async function loadPiSandbox(
@@ -165,91 +125,4 @@ export async function savePiSandbox(
 		sandbox.id,
 		Date.now(),
 	);
-}
-
-export async function appendPiEntry(
-	db: PiDatabase,
-	entry: SessionEntry,
-): Promise<void> {
-	await db.execute(
-		`INSERT OR IGNORE INTO pi_entry (entry_id, entry_json) VALUES (?, ?)`,
-		entry.id,
-		JSON.stringify(entry),
-	);
-}
-
-export async function savePiSettings(
-	db: PiDatabase,
-	settings: PiSettings,
-): Promise<void> {
-	await db.execute(
-		`UPDATE pi_session SET settings_json = ?, updated_at = ? WHERE singleton = 1`,
-		JSON.stringify(settings),
-		Date.now(),
-	);
-}
-
-/**
- * Brings a session stored by an older `pi-coding-agent` to the current session
- * format with Pi's own migration, and rewrites the stored rows in one
- * transaction, so later loads read them as they are.
- */
-export async function migratePiSession(
-	db: RawAccess,
-	stored: StoredPiSession,
-): Promise<StoredPiSession> {
-	if ((stored.header.version ?? 1) >= CURRENT_SESSION_VERSION) return stored;
-	const entries = structuredClone(toFileEntries(stored));
-	migrateSessionEntries(entries);
-	// `toFileEntries` puts the header first, and Pi's migration keeps the order.
-	const [header, ...rest] = entries as [SessionHeader, ...SessionEntry[]];
-	await db.transaction(async (tx) => {
-		await tx.execute(`DELETE FROM pi_entry`);
-		for (const entry of rest) await appendPiEntry(tx, entry);
-		await tx.execute(
-			`UPDATE pi_session SET header_json = ?, updated_at = ? WHERE singleton = 1`,
-			JSON.stringify(header),
-			Date.now(),
-		);
-	});
-	return { ...stored, header, entries: rest };
-}
-
-/** Builds the entry list `SessionManager.inMemory` expects: header first. */
-export function toFileEntries(stored: StoredPiSession): FileEntry[] {
-	return [stored.header, ...stored.entries];
-}
-
-/** Records that a run is active, with the messages queued for it. */
-export async function savePiRunning(
-	db: PiDatabase,
-	queue: PiQueue,
-): Promise<void> {
-	await db.execute(
-		`UPDATE pi_session SET run_state = 'running', queued_json = ? WHERE singleton = 1`,
-		JSON.stringify(queue),
-	);
-}
-
-/** Records that no run is active. */
-export async function savePiIdle(db: PiDatabase): Promise<void> {
-	await db.execute(
-		`UPDATE pi_session SET run_state = 'idle', queued_json = NULL WHERE singleton = 1`,
-	);
-}
-
-/** The queue of the run that was active when the actor stopped, or undefined when none was. */
-export async function loadPiInterruptedRun(
-	db: PiDatabase,
-): Promise<PiQueue | undefined> {
-	const rows = await db.execute<{
-		run_state: string;
-		queued_json: string | null;
-	}>(`SELECT run_state, queued_json FROM pi_session WHERE singleton = 1`);
-	const row = rows[0];
-	if (row?.run_state !== "running") return undefined;
-	// Only `savePiRunning` writes `queued_json`, from a `PiQueue`.
-	return row.queued_json === null
-		? { steering: [], followUp: [] }
-		: (JSON.parse(row.queued_json) as PiQueue);
 }

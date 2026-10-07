@@ -42,8 +42,7 @@ export function assertNoReservedNames(
 }
 
 /**
- * The app's actor config with what `pi()` and `piDurable()` add the same way:
- * longer action and sleep grace defaults, the runtime slot on the app's vars,
+ * The app's actor config with what `pi()` adds: longer action and sleep grace defaults, the runtime slot on the app's vars,
  * and shutdown hooks that run the app's hook and then close Pi.
  */
 export function sharedActorConfig(

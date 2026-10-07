@@ -11,11 +11,7 @@ import {
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { beforeAll, describe, expect, test, vi } from "vitest";
-import {
-	type PiDocFrame,
-	type PiEventsFrame,
-	piDurable,
-} from "../src/durable/index.js";
+import { type PiDocFrame, type PiEventsFrame, pi } from "../src/index.js";
 import {
 	createMockModel,
 	type MockModel,
@@ -54,7 +50,7 @@ let registry: ReturnType<typeof buildRegistry>;
 function buildRegistry(mock: MockModel) {
 	const extensions = createRegistry();
 	extensions.install(defineExtension({ name: "todos", tools: [addTodo] }));
-	const agent = piDurable({
+	const agent = pi({
 		model: "mock/mock-model",
 		providers: { mock: mock.providerConfig },
 		apiKeys: { mock: "mock" },
@@ -113,7 +109,7 @@ function received<T>(): { frames: T[]; push: (frame: unknown) => void } {
 const hasEvent = (received: PiEventsFrame[], type: string) =>
 	received.some((frame) => frame.events.some((event) => event.type === type));
 
-describe("piDurable watches", () => {
+describe("pi watches", () => {
 	test("connections watching one conversation see the same frames, a late joiner sees the partial answer, and other conversations see none", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["multiplayer", randomUUID()];

@@ -4,7 +4,6 @@ import { createRegistry } from "@earendil-works/pi-durable";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { beforeAll, describe, expect, test, vi } from "vitest";
-import { piDurable } from "../src/durable/index.js";
 import { pi } from "../src/index.js";
 import {
 	createMockModel,
@@ -38,14 +37,13 @@ function buildRegistry(mock: MockModel) {
 	};
 	// A short idle timeout: an actor that is not kept awake sleeps well before the story ends.
 	const options = { sleepTimeout: 300 };
-	const session = pi({ ...models, options, onSleep: countSleep });
-	const durable = piDurable({
+	const agent = pi({
 		...models,
 		registry: createRegistry(),
 		options,
 		onSleep: countSleep,
 	});
-	return setup({ use: { session, durable } });
+	return setup({ use: { agent } });
 }
 
 beforeAll(() => {
@@ -69,33 +67,10 @@ async function abortWhileTheModelAnswers(
 }
 
 describe("a caller that disconnects", () => {
-	test("pi(): the run finishes, and the actor sleeps only after it", async (c) => {
+	test("the run finishes, and the actor sleeps only after it", async (c) => {
 		const { client } = await setupTest(c, registry);
-		const key = ["session", randomUUID()];
-		const handle = client.session.getOrCreate(key);
-
-		await abortWhileTheModelAnswers((signal) =>
-			handle.action({ name: "prompt", args: ["tell a story"], signal }),
-		);
-		// No client calls the actor here, so only finished work lets it reach its idle timeout.
-		await vi.waitFor(
-			() => expect(sleeps.get(JSON.stringify(key))?.count).toBe(1),
-			{ timeout: 20_000 },
-		);
-		expect(sleeps.get(JSON.stringify(key))?.midAnswer).toBe(false);
-
-		const messages = await handle.getMessages();
-		expect(messages.at(-1)).toMatchObject({
-			role: "assistant",
-			stopReason: "stop",
-			content: [{ type: "text", text: STORY }],
-		});
-	});
-
-	test("piDurable(): the run finishes, and the actor sleeps only after it", async (c) => {
-		const { client } = await setupTest(c, registry);
-		const key = ["durable", randomUUID()];
-		const handle = client.durable.getOrCreate(key);
+		const key = [randomUUID()];
+		const handle = client.agent.getOrCreate(key);
 		const root = await handle.harness.root();
 
 		await abortWhileTheModelAnswers((signal) =>
