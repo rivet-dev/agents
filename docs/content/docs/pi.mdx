@@ -1,10 +1,10 @@
 ---
 title: "Pi"
-description: "Run the Pi coding agent as a durable Rivet Actor."
+description: "Run the Pi coding agent in a Rivet Actor, with one conversation per agent."
 skill: false
 ---
 
-The `@rivet-dev/pi` package runs the [Pi](https://github.com/earendil-works/pi) coding agent in a Rivet Actor. The agent loop runs in the Actor. Pi's file and shell tools run in a separate sandbox.
+`@rivet-dev/pi` runs the [Pi](https://github.com/earendil-works/pi) coding agent in a Rivet Actor. The agent loop runs in the Actor, and Pi's file and shell tools run in a sandbox.
 
 Each Actor holds one Pi session and saves it in its SQLite database, so a conversation survives sleep and restarts.
 
@@ -84,15 +84,25 @@ Each Actor holds one Pi session and saves it in its SQLite database, so a conver
 </svg>
 </div>
 
-<CardGroup>
-  <Card title="Quickstart" href="/agents/docs/quickstart">
-    Run your first agent, with its tools in a sandbox.
-  </Card>
-</CardGroup>
+## When to use Pi
+
+Use `pi()` for chats a person drives, with the Pi coding agent as it is: skills, `AGENTS.md`, the session tree, and Pi's built-in tools. The [React SDK](/agents/docs/react-sdk), [Human in the Loop](/agents/docs/human-in-the-loop), and connector guides use it.
+
+Use [Pi Durable](/agents/docs/pi-durable) when a run has to finish with nobody there to retry it, tools have side effects, or one agent needs many conversations.
+
+To get started, see the [Quickstart](/agents/docs/quickstart).
+
+## Your own actions and `c.pi`
+
+Your own actions and lifecycle hooks get Pi's `AgentSession` as `c.pi`:
+
+<CodeSnippet file="examples/docs/pi/actions.ts" title="server.ts" />
+
+Settings changes such as `c.pi.setModel` are saved. In `onSleep` and `onDestroy`, `c.pi` is set only if the session is already open.
 
 ## Configuration
 
-The Pi Actor accepts every [`actor()`](/actors/docs/actor-configuration) option except `db`, which Pi uses for the session, and Pi's [session options](https://github.com/rivet-dev/agents/blob/main/packages/pi/src/runtime.ts), such as `thinkingLevel`, `tools`, and `customTools`. It also accepts:
+`pi()` accepts every [`actor()`](/actors/docs/actor-configuration) option except `db`, Pi's [session options](https://github.com/rivet-dev/agents/blob/main/packages/pi/src/runtime.ts) such as `thinkingLevel` and `customTools`, and:
 
 | Option | Description |
 | --- | --- |
@@ -100,8 +110,21 @@ The Pi Actor accepts every [`actor()`](/actors/docs/actor-configuration) option 
 | `scopedModels` | Models a client may switch to with `setModel`. |
 | `apiKeys` | API keys by provider. Defaults to the environment. |
 | `providers` | Custom providers, in the shape of Pi's `models.json`. |
-| `credentials` | Logins your application stores. See [User Subscriptions](/agents/docs/user-subscriptions). |
-| `sandbox` | Where Pi's file and shell tools run. See [Sandboxes](/agents/docs/sandboxes). |
+| `credentials` | Logins your app stores. See [User Subscriptions](/agents/docs/user-subscriptions). |
+| `sandbox` | Where Pi's tools run. See [Sandboxes](/agents/docs/sandboxes). |
 | `settings` | Pi settings for a new session. |
+
+`actionTimeout` defaults to ten minutes and `sleepGracePeriod` to 15 minutes.
+
+## Known limitations
+
+- **One session per Actor.** Use one agent key per chat.
+- **One run at a time.** `prompt` throws during a run unless you pass `streamingBehavior`.
+- **Retries run again.** A retried `prompt` prompts the agent twice.
+- **Partial resume.** A cut-off run resumes only if Pi can continue the transcript, and a cut-off tool call isn't repeated. See [Upgrades](/agents/docs/architecture#upgrades).
+- **Long retry waits keep the Actor awake.**
+- **Replaced sandboxes.** Absolute paths in earlier `bash` commands point to the old sandbox until the session reopens.
+- **Pinned Pi version.** Upgrade `pi-coding-agent` by upgrading `@rivet-dev/pi`.
+- **Node.js 22.19 or later.**
 
 **Next:** [Design Patterns](/agents/docs/design-patterns), how to structure an app with many agents.

@@ -53,7 +53,7 @@ A listener added with `on("event", ...)` receives every event of the session as 
 ## Results and errors
 
 - The `prompt` action resolves when the run ends. Read the reply with `getLastAssistantText` or `getMessages`.
-- The `prompt` action rejects with an `ActorError` when the action itself fails. For example, another prompt is already running (pass `streamingBehavior` to queue it instead), the model has no credential (`model_unavailable`), or the run passes the ten-minute action timeout (`action_timed_out`).
+- The `prompt` action rejects with an `ActorError` when the action itself fails. For example, another prompt is already running (pass `streamingBehavior` to queue it instead), the model has no credential (`model_unavailable`), or the run passes the ten-minute action timeout (`action_timed_out`). A timeout only stops the wait. The run keeps going until it finishes or `abort` stops it.
 - A model error doesn't reject. The run ends with an assistant message whose `stopReason` is `"error"`, and `errorMessage` explains why.
 
 ## Browsers

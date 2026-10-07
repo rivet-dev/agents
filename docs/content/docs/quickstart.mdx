@@ -1,6 +1,6 @@
 ---
 title: "Quickstart"
-description: "Run your first agent: Pi in a Rivet Actor, with its tools in a sandbox."
+description: "Run your first agent in a Rivet Actor, with Pi or Pi Durable, and its tools in a sandbox."
 ---
 
 import { Hosting } from "@/components/docs/Hosting";
@@ -33,42 +33,40 @@ An agent is a Rivet Actor in your backend. Its file and shell tools run in a san
 </svg>
 </div>
 
+## Choose a harness
+
+Both harnesses keep conversations through sleep, crashes, and upgrades. They differ in what they run and how much of a cut-off run they recover:
+
+- **Pi** (`pi()`) runs the Pi coding agent, with skills, `AGENTS.md`, and one conversation per agent. After a crash, it resumes a run when Pi can continue the transcript. Use it for chats a person drives.
+- **Pi Durable** (`piDurable()`, beta) saves each step of a run, including tool calls and tasks your tools launch, and carries a cut-off run on from the last saved step. Use it for runs nobody watches, such as background jobs, and for tools with side effects.
+
+Not sure? Start with Pi. See [When to use Pi Durable](/agents/docs/pi-durable#when-to-use-pi-durable).
+
+<Tabs label="Harness">
+<Tab title="Pi">
+
 <Steps>
 
 <Step title="Install">
 
 ```sh
-npm add @rivet-dev/pi rivetkit
+npm add @rivet-dev/pi @rivet-dev/sandbox-adapter rivetkit e2b
 ```
+
+For Daytona, replace `e2b` with `@daytonaio/sdk`.
 
 </Step>
 
-<Step title="Define the Actor">
-
-<CodeSnippet file="examples/docs/pi/server.ts" title="server.ts" />
-
-Set `ANTHROPIC_API_KEY`. For another provider, change `model` and set its key instead, such as `OPENAI_API_KEY`, `XAI_API_KEY`, or `OPENROUTER_API_KEY`. See [LLM API Keys](/agents/docs/api-keys).
-
-</Step>
-
-<Step title="Add a sandbox">
-
-Pi's file and shell tools run in a sandbox. Without one they are disabled.
-
-```sh
-# E2B
-npm add @rivet-dev/sandbox-adapter e2b
-
-# Daytona
-npm add @rivet-dev/sandbox-adapter @daytonaio/sdk
-```
+<Step title="Define the agent">
 
 <CodeGroup>
 <CodeSnippet file="examples/docs/quickstart/server.ts" title="e2b.ts" />
 <CodeSnippet file="examples/docs/sandboxes/daytona.ts" title="daytona.ts" />
 </CodeGroup>
 
-Set `E2B_API_KEY` for [E2B](https://e2b.dev) or `DAYTONA_API_KEY` for [Daytona](https://daytona.io). To write your own provider, see [Sandboxes](/agents/docs/sandboxes).
+Set `ANTHROPIC_API_KEY`. For another model provider, change `model` and set that provider's key, such as `OPENAI_API_KEY`. See [LLM API Keys](/agents/docs/api-keys).
+
+Pi's file and shell tools run in the sandbox. Set `E2B_API_KEY` for [E2B](https://e2b.dev) or `DAYTONA_API_KEY` for [Daytona](https://daytona.io). To write your own provider, see [Sandboxes](/agents/docs/sandboxes).
 
 </Step>
 
@@ -104,12 +102,71 @@ The `prompt` action waits for Pi to finish, then `getLastAssistantText` reads th
 
 </Step>
 
-<Step title="Deploy">
+</Steps>
 
-<Hosting />
+</Tab>
+<Tab title="Pi Durable">
+
+<Steps>
+
+<Step title="Install">
+
+```sh
+npm add @rivet-dev/pi @rivet-dev/sandbox-adapter @earendil-works/pi-durable@latest rivetkit e2b
+```
+
+For Daytona, replace `e2b` with `@daytonaio/sdk`.
+
+</Step>
+
+<Step title="Define the agent">
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/pi-durable/server.ts" title="e2b.ts" />
+<CodeSnippet file="examples/docs/pi-durable/daytona.ts" title="daytona.ts" />
+</CodeGroup>
+
+Set `ANTHROPIC_API_KEY`. For another model provider, change `model` and set that provider's key, such as `OPENAI_API_KEY`. See [LLM API Keys](/agents/docs/api-keys).
+
+`CodingTools` gives the agent `read`, `write`, `edit`, and `bash`, and they run in the sandbox. Set `E2B_API_KEY` for [E2B](https://e2b.dev) or `DAYTONA_API_KEY` for [Daytona](https://daytona.io). To write your own provider, see [Sandboxes](/agents/docs/sandboxes).
+
+</Step>
+
+<Step title="Send a prompt">
+
+<Tabs>
+<Tab title="TypeScript">
+
+<CodeSnippet file="examples/docs/pi-durable/client.ts" title="client.ts" />
+
+</Tab>
+<Tab title="curl">
+
+```sh
+URL="http://localhost:6420/gateway/agent/action"
+AGENT="rvt-namespace=default&rvt-method=getOrCreate&rvt-key=user-123&rvt-pool=default"
+
+curl -X POST "$URL/prompt?$AGENT" \
+  -H "Content-Type: application/json" \
+  -d '{"args": ["Write a Python script that prints the first 20 prime numbers, run it, and show me the output.", {"requestId": "primes-1"}]}'
+```
+
+Each action is a `POST` to the gateway with its arguments in `args`. See [Call Action](/docs/api/gateway/call-action).
+
+</Tab>
+</Tabs>
+
+The `prompt` action waits for the run to finish and returns `{ status, text }`. A model error doesn't reject it: `status` is `unanswered`, with Pi's reason. Sending the same `requestId` to the same conversation again returns the first answer.
 
 </Step>
 
 </Steps>
 
-**Next:** [Design Patterns](/agents/docs/design-patterns), how to structure an app with many agents.
+</Tab>
+</Tabs>
+
+## Deploy
+
+<Hosting />
+
+**Next:** the page for the harness you chose, [Pi](/agents/docs/pi) or [Pi Durable](/agents/docs/pi-durable), for how it handles crashes and upgrades, and its known limitations.

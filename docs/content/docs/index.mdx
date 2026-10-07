@@ -47,7 +47,7 @@ Each agent on Rivet is one [Rivet Actor](/actors/docs). You define the agent onc
 
 - **The agent loop runs in the Actor.** Model calls, retries, and the conversation run in your backend, next to your application code, where you control credentials, permissions, and logging.
 - **Tools run in a separate sandbox.** File and shell tools call into a sandbox such as E2B or Daytona. Nothing the agent runs executes on your worker, and your provider keys never enter the sandbox.
-- **Agents are durable.** The Actor saves the session to its SQLite database and restores it when it wakes, so an idle agent can sleep, and a crash or deploy does not lose the conversation.
+- **Agents are durable.** The Actor saves the session to its SQLite database and restores it when it wakes, so an idle agent can sleep, and a crash or upgrade does not lose the conversation.
 
 <CardGroup>
   <Card title="Quickstart" href="/agents/docs/quickstart">
@@ -111,7 +111,7 @@ Each agent on Rivet is one [Rivet Actor](/actors/docs). You define the agent onc
     Trace every agent run with OpenTelemetry.
   </Card>
   <Card title="Architecture" href="/agents/docs/architecture">
-    The states an agent moves through, and what survives sleep, crashes, and deploys.
+    The states an agent moves through, and what survives sleep, crashes, and upgrades.
   </Card>
   <Card title="Security Model" href="/agents/docs/security-model">
     What reaches the sandbox, where secrets live, and who can connect to an agent.

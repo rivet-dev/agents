@@ -1,6 +1,6 @@
 ---
 title: "Design Patterns"
-description: "Patterns for agent keys, subagents, agent-to-agent messages, workflows, schedules, and shared credentials."
+description: "Patterns for agent keys, subagents, agent-to-agent messages, workflows, schedules, background jobs, and shared credentials."
 ---
 
 Each agent is an Actor, so agent apps use the same building blocks as the rest of Rivet: keys pick the agent, and agents call other Actors.
@@ -49,6 +49,8 @@ The key decides which conversation a prompt continues. Pick it from what the age
 
 Keys are arrays, so a channel id or repository name from a webhook can't break the key's structure. See [Actor Keys](/actors/docs/keys).
 
+A [`pi()`](/agents/docs/pi) agent holds one conversation, so the key is the conversation. A [`piDurable()`](/agents/docs/pi-durable) agent can hold many conversations and forks, which lets related conversations share one Actor, one sandbox, and its documents.
+
 ## Lead Agent with Subagents
 
 A lead agent hands a focused task to a specialist with its own tools and waits for its answer. The specialist starts with a fresh context, so only the answer comes back.
@@ -80,6 +82,8 @@ A lead agent hands a focused task to a specialist with its own tools and waits f
 <CodeSnippet file="examples/docs/subagents/specialists.ts" title="specialists.ts" />
 <CodeSnippet file="examples/docs/subagents/client.ts" title="client.ts" />
 </CodeGroup>
+
+`get-order.ts` is the `get_order` tool from [Custom Tools](/agents/docs/custom-tools).
 
 See [Subagents](/agents/docs/subagents).
 
@@ -134,6 +138,10 @@ When the work has fixed steps, waits, or retries, let a workflow drive the agent
 </svg>
 </div>
 
+```sh
+npm add @rivet-dev/workflows
+```
+
 <CodeGroup>
 <CodeSnippet file="examples/docs/workflows/server.ts" title="server.ts" />
 <CodeSnippet file="examples/docs/workflows/client.ts" title="client.ts" />
@@ -170,6 +178,43 @@ An agent can wake itself on a schedule and sleep between runs.
 
 See [Schedules](/agents/docs/schedules).
 
+## Background Agents That Must Finish
+
+When nobody is watching a run, such as an agent started by a webhook, a crash must not lose the work or repeat a side effect. Use [Pi Durable](/agents/docs/pi-durable): every model request and tool call is a durable task that continues where it stopped, and a redelivered webhook is ignored because of its `requestId`.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 600 130" role="img" aria-label="A GitHub webhook submits the issue to the fixer agent with the delivery id as requestId. The fixer agent opens a pull request, a tool that is never repeated after a crash." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="dp-background-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="40" width="150" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="240" y="40" width="150" height="52" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="440" y="40" width="140" height="52" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M171 66 L238 66" marker-end="url(#dp-background-arrow)"/>
+    <path d="M391 66 L438 66" marker-end="url(#dp-background-arrow)"/>
+  </g>
+  <text x="95" y="63" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">GitHub webhook</text>
+  <text x="95" y="80" text-anchor="middle" font-size="12" fill="#56524a">requestId: delivery</text>
+  <text x="315" y="63" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Fixer agent</text>
+  <text x="315" y="80" text-anchor="middle" font-size="12" fill="#56524a">key: repo, issue</text>
+  <text x="510" y="63" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Open PR</text>
+  <text x="510" y="80" text-anchor="middle" font-size="12" fill="#56524a">never repeated</text>
+  <text x="204.5" y="58" text-anchor="middle" font-size="12" fill="#56524a">submit</text>
+</svg>
+</div>
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/design-patterns/background-job/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/design-patterns/background-job/client.ts" title="client.ts" />
+</CodeGroup>
+
+- `conversation.submit` returns once the input is saved, so the webhook answers right away while the agent works.
+- `open_pull_request` has no `replay`, so a call cut off by a crash isn't repeated. The model is told the call was interrupted. Mark only tools that are safe to run twice as `replay: "safe"`.
+- When you ship new code, the Actor lets the run finish, for up to `sleepGracePeriod`, before it restarts on the new version. Anything still running then carries on from its last saved step.
+
+See [Pi Durable](/agents/docs/pi-durable).
+
 ## Credentials Shared per Tenant
 
 Start agent keys with the tenant id, and pick the `credentials` Actor from it. Every agent in a tenant shares one set of model logins, and never sees another tenant's.
@@ -199,7 +244,7 @@ Start agent keys with the tenant id, and pick the `credentials` Actor from it. E
 
 <CodeGroup>
 <CodeSnippet file="examples/docs/design-patterns/tenant-credentials/server.ts" title="server.ts" />
-<CodeSnippet file="examples/docs/user-subscriptions/credentials.ts" title="credentials.ts" />
+<CodeSnippet file="examples/docs/design-patterns/tenant-credentials/credentials.ts" title="credentials.ts" />
 <CodeSnippet file="examples/docs/design-patterns/tenant-credentials/client.ts" title="client.ts" />
 </CodeGroup>
 
@@ -223,6 +268,12 @@ A new key creates a new agent with an empty session, so the agent forgets the co
 
 **Solution:** Reuse the key of the conversation the message belongs to.
 
+### Unattended Runs on `pi()`
+
+A `pi()` agent started by a webhook or schedule has nobody to ask it to continue. If a crash cuts off a tool call, the run doesn't resume. If the webhook is redelivered, the agent is prompted twice, and a tool with side effects can run twice.
+
+**Solution:** Use [Pi Durable](/agents/docs/pi-durable) for runs nobody watches, and pass a `requestId` with every submission. See [Background Agents That Must Finish](#background-agents-that-must-finish).
+
 ## Where to Go Next
 
 | Goal | Read |
@@ -231,6 +282,7 @@ A new key creates a new agent with an empty session, so the agent forgets the co
 | Give the agent your own APIs | [Custom Tools](/agents/docs/custom-tools) |
 | Let the agent run commands and edit files | [Sandboxes](/agents/docs/sandboxes), then [Built-in Tools](/agents/docs/built-in-tools) |
 | Run agents on your users' own subscriptions | [User Subscriptions](/agents/docs/user-subscriptions) |
+| Make runs finish after a crash, with no one to retry them | [Pi Durable](/agents/docs/pi-durable) |
 | Wait for a person before a risky action | [Human in the Loop](/agents/docs/human-in-the-loop) |
 | Share a result through a link | [Scoped Access with JWTs](/agents/docs/scoped-access) |
 | Talk to users in Slack, Linear, GitHub, or Discord | [Slack](/agents/docs/connectors/slack) and the other connectors |

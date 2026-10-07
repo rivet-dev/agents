@@ -43,13 +43,13 @@ npm add @rivet-dev/sandbox-adapter e2b
 
 <Step title="Pass a provider">
 
-<CodeSnippet file="examples/docs/quickstart/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/sandboxes/e2b.ts" title="server.ts" />
 
 </Step>
 
 </Steps>
 
-Without a sandbox, Pi's built-in file and shell tools are turned off and the agent only has the `customTools` you pass.
+Without a sandbox, Pi's built-in file and shell tools are turned off and the agent only has the `customTools` you pass. [Pi Durable](/agents/docs/pi-durable) takes the same providers as `sandbox`, and runs its `CodingTools` there.
 
 ## Providers
 
@@ -89,12 +89,13 @@ npm add @daytonaio/sdk
 | `client` | A Daytona client. Defaults to `new Daytona()`, which reads `DAYTONA_API_KEY`. |
 | `create` | Options for Daytona's `create`. |
 
-The working directory is the sandbox's own working directory. A stopped sandbox is started again when the Actor wakes.
+The working directory is the sandbox's own working directory. A stopped sandbox is started again the next time the Actor uses it.
 
 ## How the sandbox is managed
 
 - The sandbox is created the first time the agent needs it.
-- On wake, the Actor reconnects to the same sandbox. If it no longer exists, a new one is created and the old files are lost.
+- After a wake, the Actor reconnects to the same sandbox the first time a tool or `executeBash` needs it. If it no longer exists, a new one is created and the old files are lost.
+- Actions that don't touch the sandbox keep working while the provider is down.
 - An existing Actor cannot switch to a different provider.
 - Commands run with the sandbox's environment, not your worker's. File tools reject paths outside the working directory, but shell commands can reach anything inside the sandbox.
 

@@ -4,7 +4,7 @@ import { pi } from "@rivet-dev/pi";
 import { e2bProvider } from "@rivet-dev/sandbox-adapter/e2b";
 import type { Registry } from "rivetkit";
 import { createClient } from "rivetkit/client";
-import { getOrder } from "../custom-tools/get-order";
+import { getOrder } from "./get-order";
 
 export const orders = pi({ model: "openai/gpt-5.4-mini", customTools: [getOrder] });
 
