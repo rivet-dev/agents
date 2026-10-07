@@ -18,6 +18,7 @@ import {
 	ROOT_CONVERSATION_ID,
 } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
+import type { SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
@@ -46,6 +47,9 @@ const STORY_TWO = "omega ".repeat(40).trim();
 
 /** Tool calls of the crash test. A tool's first run blocks until the stop aborts it; a rerun returns at once. */
 const toolRuns = { safe: 0, unsafe: 0 };
+
+/** Sandboxes the unreachable provider was asked to create. */
+let sandboxCreates = 0;
 
 const Todos = defineDoc<{ items: string[] }>({
 	kind: "app.todos",
@@ -201,6 +205,37 @@ function buildRegistry(mock: MockModel, root: string) {
 		},
 	});
 	// Neither `model` nor `scopedModels`, so clients may not choose a model.
+	// A provider that cannot create a sandbox, for an agent whose tools never need one.
+	const unreachable: SandboxProvider = {
+		name: "unreachable",
+		cwd: "/workspace",
+		create: async () => {
+			sandboxCreates += 1;
+			throw new Error("the sandbox provider is down");
+		},
+		connect: async () => undefined,
+	};
+	const lookups = createRegistry();
+	lookups.install(
+		defineExtension({
+			name: "lookups",
+			tools: [
+				defineTool({
+					name: "lookup",
+					description: "Look up a value",
+					parameters: Type.Object({}),
+					replay: "safe",
+					execute: async () => ({ content: [{ type: "text", text: "42" }] }),
+				}),
+			],
+		}),
+	);
+	lookups.install(CodingTools);
+	const lookupAgent = pi({
+		...models,
+		registry: lookups,
+		sandbox: unreachable,
+	});
 	const unscoped = pi({
 		providers: models.providers,
 		apiKeys: models.apiKeys,
@@ -214,6 +249,7 @@ function buildRegistry(mock: MockModel, root: string) {
 			backoffWithoutSchedules,
 			jobRunner,
 			unscoped,
+			lookupAgent,
 		},
 	});
 }
@@ -238,9 +274,22 @@ beforeAll(async () => {
 		fauxAssistantMessage("finished"),
 	);
 	mockModel.reply(
+		"look it up",
+		toolCall("lookup", {}),
+		fauxAssistantMessage("it is 42"),
+	);
+	mockModel.reply(
 		"create hello.txt",
-		toolCall("write", { path: "hello.txt", content: "hi from pi\n" }),
+		toolCall("write", {
+			path: "hello.txt",
+			content: "hi from pi\nline two\nline three\n",
+		}),
 		fauxAssistantMessage("written"),
+	);
+	mockModel.reply(
+		"read line two of hello.txt",
+		toolCall("read", { path: "hello.txt", offset: 2, limit: 1 }),
+		fauxAssistantMessage("read it"),
 	);
 	mockModel.reply(
 		"write outside the sandbox",
@@ -398,7 +447,19 @@ describe("pi actor", () => {
 		expect((await handle.conversation.agent(root.id)).model).toBeUndefined();
 	});
 
-	test("Pi's built-in tools write files inside the sandbox", async (c) => {
+	test("a prompt that uses only a custom tool answers without creating the sandbox", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.lookupAgent.getOrCreate([randomUUID()]);
+		const before = sandboxCreates;
+
+		expect(await handle.prompt("look it up")).toMatchObject({
+			status: "done",
+			text: "it is 42",
+		});
+		expect(sandboxCreates).toBe(before);
+	});
+
+	test("Pi's built-in tools write and read files inside the sandbox", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const handle = client.coder.getOrCreate(["write", randomUUID()]);
 
@@ -414,7 +475,17 @@ describe("pi actor", () => {
 				),
 			),
 		);
-		expect(contents).toContain("hi from pi\n");
+		expect(contents).toContain("hi from pi\nline two\nline three\n");
+
+		await handle.prompt("read line two of hello.txt");
+		const root = await handle.harness.root();
+		const { messages } = await handle.conversation.context(root.id);
+		const read = messages.findLast(
+			(message) => message.role === "toolResult" && message.toolName === "read",
+		);
+		expect(read).toMatchObject({ isError: false });
+		expect(JSON.stringify(read?.content)).toContain("line two");
+		expect(JSON.stringify(read?.content)).not.toContain("hi from pi");
 	});
 
 	test("sandbox tools cannot write outside the sandbox or read the actor host's environment", async (c) => {
