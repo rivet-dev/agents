@@ -230,6 +230,11 @@ jobs:
     needs: [setup, docker, binaries]
     if: ${{ always() && !cancelled() && needs.setup.result == 'success' && (needs.docker.result == 'success' || needs.docker.result == 'skipped') && (needs.binaries.result == 'success' || needs.binaries.result == 'skipped') }}
     runs-on: ubuntu-24.04
+    permissions:
+      # Allow the release script to create tags and GitHub releases.
+      contents: write
+      # Allow npm to exchange GitHub's short-lived OIDC token.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -237,10 +242,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
       - run: corepack enable
 
@@ -255,15 +261,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           R2_RELEASES_ACCESS_KEY_ID: ${{ secrets.R2_RELEASES_ACCESS_KEY_ID }}
           R2_RELEASES_SECRET_ACCESS_KEY: ${{ secrets.R2_RELEASES_SECRET_ACCESS_KEY }}
         run: |
-          # Authenticate with NPM
-          cat << EOF > ~/.npmrc
-          //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
-          EOF
-
           # Install dependencies. The root workspace holds the release script;
           # Sandbox Agent keeps its own workspace in sandbox-agent/.
           pnpm install --no-frozen-lockfile
