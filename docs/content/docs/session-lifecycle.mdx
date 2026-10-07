@@ -9,7 +9,7 @@ A session is one agent's conversation. Each agent key has exactly one session, a
 - Runs one prompt at a time, calling the model and tools until the model is done.
 - Streams events to every connected client while it runs.
 - Summarizes older messages when the context fills up.
-- Survives sleep, crashes, and deploys. See [Architecture](/agents/docs/architecture).
+- Survives sleep, crashes, and upgrades. See [Architecture](/agents/docs/architecture).
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 640 132" role="img" aria-label="A client sends a prompt to the agent&#x27;s session. The agent calls the model, runs the tools it asks for in the sandbox, and repeats until the model stops calling tools. Events stream back to the client the whole time." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -69,6 +69,8 @@ While a run is in progress:
 | `abort()` | Cancels the run and stops any command still running in the sandbox. Daytona can't cancel a command, so it runs until it exits or times out. |
 
 Calling `prompt` while a run is in progress throws. To queue it instead, pass `streamingBehavior: "steer"` or `"followUp"`. On an idle agent, the prompt runs right away.
+
+Only `abort` stops a run. If `prompt` times out or its client disconnects, `prompt` rejects, and the run keeps going until it finishes.
 
 ## Compaction and errors
 

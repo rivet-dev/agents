@@ -41,3 +41,5 @@ const flakyTest = workflow({
 });
 
 export const registry = setup({ use: { agent, flakyTest } });
+
+registry.start();

@@ -45,7 +45,7 @@ Store each user's logins in a `credentials` Actor and pass it to `pi({ credentia
 
 The agent Actor never receives a refresh token and never writes credentials back. Errors from the `credentials` Actor reject the model call that needed the credential, so keep secrets out of their messages.
 
-See the [complete example](https://github.com/rivet-dev/rivet/tree/main/examples/pi-credentials), including a script that runs Pi's headless login in the terminal. Your app needs its own login flow, such as a settings page, that saves the result with the `credentials` Actor's `save` action.
+Your app needs its own login flow, such as a settings page, that saves the result with the `credentials` Actor's `save` action. The files above are in [`examples/docs/user-subscriptions`](https://github.com/rivet-dev/agents/tree/main/examples/docs/user-subscriptions).
 
 ## Share credentials across a team
 

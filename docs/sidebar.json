@@ -25,6 +25,14 @@
 					"icon": {
 						"src": "/images/vendors/pi.svg"
 					}
+				},
+				{
+					"title": "Pi Durable",
+					"href": "/agents/docs/pi-durable",
+					"badge": "Beta",
+					"icon": {
+						"src": "/images/vendors/pi.svg"
+					}
 				}
 			]
 		},

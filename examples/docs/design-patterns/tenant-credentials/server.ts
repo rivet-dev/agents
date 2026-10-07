@@ -1,6 +1,6 @@
 import { pi } from "@rivet-dev/pi";
 import { type Registry, setup } from "rivetkit";
-import { credentials } from "../../user-subscriptions/credentials";
+import { credentials } from "./credentials";
 
 const agent = pi({
 	model: "anthropic/claude-opus-5-5",

@@ -14,6 +14,7 @@
 		// excluded because it imports useAgentChat.ts.
 		"client-sdk/client.ts",
 		"human-in-the-loop/ApprovalDialog.tsx",
+		"pi-durable/stream.ts",
 		"react-sdk/Chat.tsx",
 		"react-sdk/useAgentChat.ts",
 		"session-lifecycle/client.ts"

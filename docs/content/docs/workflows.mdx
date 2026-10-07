@@ -36,6 +36,10 @@ Run an agent as a workflow step to get retries and durable waits between steps.
 </svg>
 </div>
 
+```sh
+npm add @rivet-dev/workflows
+```
+
 <CodeGroup>
 <CodeSnippet file="examples/docs/workflows/server.ts" title="server.ts" />
 <CodeSnippet file="examples/docs/workflows/client.ts" title="client.ts" />
@@ -43,7 +47,7 @@ Run an agent as a workflow step to get retries and durable waits between steps.
 
 - Steps time out after 30 seconds by default, so `timeout` gives each prompt up to ten minutes.
 - A step that throws is retried up to three times, while a timeout fails the step right away. Each attempt calls `abort` first, so a retry stops any run the previous attempt left going before prompting again.
-- The `ctx.sleep` call waits ten minutes with nothing running. The workflow resumes on time, even after a crash or deploy.
+- The `ctx.sleep` call waits ten minutes with nothing running. The workflow resumes on time, even after a crash or upgrade.
 - Both steps use the same agent key, so the second prompt continues the first conversation.
 - Use a workflow when the work has fixed steps, waits, or retries. Use a single agent session when the agent should decide the steps itself.
 

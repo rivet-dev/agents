@@ -33,6 +33,8 @@ A subagent is a specialist that a lead agent hands one focused task to. It has i
 <CodeSnippet file="examples/docs/subagents/client.ts" title="client.ts" />
 </CodeGroup>
 
+`get-order.ts` is the `get_order` tool from [Custom Tools](/agents/docs/custom-tools).
+
 - The model picks the specialist and writes the question. The question has to carry everything the specialist needs, because the specialist can't see the lead's conversation.
 - Each specialist has only the tools for its job: `orders` has `get_order`, and `engineering` has a sandbox to read and run code. The support agent has neither.
 - Specialists are keyed by the lead's session id, so a follow-up question on the same ticket continues the same specialist session.
