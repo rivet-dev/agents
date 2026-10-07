@@ -14,7 +14,7 @@ import {
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { SqliteStorage } from "@earendil-works/pi-durable/storage/sqlite";
 import type { Sandbox, SandboxProvider } from "@rivet-dev/sandbox-adapter";
-import { sandboxEnv } from "@rivet-dev/sandbox-adapter/pi";
+import { databaseEnv, sandboxEnv } from "@rivet-dev/sandbox-adapter/pi";
 import { type ActorContext, UserError } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
 import { actorSqlite } from "./actor-sqlite.js";
@@ -69,14 +69,21 @@ export interface PiOptions extends PiModelOptions {
 	/** pi-ai model access. Without it, the actor builds it from `model`, `providers`, `apiKeys`, and `credentials`. */
 	models?: Models;
 	settings?: HarnessSettings;
-	/** Builds a conversation's environment. Without it, the actor builds one from `sandbox`. */
+	/**
+	 * Builds a conversation's environment. Without it, the actor builds one from
+	 * `sandbox`, or stores files in its own database when there is no sandbox.
+	 */
 	env?: HarnessOptions["env"];
 	conversationCreated?: HarnessOptions["conversationCreated"];
 	now?: HarnessOptions["now"];
 	onReport?: HarnessOptions["onReport"];
 	/** The starting thinking level of every new conversation. */
 	thinkingLevel?: ModelThinkingLevel;
-	/** Runs the tools of Pi's `CodingTools` extension in a sandbox. Used only when `env` is omitted. */
+	/**
+	 * Runs the tools of Pi's `CodingTools` extension in a sandbox. Used only
+	 * when `env` is omitted. Without a sandbox, files live in the actor's
+	 * database and there is no shell.
+	 */
 	sandbox?: SandboxProvider;
 	/** App documents that clients may read by `kind` with `harness.snapshot`. */
 	documents?: readonly ConversationDocToken<any>[];
@@ -256,7 +263,11 @@ async function openHarness(
 				options.env ??
 				(options.sandbox
 					? sandboxEnvBuilder(c, runtime, options.sandbox)
-					: undefined),
+					: (target) =>
+							databaseEnv(c.db, {
+								id: `pi-files:${c.actorId}`,
+								cwd: target.cwd,
+							})),
 			conversationCreated: startingAgent(options),
 			now: options.now,
 			onReport: (error) => {
