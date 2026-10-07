@@ -1,19 +1,21 @@
 import { posix } from "node:path";
 import type { Context } from "@earendil-works/chord";
 import {
+	type BinaryReader,
 	type ExecutionEnv,
 	ExecutionError,
 	err,
 	FileError,
 	type FileInfo,
 	type FileKind,
+	LineScanner,
 	ok,
 	type Result,
 	type ShellExecOptions,
 	type ShellExecResult,
 	toError,
 } from "@earendil-works/pi-durable/env";
-import type { Sandbox } from "@rivet-dev/sandbox-adapter";
+import type { Sandbox } from "../index.js";
 
 /**
  * Pi Durable's `ExecutionEnv` inside a sandbox, for Pi's built-in tools
@@ -22,14 +24,31 @@ import type { Sandbox } from "@rivet-dev/sandbox-adapter";
  *
  * Only the operations Pi's tools use are supported. Every other operation
  * returns a `not_supported` error. Operations return failures instead of
- * throwing. Building the environment throws when `cwd` is outside the sandbox.
+ * throwing. Building the environment throws when `cwd` is outside `root`.
+ * `connect` runs on the first operation that needs the sandbox, so a tool
+ * that never touches files or the shell never connects it.
  */
 export function sandboxEnv(
 	id: string,
-	sandbox: Sandbox,
+	root: string,
+	connect: () => Promise<Sandbox>,
 	cwd: string | undefined,
 ): ExecutionEnv {
-	const root = sandbox.cwd;
+	/** Connects on first use. A failed connect becomes this call's error result. */
+	const withSandbox = async <T, E extends Error>(
+		fail: (cause: Error) => E,
+		use: (sandbox: Sandbox) => Promise<Result<T, E>>,
+	): Promise<Result<T, E>> => {
+		let sandbox: Sandbox;
+		try {
+			sandbox = await connect();
+		} catch (error) {
+			return err(fail(toError(error)));
+		}
+		return use(sandbox);
+	};
+	const fileFailure = (path: string) => (cause: Error) =>
+		new FileError("unknown", cause.message, path, cause);
 	const inside = (path: string): Result<string, FileError> => {
 		try {
 			return ok(resolveSandboxPath(root, path));
@@ -49,34 +68,76 @@ export function sandboxEnv(
 
 		absolutePath: async (path) => inside(posix.resolve(env.cwd, path)),
 		joinPath: async (parts) => ok(posix.join(...parts)),
-		exists: (path) =>
-			onPath(inside(path), (resolved) => sandbox.exists(resolved)),
+		exists: async (path) => {
+			const resolved = inside(path);
+			if (!resolved.ok) return resolved;
+			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+				onPath(resolved, (target) => sandbox.exists(target)),
+			);
+		},
 		readTextFile: async (path) => {
 			const resolved = inside(path);
 			if (!resolved.ok) return resolved;
-			return read(sandbox, resolved.value, async () =>
-				new TextDecoder().decode(await sandbox.readFile(resolved.value)),
+			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+				read(sandbox, resolved.value, async () =>
+					new TextDecoder().decode(await sandbox.readFile(resolved.value)),
+				),
 			);
 		},
 		readBinaryFile: async (path) => {
 			const resolved = inside(path);
 			if (!resolved.ok) return resolved;
-			return read(sandbox, resolved.value, () =>
-				sandbox.readFile(resolved.value),
+			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+				read(sandbox, resolved.value, () => sandbox.readFile(resolved.value)),
 			);
+		},
+		// The sandbox reads whole files, so the reader holds the file it opened.
+		openBinaryReader: async (path) => {
+			const resolved = inside(path);
+			if (!resolved.ok) return resolved;
+			return withSandbox(fileFailure(resolved.value), async (sandbox) => {
+				const info = await fileInfo(sandbox, resolved.value);
+				if (!info.ok) return info;
+				if (info.value.kind === "directory") {
+					return err(
+						new FileError(
+							"is_directory",
+							`${path} is a directory`,
+							resolved.value,
+						),
+					);
+				}
+				const bytes = await read(sandbox, resolved.value, () =>
+					sandbox.readFile(resolved.value),
+				);
+				if (!bytes.ok) return bytes;
+				return ok(
+					bufferReader(
+						{ ...info.value, size: bytes.value.length },
+						bytes.value,
+					),
+				);
+			});
 		},
 		writeFile: async (path, content) => {
 			if (typeof content !== "string") {
 				return notSupported("writing binary content", path);
 			}
-			return onPath(inside(path), async (resolved) => {
-				await sandbox.mkdir(posix.dirname(resolved));
-				await sandbox.writeFile(resolved, content);
-			});
+			const resolved = inside(path);
+			if (!resolved.ok) return resolved;
+			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+				onPath(resolved, async (target) => {
+					await sandbox.mkdir(posix.dirname(target));
+					await sandbox.writeFile(target, content);
+				}),
+			);
 		},
 		fileInfo: async (path) => {
 			const resolved = inside(path);
-			return resolved.ok ? fileInfo(sandbox, resolved.value) : resolved;
+			if (!resolved.ok) return resolved;
+			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+				fileInfo(sandbox, resolved.value),
+			);
 		},
 		// Pi's tools fall back to the absolute path when canonical paths are not supported.
 		canonicalPath: async (path) => notSupported("canonicalPath", path),
@@ -88,7 +149,10 @@ export function sandboxEnv(
 					new ExecutionError("spawn_error", cwd.error.message, cwd.error),
 				);
 			}
-			return exec(sandbox, command, options, context, cwd.value);
+			return withSandbox(
+				(cause) => new ExecutionError("spawn_error", cause.message, cause),
+				(sandbox) => exec(sandbox, command, options, context, cwd.value),
+			);
 		},
 
 		openTextLineReader: async (path) =>
@@ -99,6 +163,8 @@ export function sandboxEnv(
 		flushFile: async (path) => notSupported("flushFile", path),
 		renameFile: async (path) => notSupported("renameFile", path),
 		listDir: async (path) => notSupported("listDir", path),
+		openDirReader: async (path) => notSupported("openDirReader", path),
+		watch: async () => notSupported("watch"),
 		createDir: async (path) => notSupported("createDir", path),
 		remove: async (path) => notSupported("remove", path),
 		createTempDir: async () => notSupported("createTempDir"),
@@ -202,24 +268,47 @@ async function fileInfo(
 	});
 }
 
+/** Positional reads and line scans of a file already read into memory. */
+function bufferReader(info: FileInfo, bytes: Uint8Array): BinaryReader {
+	return {
+		info: async () => ok(info),
+		read: async (offset, length) => ok(bytes.subarray(offset, offset + length)),
+		scanLines: async ({ startLine, endLine }) => {
+			let scanner: LineScanner;
+			try {
+				scanner = new LineScanner(startLine, endLine);
+			} catch {
+				return err(new FileError("invalid", "Invalid line range", info.path));
+			}
+			scanner.push(bytes);
+			return ok(scanner.finish());
+		},
+		close: async () => {},
+	};
+}
+
 /**
- * Runs a command in the sandbox. `timeout` is in seconds, as in Pi. Commands
- * get only the variables in `options.env`. `inheritEnv` would mean the actor
- * host's environment, which holds provider keys, so it is ignored.
+ * Runs a command in the sandbox. An argument list is quoted into one shell
+ * command. `timeout` is in seconds, as in Pi. Commands get only the variables
+ * in `options.env`. `inheritEnv` would mean the actor host's environment,
+ * which holds provider keys, so it is ignored. The sandbox reports stdout and
+ * stderr as one stream, so every chunk is reported as stdout.
  */
 async function exec(
 	sandbox: Sandbox,
-	command: string,
+	command: string | readonly string[],
 	options: ShellExecOptions | undefined,
 	context: Context,
 	cwd: string,
 ): Promise<Result<ShellExecResult, ExecutionError>> {
 	const decoder = new TextDecoder();
 	const output = (text: string) => {
-		if (text) options?.onOutput?.(text, context);
+		if (text) options?.onOutput?.(text, context, { stream: "stdout" });
 	};
 	try {
-		const result = await sandbox.exec(command, {
+		const shellCommand =
+			typeof command === "string" ? command : command.map(shellQuote).join(" ");
+		const result = await sandbox.exec(shellCommand, {
 			cwd,
 			env: options?.env,
 			timeoutMs:

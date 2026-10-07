@@ -43,6 +43,10 @@
 		"./daytona": {
 			"types": "./dist/daytona.d.ts",
 			"default": "./dist/daytona.js"
+		},
+		"./pi": {
+			"types": "./dist/pi/index.d.ts",
+			"default": "./dist/pi/index.js"
 		}
 	},
 	"main": "./dist/index.js",
@@ -50,6 +54,10 @@
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
 		"check-types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@earendil-works/chord": "^1.0.0",
+		"@earendil-works/pi-durable": "^1.0.0"
 	},
 	"peerDependencies": {
 		"@daytonaio/sdk": "^0.216.0",

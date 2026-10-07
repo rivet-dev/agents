@@ -95,6 +95,7 @@ export function agentOSProvider(
 
 	return {
 		name: "agentos",
+		cwd,
 		create: async (c) => c.actorId,
 		connect: async (c, id) => {
 			const handle = agentOS(c).getOrCreate(["sandbox", id], {

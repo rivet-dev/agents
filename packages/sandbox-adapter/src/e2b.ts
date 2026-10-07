@@ -22,6 +22,7 @@ export function e2bProvider(options: E2BProviderOptions = {}): SandboxProvider {
 	const cwd = options.cwd ?? "/home/user";
 	return {
 		name: "e2b",
+		cwd,
 		create: async () =>
 			(
 				await E2BSandbox.create(options.template ?? "base", {

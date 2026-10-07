@@ -58,6 +58,12 @@ export interface Sandbox {
 export interface SandboxProvider {
 	/** Stored next to the sandbox id so a changed provider is detected on wake. */
 	readonly name: string;
+	/**
+	 * Working directory of this provider's sandboxes. When set, an agent can
+	 * build its tool environment before the sandbox connects, so the sandbox
+	 * connects only when a tool first uses it.
+	 */
+	readonly cwd?: string;
 	/** Provisions a new sandbox and returns its id. */
 	create(c: SandboxActorContext): Promise<string>;
 	/** Connects to an existing sandbox. Returns undefined when the provider reports that it no longer exists. */

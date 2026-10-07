@@ -46,19 +46,19 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@earendil-works/pi-coding-agent": "1.0.2",
+		"@earendil-works/pi-coding-agent": "^1.0.4",
 		"@opentelemetry/api": "^1.1.0",
 		"@rivet-dev/sandbox-adapter": "workspace:*"
 	},
 	"peerDependencies": {
-		"@earendil-works/chord": "^1.0.2",
-		"@earendil-works/pi-durable": "^1.0.2",
+		"@earendil-works/chord": "^1.0.0",
+		"@earendil-works/pi-durable": "^1.0.0",
 		"rivetkit": ">=2.3.23 <2.4.0"
 	},
 	"devDependencies": {
-		"@earendil-works/chord": "1.0.2",
-		"@earendil-works/pi-ai": "1.0.2",
-		"@earendil-works/pi-durable": "1.0.2",
+		"@earendil-works/chord": "^1.0.4",
+		"@earendil-works/pi-ai": "^1.0.4",
+		"@earendil-works/pi-durable": "^1.0.4",
 		"@opentelemetry/sdk-trace-node": "2.11.0",
 		"@types/node": "^24.0.0",
 		"rivetkit": "2.3.23",

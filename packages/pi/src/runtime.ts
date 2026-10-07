@@ -14,11 +14,11 @@ import {
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { SqliteStorage } from "@earendil-works/pi-durable/storage/sqlite";
 import type { Sandbox, SandboxProvider } from "@rivet-dev/sandbox-adapter";
+import { sandboxEnv } from "@rivet-dev/sandbox-adapter/pi";
 import { type ActorContext, UserError } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
 import { actorSqlite } from "./actor-sqlite.js";
 import { SourceCredentialStore } from "./credentials.js";
-import { sandboxEnv } from "./env.js";
 import { toClientError } from "./errors.js";
 import {
 	createActorModelRuntime,
@@ -384,21 +384,30 @@ function startingAgent(
 	};
 }
 
-/** Connects the sandbox on the first tool call that needs it. */
+/**
+ * Builds the sandbox env without connecting, so a model request or a custom
+ * tool call never creates a sandbox. The sandbox connects on the first file
+ * or shell operation. A provider that does not report its working directory
+ * connects first, because the env needs that directory.
+ */
 function sandboxEnvBuilder(
 	c: PiContext,
 	runtime: PiRuntime,
 	provider: SandboxProvider,
 ): NonNullable<HarnessOptions["env"]> {
-	return async (target): Promise<ExecutionEnv> => {
+	const connect = async () => {
 		runtime.sandbox ??= connectSandbox(c, provider).catch((error: unknown) => {
 			runtime.sandbox = undefined;
 			throw error;
 		});
-		const connected = await runtime.sandbox;
+		return (await runtime.sandbox).sandbox;
+	};
+	return async (target): Promise<ExecutionEnv> => {
+		const root = provider.cwd ?? (await connect()).cwd;
 		return sandboxEnv(
-			`${provider.name}:${connected.id}`,
-			connected.sandbox,
+			`${provider.name}:${c.actorId}`,
+			root,
+			connect,
 			target.cwd,
 		);
 	};
