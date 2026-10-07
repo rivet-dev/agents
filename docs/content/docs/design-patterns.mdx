@@ -49,7 +49,7 @@ The key decides which conversation a prompt continues. Pick it from what the age
 
 Keys are arrays, so a channel id or repository name from a webhook can't break the key's structure. See [Actor Keys](/actors/docs/keys).
 
-A [`pi()`](/agents/docs/pi) agent holds one conversation, so the key is the conversation. A [`piDurable()`](/agents/docs/pi-durable) agent can hold many conversations and forks, which lets related conversations share one Actor, one sandbox, and its documents.
+The `prompt` action uses the agent's root conversation, so by default the key is the conversation. An agent can also hold more conversations and forks, which lets related conversations share one Actor, one sandbox, and its documents.
 
 ## Lead Agent with Subagents
 
@@ -83,7 +83,7 @@ A lead agent hands a focused task to a specialist with its own tools and waits f
 <CodeSnippet file="examples/docs/subagents/client.ts" title="client.ts" />
 </CodeGroup>
 
-`get-order.ts` is the `get_order` tool from [Custom Tools](/agents/docs/custom-tools).
+The `get_order` tool in `get-order.ts` is the one from [Custom Tools](/agents/docs/custom-tools).
 
 See [Subagents](/agents/docs/subagents).
 
@@ -119,7 +119,7 @@ See [Agent-to-Agent Messages](/agents/docs/agent-to-agent).
 
 ## Agent as a Workflow Step
 
-When the work has fixed steps, waits, or retries, let a workflow drive the agent. Each step calls `abort` first, so a retried step doesn't collide with a run the previous attempt left going.
+When the work has fixed steps, waits, or retries, let a workflow drive the agent. Each step prompts the agent and waits for its answer.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 600 130" role="img" aria-label="A workflow step prompts an agent. The workflow retries the step if it throws." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -134,7 +134,7 @@ When the work has fixed steps, waits, or retries, let a workflow drive the agent
   <text x="105" y="63" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Workflow step</text>
   <text x="105" y="80" text-anchor="middle" font-size="12" fill="#56524a">triage</text>
   <text x="455" y="71" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent</text>
-  <text x="284.5" y="59" text-anchor="middle" font-size="12" fill="#56524a">abort, prompt</text>
+  <text x="284.5" y="59" text-anchor="middle" font-size="12" fill="#56524a">prompt</text>
 </svg>
 </div>
 
@@ -180,7 +180,7 @@ See [Schedules](/agents/docs/schedules).
 
 ## Background Agents That Must Finish
 
-When nobody is watching a run, such as an agent started by a webhook, a crash must not lose the work or repeat a side effect. Use [Pi Durable](/agents/docs/pi-durable): every model request and tool call is a durable task that continues where it stopped, and a redelivered webhook is ignored because of its `requestId`.
+When nobody is watching a run, such as an agent started by a webhook, a crash must not lose the work or repeat a side effect. Every model call and tool call of a [`pi()`](/agents/docs/pi) run is saved before the next step starts, so the run continues where it stopped. Pass a `requestId`, so a redelivered webhook returns the first submission instead of starting a second run.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 600 130" role="img" aria-label="A GitHub webhook submits the issue to the fixer agent with the delivery id as requestId. The fixer agent opens a pull request, a tool that is never repeated after a crash." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -209,11 +209,11 @@ When nobody is watching a run, such as an agent started by a webhook, a crash mu
 <CodeSnippet file="examples/docs/design-patterns/background-job/client.ts" title="client.ts" />
 </CodeGroup>
 
-- `conversation.submit` returns once the input is saved, so the webhook answers right away while the agent works.
-- `open_pull_request` has no `replay`, so a call cut off by a crash isn't repeated. The model is told the call was interrupted. Mark only tools that are safe to run twice as `replay: "safe"`.
+- The `conversation.submit` action returns once the input is saved, so the webhook answers right away while the agent works.
+- The `open_pull_request` tool has no `replay`, so a call cut off by a crash isn't repeated. The model is told the call was interrupted. Mark only tools that are safe to run twice as `replay: "safe"`.
 - When you ship new code, the Actor lets the run finish, for up to `sleepGracePeriod`, before it restarts on the new version. Anything still running then carries on from its last saved step.
 
-See [Pi Durable](/agents/docs/pi-durable).
+See [Architecture](/agents/docs/architecture#resuming-a-run).
 
 ## Credentials Shared per Tenant
 
@@ -254,7 +254,7 @@ See [User Subscriptions](/agents/docs/user-subscriptions).
 
 ### One Agent for Every User
 
-An agent runs one prompt at a time. With a single key for everyone, a prompt from one user throws while another user's prompt is running, and every user shares one session.
+With a single key for everyone, every user shares one conversation and its history. A prompt from one user waits in the queue while another user's prompt runs.
 
 <CodeSnippet file="examples/docs/design-patterns/one-agent.ts" title="answer.ts" />
 
@@ -262,17 +262,17 @@ An agent runs one prompt at a time. With a single key for everyone, a prompt fro
 
 ### A New Key per Request
 
-A new key creates a new agent with an empty session, so the agent forgets the conversation after every message and leaves an Actor behind.
+A new key creates a new agent with an empty conversation, so the agent forgets the conversation after every message and leaves an Actor behind.
 
 <CodeSnippet file="examples/docs/design-patterns/key-per-request.ts" title="answer.ts" />
 
 **Solution:** Reuse the key of the conversation the message belongs to.
 
-### Unattended Runs on `pi()`
+### Webhooks Without a `requestId`
 
-A `pi()` agent started by a webhook or schedule has nobody to ask it to continue. If a crash cuts off a tool call, the run doesn't resume. If the webhook is redelivered, the agent is prompted twice, and a tool with side effects can run twice.
+Webhook providers deliver the same event again when your handler is slow or fails. Without a `requestId`, each delivery starts its own run, so the agent does the work twice and a tool with side effects can run twice.
 
-**Solution:** Use [Pi Durable](/agents/docs/pi-durable) for runs nobody watches, and pass a `requestId` with every submission. See [Background Agents That Must Finish](#background-agents-that-must-finish).
+**Solution:** Pass the delivery id as the `requestId` of every submission. See [Background Agents That Must Finish](#background-agents-that-must-finish).
 
 ## Where to Go Next
 
@@ -282,7 +282,7 @@ A `pi()` agent started by a webhook or schedule has nobody to ask it to continue
 | Give the agent your own APIs | [Custom Tools](/agents/docs/custom-tools) |
 | Let the agent run commands and edit files | [Sandboxes](/agents/docs/sandboxes), then [Built-in Tools](/agents/docs/built-in-tools) |
 | Run agents on your users' own subscriptions | [User Subscriptions](/agents/docs/user-subscriptions) |
-| Make runs finish after a crash, with no one to retry them | [Pi Durable](/agents/docs/pi-durable) |
+| Make runs finish after a crash, with no one to retry them | [Architecture](/agents/docs/architecture) |
 | Wait for a person before a risky action | [Human in the Loop](/agents/docs/human-in-the-loop) |
 | Share a result through a link | [Scoped Access with JWTs](/agents/docs/scoped-access) |
 | Talk to users in Slack, Linear, GitHub, or Discord | [Slack](/agents/docs/connectors/slack) and the other connectors |

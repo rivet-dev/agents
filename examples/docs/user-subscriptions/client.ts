@@ -11,7 +11,6 @@ export async function saveLogin(userId: string, provider: string, credential: Cr
 
 // The agent's key starts with the user id, so it runs on that user's credential.
 export async function chat(userId: string, text: string) {
-	const agent = client.agent.getOrCreate([userId, "chat"]);
-	await agent.prompt(text);
-	return agent.getLastAssistantText();
+	const result = await client.agent.getOrCreate([userId, "chat"]).prompt(text);
+	return result.status === "done" ? result.text : undefined;
 }

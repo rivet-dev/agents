@@ -33,7 +33,7 @@ description: "Talk to an agent with a slash command in Discord."
 
 <Step title="Create a Discord application">
 
-In the [Discord Developer Portal](https://discord.com/developers/applications), create an application. Copy its application ID and public key, and create a bot token.
+In the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer">Discord Developer Portal</a>, create an application. Copy its application ID and public key, and create a bot token.
 
 </Step>
 
@@ -87,8 +87,10 @@ Under **General Information**, set the interactions endpoint URL to `https://<yo
 ## How it works
 
 - The route verifies Discord's Ed25519 signature against the raw body with the application's public key.
-- Each Discord channel gets its own agent. Every `/ask` in the channel continues the same session.
-- Discord expects a response within three seconds and an agent run takes longer, so the route hands the command to the agent's `receive` action and defers the reply. The `receive` action adds the message to the agent's queue and schedules `drain`, which prompts the agent with the oldest message and edits the deferred message. Interaction tokens stay valid for 15 minutes, and a message holds up to 2,000 characters. A message that arrives while the agent is answering waits in the queue. The queue is saved with the agent, so replies still run if the request that delivered a message goes away.
+- Each Discord channel gets its own agent. Every `/ask` in the channel continues the same conversation.
+- Discord expects a response within three seconds and an agent run takes longer, so the route hands the command to the agent's `receive` action and defers the reply. The `receive` action schedules `reply`, which prompts the agent and edits the deferred message. Interaction tokens stay valid for 15 minutes, and a message holds up to 2,000 characters. The schedule is saved with the agent, so the reply still runs if the request that delivered the message goes away.
+- A message that arrives while the agent is answering waits as a follow-up, and gets its own reply when its run ends.
+- The prompt's `requestId` is the interaction's id, so a command delivered twice runs the agent only once.
 
 ## Configure
 
@@ -104,4 +106,4 @@ Under **General Information**, set the interactions endpoint URL to `https://<yo
 | Discord interaction | Webhook path | What the route does |
 | --- | --- | --- |
 | `PING` | `/discord/interactions` | Answers Discord's endpoint check. |
-| [Application command](https://discord.com/developers/docs/interactions/application-commands) `/ask` | `/discord/interactions` | Hands the command to the channel's agent and defers. The agent edits the reply. |
+| <a href="https://discord.com/developers/docs/interactions/application-commands" target="_blank" rel="noopener noreferrer">Application command</a> `/ask` | `/discord/interactions` | Hands the command to the channel's agent and defers. The agent edits the reply. |

@@ -4,37 +4,55 @@ import type { registry } from "./server";
 const client = createClient<typeof registry>();
 const agent = client.agent.getOrCreate(["support", "customer-123"]);
 
-const history = await agent.getMessages();
-console.log(`${history.length} messages so far`);
+const root = await agent.harness.root();
+const { messages } = await agent.conversation.context(root.id);
+console.log(`${messages.length} messages so far`);
 
 const conn = agent.connect();
 conn.onStatusChange((status) => console.log(`[connection ${status}]`));
 
-const unsubscribe = conn.on("event", (event) => {
-	switch (event.type) {
-		case "message_update":
-			if (event.assistantMessageEvent.type === "text_delta") {
-				process.stdout.write(event.assistantMessageEvent.delta);
+// The text of the current answer printed so far.
+let printed = "";
+
+const unsubscribe = conn.on("pi.events", ({ events }) => {
+	for (const event of events) {
+		switch (event.type) {
+			case "message_update":
+				for (const change of event.changes) {
+					if (change.type === "text_delta") {
+						process.stdout.write(change.delta);
+						printed += change.delta;
+					}
+				}
+				break;
+			case "message_end": {
+				// A short answer can arrive whole here, with no text_delta before it.
+				const message = event.entry.model?.[0];
+				if (message?.role === "assistant") {
+					const text = message.content
+						.flatMap((block) => (block.type === "text" ? [block.text] : []))
+						.join("");
+					process.stdout.write(text.slice(printed.length));
+				}
+				printed = "";
+				break;
 			}
-			break;
-		case "tool_execution_start":
-			console.log(`\n> ${event.toolName}`);
-			break;
-		case "tool_execution_end":
-			console.log(event.isError ? "  failed" : "  done");
-			break;
-		case "auto_retry_start":
-			console.log(`\nRetrying (${event.attempt}/${event.maxAttempts}): ${event.errorMessage}`);
-			break;
+			case "tool_execution_start":
+				console.log(`\n> ${event.toolName}`);
+				break;
+			case "auto_retry_start":
+				console.log(`\nRetrying (attempt ${event.attempt}): ${event.errorMessage}`);
+				break;
+		}
 	}
 });
+// Sends this conversation's events to this connection.
+await conn.conversation.watchEvents(root.id);
 
-await conn.prompt("Clone https://github.com/honojs/hono and summarize its README.");
-
-const last = (await conn.getMessages()).at(-1);
-if (last?.role === "assistant" && last.stopReason === "error") {
-	console.error(`\nModel error: ${last.errorMessage}`);
-}
+const result = await conn.prompt("Clone https://github.com/honojs/hono and summarize its README.", {
+	requestId: crypto.randomUUID(),
+});
+if (result.status === "unanswered") console.error(`\nNo answer: ${result.reason}`);
 
 unsubscribe();
 await conn.dispose();

@@ -1,7 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
-import { piDurable } from "@rivet-dev/pi/durable";
+import { pi } from "@rivet-dev/pi";
 import { e2bProvider } from "@rivet-dev/sandbox-adapter/e2b";
 import { setup } from "rivetkit";
 
@@ -11,11 +11,12 @@ const openPullRequest = defineTool({
 	parameters: Type.Object({ repo: Type.String(), branch: Type.String(), title: Type.String() }),
 	// No replay: if a crash cuts this call off, the model learns it never completed
 	// and can check for an existing pull request before opening another.
-	execute: async ({ repo, branch, title }) => {
+	execute: async ({ repo, branch, title }, _api, context) => {
 		const response = await fetch(`https://api.github.com/repos/${repo}/pulls`, {
 			method: "POST",
 			headers: { authorization: `Bearer ${process.env.GITHUB_TOKEN}`, accept: "application/vnd.github+json" },
 			body: JSON.stringify({ head: branch, base: "main", title }),
+			signal: context.abortSignal,
 		});
 		if (!response.ok) throw new Error(`GitHub returned ${response.status}.`);
 		const pull = (await response.json()) as { html_url: string };
@@ -27,7 +28,7 @@ const extensions = createRegistry();
 extensions.install(CodingTools);
 extensions.install(defineExtension({ name: "github", tools: [openPullRequest] }));
 
-const fixer = piDurable({
+const fixer = pi({
 	model: "anthropic/claude-opus-5-5",
 	registry: extensions,
 	sandbox: e2bProvider(),

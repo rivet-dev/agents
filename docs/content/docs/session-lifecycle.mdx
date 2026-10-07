@@ -1,18 +1,18 @@
 ---
 title: "Session Lifecycle"
-description: "What a session is, the events one prompt produces, and how to steer or cancel a run."
+description: "What a conversation is, the events one prompt produces, and how to steer or cancel a run."
 ---
 
-A session is one agent's conversation. Each agent key has exactly one session, and the session:
+A conversation is one thread of messages inside an agent. Each agent has a root conversation, which `prompt` uses by default, and can hold more conversations. A conversation:
 
 - Keeps the full history of messages and tool calls.
-- Runs one prompt at a time, calling the model and tools until the model is done.
-- Streams events to every connected client while it runs.
+- Handles one run at a time, calling the model and tools until the model is done. Prompts that arrive during a run wait in a queue.
+- Streams events to every client that watches it.
 - Summarizes older messages when the context fills up.
 - Survives sleep, crashes, and upgrades. See [Architecture](/agents/docs/architecture).
 
 <div style="overflow-x:auto">
-<svg viewBox="0 0 640 132" role="img" aria-label="A client sends a prompt to the agent&#x27;s session. The agent calls the model, runs the tools it asks for in the sandbox, and repeats until the model stops calling tools. Events stream back to the client the whole time." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+<svg viewBox="0 0 640 132" role="img" aria-label="A client sends a prompt to a conversation of the agent. The agent calls the model, runs the tools it asks for in the sandbox, and repeats until the model stops calling tools. Events stream back to the client the whole time." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
   <defs>
     <marker id="session-events-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
   </defs>
@@ -38,43 +38,44 @@ A session is one agent's conversation. Each agent key has exactly one session, a
 </svg>
 </div>
 
-This client connects to the [Quickstart](/agents/docs/quickstart) agent, sends one prompt, and prints the events it receives:
+This client connects to the [Quickstart](/agents/docs/quickstart) agent, watches the root conversation, sends one prompt, and prints the events it receives:
 
 <CodeSnippet file="examples/docs/session-lifecycle/client.ts" title="client.ts" />
 
 ## Events
 
-Every event arrives as `event`, with a `type`:
+The `conversation.watchEvents(id)` action returns a snapshot of the conversation, including a partial answer. Then the agent sends `pi.events` to that connection only. Each frame has `conversationId`, `seq`, and an `events` array. A frame with `seq` 0 replaces everything the client had, and a gap in `seq` means call `watchEvents` again.
 
-| Event Type | When it fires |
+| Event type | When it fires |
 | --- | --- |
-| `agent_start`, `agent_end` | A run starts or ends. Then `agent_settled` follows once the agent is fully idle, after any retry. |
-| `turn_start`, `turn_end` | A model response starts, or it and its tool calls are done. The `turn_end` event has the response's `usage`: tokens and cost. |
-| `message_update` | The model streams output. Its `assistantMessageEvent.type` is `text_delta`, `thinking_delta`, or a tool call update. |
-| `message_end` | A message is complete: your prompt, a model reply, or a tool result. |
-| `tool_execution_start`, `tool_execution_end` | A tool starts or finishes. On a failure, `isError` is true. |
+| `run_start`, `run_end` | A run starts or ends. |
+| `turn_start`, `turn_end` | A model response starts, or it and its tool calls are done. |
+| `message_start`, `message_end` | A message starts or is complete: your prompt, a model reply, or a tool result. |
+| `message_update` | The model streams output. Each item in `changes` has a `type`, such as `text_delta`, `thinking_delta`, or `toolcall_delta`. |
+| `tool_execution_start`, `tool_execution_end` | A tool starts or finishes. |
 | `auto_retry_start`, `auto_retry_end` | A failed model call is retried. |
 | `compaction_start`, `compaction_end` | Older messages are summarized to free up context. |
+| `usage_changed` | The conversation's token and cost totals change. |
 
-A client that connects mid-run only receives events from that point on, so read earlier messages with `getMessages`. To stop listening, call the function that `on` returns.
+A short answer can arrive whole in `message_end`, with no `text_delta` before it, so print the rest of the text there. Events are not replayed. To read earlier messages, call `conversation.context(id)`, which returns `{ messages }`. To stop listening, call `conversation.unwatchEvents(id)`.
 
 ## Steer, follow up, or cancel
 
-While a run is in progress:
+While a run is in progress, `prompt(text, { whenBusy })` decides what happens to the new prompt:
 
-| Action | What it does |
+| `whenBusy` | What it does |
 | --- | --- |
-| `steer(text)` | The agent reads the message after its current tool calls finish, before its next model call. |
-| `followUp(text)` | The agent reads the message once it has no tool calls left, and the run continues. On an idle agent it only queues. |
-| `abort()` | Cancels the run and stops any command still running in the sandbox. Daytona can't cancel a command, so it runs until it exits or times out. |
+| `"followUp"` | The default. The agent reads the message once it has no tool calls left, and the run continues. |
+| `"steer"` | The agent reads the message after its current tool calls finish, before its next model call. |
+| `"reject"` | The prompt fails with an error, and nothing is queued. |
 
-Calling `prompt` while a run is in progress throws. To queue it instead, pass `streamingBehavior: "steer"` or `"followUp"`. On an idle agent, the prompt runs right away.
+On an idle conversation, the prompt runs right away. To cancel a run, call `conversation.abort(id)`. It stops any command still running in the sandbox. Daytona can't cancel a command, so it runs until it exits or times out.
 
-Only `abort` stops a run. If `prompt` times out or its client disconnects, `prompt` rejects, and the run keeps going until it finishes.
+Only `abort` stops a run. If `prompt` times out or its client disconnects, `prompt` rejects, and the run keeps going until it finishes. Send the prompt again with the same `requestId` to get its result.
 
 ## Compaction and errors
 
-- When the context fills up, the agent summarizes older messages and keeps going. Call `compact` to do it yourself. It cancels the run in progress first.
-- A failed model call is retried automatically. If it keeps failing, the run ends with an assistant message whose `stopReason` is `"error"`, and the session is kept.
+- When the context fills up, the agent summarizes older messages and keeps going. Call `conversation.compact(id)` to do it yourself. The conversation keeps working while the summary is written.
+- A failed model call is retried automatically. If it keeps failing, `prompt` returns `{ status: "unanswered", reason }`, and the conversation is kept.
 
 **Next:** [Client SDK](/agents/docs/client-sdk), how to call an agent from your backend or a browser.

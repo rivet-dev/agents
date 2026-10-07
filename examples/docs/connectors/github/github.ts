@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { createClient } from "rivetkit/client";
 import type { registry } from "./server";
 
-export type GitHubComment = { owner: string; repo: string; issueNumber: number; text: string };
+export type GitHubComment = { commentId: string; owner: string; repo: string; issueNumber: number; text: string };
 
 const botLogin = process.env.GITHUB_BOT_LOGIN ?? "";
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
@@ -24,7 +24,13 @@ github.post("/webhook", async (c) => {
 	if (action === "created" && comment.user.login !== botLogin && comment.body.includes(`@${botLogin}`)) {
 		const owner = repository.owner.login;
 		const agent = client.agent.getOrCreate([owner, repository.name, String(issue.number)]);
-		await agent.receive({ owner, repo: repository.name, issueNumber: issue.number, text: comment.body });
+		await agent.receive({
+			commentId: String(comment.id),
+			owner,
+			repo: repository.name,
+			issueNumber: issue.number,
+			text: comment.body,
+		});
 	}
 	return c.body(null, 202);
 });

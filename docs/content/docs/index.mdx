@@ -1,9 +1,9 @@
 ---
 title: "Agents"
-description: "Run a coding agent as a durable Rivet Actor, with its tools in a separate sandbox."
+description: "Run a coding agent as a durable Rivet Actor. Its files live in the Actor's database, or in a sandbox when it needs a shell."
 ---
 
-Each agent on Rivet is one [Rivet Actor](/actors/docs). You define the agent once, and every key you call it with gets its own Actor, session, and sandbox.
+Each agent on Rivet is one [Rivet Actor](/actors/docs). You define the agent once, and every key you call it with gets its own Actor, conversations, and files.
 
 <svg viewBox="0 0 472 330" role="img" aria-label="Your backend runs three agents. Each agent sends its tool calls to its own sandbox, which holds the shell and files." style="width:100%;max-width:472px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
   <defs>
@@ -46,15 +46,16 @@ Each agent on Rivet is one [Rivet Actor](/actors/docs). You define the agent onc
 </svg>
 
 - **The agent loop runs in the Actor.** Model calls, retries, and the conversation run in your backend, next to your application code, where you control credentials, permissions, and logging.
-- **Tools run in a separate sandbox.** File and shell tools call into a sandbox such as E2B or Daytona. Nothing the agent runs executes on your worker, and your provider keys never enter the sandbox.
-- **Agents are durable.** The Actor saves the session to its SQLite database and restores it when it wakes, so an idle agent can sleep, and a crash or upgrade does not lose the conversation.
+- **Files without a sandbox.** By default, the agent's file tools work on files in the Actor's own SQLite database, so there is nothing else to set up.
+- **A sandbox when it needs a shell.** Add a sandbox such as E2B or Daytona, and file and shell tools run there. Nothing the agent runs executes on your worker, and your provider keys never enter the sandbox.
+- **Agents are durable.** Each agent lives in its Actor's SQLite database, not in memory, so it can sleep, crash, or upgrade mid-run and pick up where it left off.
 
 <CardGroup>
   <Card title="Quickstart" href="/agents/docs/quickstart">
-    Run your first agent, with its tools in a sandbox.
+    Run your first agent, with nothing else to set up.
   </Card>
   <Card title="Pi" href="/agents/docs/pi">
-    Run the Pi coding agent as a durable Actor.
+    Run the Pi agent as a durable Actor.
   </Card>
 </CardGroup>
 
@@ -62,8 +63,8 @@ Each agent on Rivet is one [Rivet Actor](/actors/docs). You define the agent onc
 
 ### Stateful agents on any infrastructure
 
-- **A live process per agent.** Each agent is an Actor with its own memory and SQLite database. It keeps the session loaded between prompts and runs one prompt at a time, so two servers never race on the same agent. Nothing is rebuilt from a database or replayed from an event log on each request.
-- **No cloud lock-in.** Rivet is open source under Apache 2.0. Use [Rivet Cloud](https://dashboard.rivet.dev), [bring your own compute](/docs/deploy/self-host/workers), or [self-host](/docs/deploy/self-host/control-plane) everything. Workers run on Kubernetes, AWS ECS, Railway, Render, Vercel, Google Cloud Run, AWS Lambda, or any VM.
+- **A live process per agent.** Each agent is an Actor with its own memory and SQLite database. It keeps its conversations loaded between prompts, so two servers never race on the same agent. Nothing is rebuilt from a database or replayed from an event log on each request.
+- **No cloud lock-in.** Rivet is open source under Apache 2.0. Use <a href="https://dashboard.rivet.dev" target="_blank" rel="noopener noreferrer">Rivet Cloud</a>, [bring your own compute](/docs/deploy/self-host/workers), or [self-host](/docs/deploy/self-host/control-plane) everything. Workers run on Kubernetes, AWS ECS, Railway, Render, Vercel, Google Cloud Run, AWS Lambda, or any VM.
 
 ### Any harness, any model
 
@@ -72,11 +73,11 @@ Each agent on Rivet is one [Rivet Actor](/actors/docs). You define the agent onc
 
 ### Built for scale and realtime
 
-- **Lightweight.** A running Actor adds about 72 KB of memory on top of the agent's session, and a sleeping agent uses none. Give every user, task, or thread its own agent.
+- **Lightweight.** A running Actor adds about 72 KB of memory on top of the agent's conversations, and a sleeping agent uses none. Give every user, task, or thread its own agent.
 - **Wakes in milliseconds.** A sleeping agent wakes on its next prompt in about 12 ms, instead of the seconds it takes to boot a container.
-- **Realtime and multiplayer.** Clients connect over WebSockets and stream events as the agent works. Many users can watch and steer the same session.
+- **Realtime and multiplayer.** Clients connect over WebSockets and stream events as the agent works. Many users can watch and steer the same conversation.
 - **One primitive for your backend.** Agents are Actors, like the rest of your Rivet app, so they call other agents and Actors directly and use the same schedules, queues, and workflows.
-- **Swappable sandboxes.** A sandbox crash does not lose the session, and a tool call adds about 10 ms in the same datacenter.
+- **Swappable sandboxes.** A sandbox crash does not lose the conversation, and a tool call adds about 10 ms in the same datacenter.
 
 ## Core
 

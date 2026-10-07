@@ -19,17 +19,8 @@
 			"title": "Agents",
 			"pages": [
 				{
-					"title": "Pi",
-					"href": "/agents/docs/pi",
-					"badge": "Beta",
-					"icon": {
-						"src": "/images/vendors/pi.svg"
-					}
-				},
-				{
 					"title": "Pi Durable",
-					"href": "/agents/docs/pi-durable",
-					"badge": "Beta",
+					"href": "/agents/docs/pi",
 					"icon": {
 						"src": "/images/vendors/pi.svg"
 					}

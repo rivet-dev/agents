@@ -3,10 +3,10 @@ title: "React SDK"
 description: "Build a chat UI for an agent with React."
 ---
 
-Build a chat UI for an agent with `@rivetkit/react`. The agent logic lives in one hook, and the UI in one component.
+The chat UI uses the `@rivetkit/react` package. The agent logic lives in one hook, and the UI in one component.
 
 <div style="overflow-x:auto">
-<svg viewBox="0 0 640 190" role="img" aria-label="Chat.tsx renders what the useAgentChat hook returns. The hook calls prompt and abort on the agent and updates from its events." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+<svg viewBox="0 0 640 190" role="img" aria-label="Chat.tsx renders what the useAgentChat hook returns. The hook calls submit and abort on the agent and updates from its events." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
   <defs>
     <marker id="react-sdk-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
   </defs>
@@ -22,7 +22,7 @@ Build a chat UI for an agent with `@rivetkit/react`. The agent logic lives in on
   <text x="320" y="95" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">useAgentChat</text>
   <text x="565" y="95" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
   <text x="200.5" y="83" text-anchor="middle" font-size="12" fill="#56524a">state</text>
-  <text x="449.5" y="73" text-anchor="middle" font-size="12" fill="#56524a">prompt, abort</text>
+  <text x="449.5" y="73" text-anchor="middle" font-size="12" fill="#56524a">submit, abort</text>
   <text x="450.5" y="116" text-anchor="middle" font-size="12" fill="#56524a">events</text>
 </svg>
 </div>
@@ -32,14 +32,16 @@ Build a chat UI for an agent with `@rivetkit/react`. The agent logic lives in on
 <CodeSnippet file="examples/docs/react-sdk/useAgentChat.ts" title="useAgentChat.ts" />
 </CodeGroup>
 
-- The `useActor` hook connects to the agent by name and key. Once the connection opens, the hook loads the conversation with `getMessages`.
+- The `useActor` hook connects to the agent by name and key. Once the connection opens, the hook calls `conversation.watchEvents` on the root conversation. The returned snapshot has the history and any answer in progress, and from then on the connection receives `pi.events`.
 - The `message_update` event streams the reply as text deltas, and `message_end` adds each finished message, including your own prompt. See [Session Lifecycle](/agents/docs/session-lifecycle#events) for every event.
-- The `agent_settled` event marks the agent idle once it has finished, after any retry. The `Chat` component switches its button from Send to Stop while the agent works.
+- Each batch has a `seq` number. If one is missing, the hook watches again and starts from a new snapshot.
+- The `send` function calls `conversation.submit`, which starts a run without waiting for it. A message sent during a run waits as a follow-up.
+- The `run_start` and `run_end` events mark when the agent works. The `Chat` component switches its button from Send to Stop while it does, and Stop calls `conversation.abort`.
 
 ## Next steps
 
-- To steer a run in progress, see [Session Lifecycle](/agents/docs/session-lifecycle#steer-follow-up-or-cancel). To handle errors, see [Client SDK](/agents/docs/client-sdk#results-and-errors).
+- To steer a run in progress, see [Session Lifecycle](/agents/docs/session-lifecycle). To handle errors, see [Client SDK](/agents/docs/client-sdk#results-and-errors).
 - To send a login token, add `params` to `useActor`.
-- To switch models from the UI, call `setModel` on the connection with one of the agent's `scopedModels`.
+- To switch models from the UI, call `conversation.configure(id, { model: { provider, modelId } })` on the connection with one of the agent's `scopedModels`.
 
 See [React](/actors/docs/clients/react) in the Actors docs for everything `@rivetkit/react` can do.

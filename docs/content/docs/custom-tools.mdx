@@ -30,12 +30,29 @@ A custom tool is a function the model can call. It runs in the agent Actor on yo
 </svg>
 </div>
 
+Tool parameters are <a href="https://github.com/sinclairzx81/typebox" target="_blank" rel="noopener noreferrer">TypeBox</a> schemas. Pi validates every call against them, so build them with the `Type` that pi-ai exports:
+
+```sh
+npm add @earendil-works/pi-ai
+```
+
 <CodeGroup>
 <CodeSnippet file="examples/docs/custom-tools/get-order.ts" title="get-order.ts" />
 <CodeSnippet file="examples/docs/custom-tools/server.ts" title="server.ts" />
 </CodeGroup>
 
-The model reads the tool's `description` and calls it with arguments that match `parameters`. It reads `content` as the result, while `details` goes to clients for your UI. A thrown error, like the 404 in `fetchOrder`, becomes an error result: the model reads the message and can try something else. The `signal` argument aborts when the run is cancelled, so a Stop from the client also cancels the request.
+Both `defineTool` and `defineExtension` come from `@earendil-works/pi-durable`. A tool is installed through an extension, and by default every conversation uses every installed extension.
+
+- The model reads the tool's `description` and calls it with arguments that match `parameters`. Pi rejects a call whose arguments don't match.
+- The model reads `content` as the result. Clients get `details` for your UI.
+- A thrown error, like the 404 in `fetchOrder`, becomes an error result. The model reads the message and can try something else.
+- The `context.abortSignal` aborts when the run is cancelled or the Actor stops, so a Stop from the client also cancels the request. Until the tool returns, the Actor can't sleep, and an upgrade waits for it.
+
+## After a crash
+
+If the Actor restarts while a tool runs, the agent runs that tool again on wake only if the tool sets `replay: "safe"`. The `get_order` tool only reads, so it sets it. See [Resuming a run](/agents/docs/architecture#resuming-a-run) for every case.
+
+Leave `replay` unset for a tool with side effects, such as one that deploys a preview. For work that must finish exactly once, launch a [task](/agents/docs/pi#tools-and-tasks) from the tool.
 
 ## Secrets
 
@@ -45,11 +62,11 @@ The orders API token stays in your backend. The tool reads it from the worker's 
 | --- | --- |
 | Your tool code | Yes, from `process.env` on the worker. |
 | The model | No. It sees the tool's name, description, parameters, and results. |
-| The session and connected clients | No. They store and receive tool arguments and results. |
+| The conversation and connected clients | No. They store and receive tool arguments and results. |
 | The sandbox | No. Commands run with the sandbox's own environment. |
 
-Tool results and error messages are stored in the session and sent to every connected client, so keep secrets out of both. For model keys, see [LLM API Keys](/agents/docs/api-keys).
+Tool results and error messages are stored in the conversation and sent to every watching client, so keep secrets out of both. For model keys, see [LLM API Keys](/agents/docs/api-keys).
 
-Custom tools work without a sandbox too. This agent has one, so the model can also use the [built-in tools](/agents/docs/built-in-tools).
+Custom tools need no sandbox. To also give the model file and shell tools, see [Built-in Tools](/agents/docs/built-in-tools).
 
 **Next:** [Session Lifecycle](/agents/docs/session-lifecycle), what happens while the agent answers a prompt.

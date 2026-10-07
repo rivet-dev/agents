@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { createClient } from "rivetkit/client";
 import type { registry } from "./server";
 
-export type DiscordCommand = { applicationId: string; token: string; prompt: string };
+export type DiscordCommand = { interactionId: string; applicationId: string; token: string; prompt: string };
 
 const client = createClient<typeof registry>();
 
@@ -23,7 +23,12 @@ discord.post("/interactions", async (c) => {
 	if (interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data.name === "ask") {
 		const prompt = interaction.data.options?.find((option: { name: string }) => option.name === "prompt")?.value;
 		const agent = client.agent.getOrCreate(["discord", interaction.channel_id ?? interaction.channel?.id]);
-		await agent.receive({ applicationId: interaction.application_id, token: interaction.token, prompt: String(prompt ?? "") });
+		await agent.receive({
+			interactionId: interaction.id,
+			applicationId: interaction.application_id,
+			token: interaction.token,
+			prompt: String(prompt ?? ""),
+		});
 		return c.json({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
 	}
 

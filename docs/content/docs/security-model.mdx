@@ -4,7 +4,7 @@ description: "What reaches the sandbox, where secrets live, and who can connect 
 ---
 
 <div style="overflow-x:auto">
-<svg viewBox="0 0 644 272" role="img" aria-label="Authenticated clients call the agent Actor in your trusted backend. The Actor holds the agent loop and model keys, stores the session in SQLite, and calls the model provider. It sends tool calls to an untrusted sandbox with a shell and files, and no secrets cross into the sandbox." style="width:100%;min-width:520px;max-width:644px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+<svg viewBox="0 0 644 272" role="img" aria-label="Authenticated clients call the agent Actor in your trusted backend. The Actor holds the agent loop and model keys, stores conversations in SQLite, and calls the model provider. It sends tool calls to an untrusted sandbox with a shell and files, and no secrets cross into the sandbox." style="width:100%;min-width:520px;max-width:644px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
   <defs>
     <marker id="security-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
   </defs>
@@ -40,7 +40,7 @@ description: "What reaches the sandbox, where secrets live, and who can connect 
   <g text-anchor="middle" font-size="12" fill="#56524a">
     <text x="75" y="109">authenticated</text>
     <text x="285" y="109">agent loop + keys</text>
-    <text x="285" y="221">session</text>
+    <text x="285" y="221">conversations</text>
     <text x="547" y="109">own environment</text>
   </g>
   <g font-size="11" fill="#56524a">
@@ -55,20 +55,20 @@ The agent loop runs in an Actor on your backend, and the commands the model choo
 
 ## What reaches the sandbox
 
-- Only tool calls: commands to run, and files to read or write. Each agent has its own sandbox.
+- Only calls of the built-in tools: commands to run, and files to read or write. Each agent has its own sandbox. Your [custom tools](/agents/docs/custom-tools) run on your worker.
 - Not your worker's environment. Commands run with the sandbox's own environment.
 - File tools reject paths outside the working directory. Shell commands can reach anything inside the sandbox, so the sandbox itself is the boundary.
-- Without a sandbox, the agent has no file or shell tools. They never fall back to running on your worker.
+- Without a sandbox, files live in the Actor's own SQLite database and there is no shell, so `bash` returns an error. Commands never fall back to running on your worker.
 
 ## Where secrets live
 
 - Model keys, sandbox provider keys, and the secrets your [custom tools](/agents/docs/custom-tools) use stay on your worker. The model and the sandbox never see them.
 - [User subscription](/agents/docs/user-subscriptions) logins stay in your `credentials` Actor. The agent never receives a refresh token.
-- The session stores every message and tool result, and connected clients receive them, so keep secrets out of tool results and error messages.
+- A conversation stores every message and tool result, and clients can read them with `conversation.context` or watch them as events, so keep secrets out of tool results and error messages.
 - [Traces](/agents/docs/observability) never record prompt text, tool arguments, or tool results.
 
 ## Who can connect
 
-- Anyone who can connect to an agent can prompt it and read its whole session. Add [authentication](/docs/authentication) and check that the caller may use the agent's key. Keys aren't secret.
+- Anyone who can connect to an agent can prompt it and read every one of its conversations. Add [authentication](/docs/authentication) and check that the caller may use the agent's key. Keys aren't secret.
 - Protect the `credentials` Actor the same way, because its actions return provider tokens.
 - Give a browser a short-lived token for one agent instead of your Rivet credentials. See [Client SDK](/agents/docs/client-sdk#browsers).

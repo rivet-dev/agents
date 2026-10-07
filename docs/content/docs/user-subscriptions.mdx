@@ -3,7 +3,7 @@ title: "User Subscriptions"
 description: "Let your users run agents on their own Claude or ChatGPT subscription."
 ---
 
-Your users can run the agent on their own Claude or ChatGPT subscription, or their own API key, instead of yours.
+They can also bring their own API key. Your app saves each user's login in a credentials Actor, and the agent reads it before every model call.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 660 250" role="img" aria-label="Your app saves each user&#x27;s login in their credentials Actor. The agent reads and refreshes the credential there, then calls the model provider with the user&#x27;s own login." style="width:100%;min-width:520px;max-width:660px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -43,9 +43,9 @@ Store each user's logins in a `credentials` Actor and pass it to `pi({ credentia
 <CodeSnippet file="examples/docs/user-subscriptions/client.ts" title="client.ts" />
 </CodeGroup>
 
-The agent Actor never receives a refresh token and never writes credentials back. Errors from the `credentials` Actor reject the model call that needed the credential, so keep secrets out of their messages.
+The agent asks the `credentials` Actor on every model call, so a login or logout applies to the next model call, also in a run that is already going. The agent Actor never receives a refresh token and never writes credentials back. Errors from the `credentials` Actor reject the model call that needed the credential, so keep secrets out of their messages.
 
-Your app needs its own login flow, such as a settings page, that saves the result with the `credentials` Actor's `save` action. The files above are in [`examples/docs/user-subscriptions`](https://github.com/rivet-dev/agents/tree/main/examples/docs/user-subscriptions).
+Your app needs its own login flow, such as a settings page, that saves the result with the `credentials` Actor's `save` action. The files above are in <a href="https://github.com/rivet-dev/agents/tree/main/examples/docs/user-subscriptions" target="_blank" rel="noopener noreferrer">`examples/docs/user-subscriptions`</a>.
 
 ## Share credentials across a team
 

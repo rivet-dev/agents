@@ -3,10 +3,10 @@ title: "Human in the Loop"
 description: "Make a tool wait for a person's approval before it acts."
 ---
 
-A tool can refuse to act until a person approves. The check is in the tool, so the model can't skip it: `deploy` only runs after someone approves that exact deploy.
+Pi has no built-in approval flow, so the check goes in the tool. A tool can refuse to act until a person approves, and the model can't skip it: `deploy` only runs after someone approves that exact deploy.
 
 <div style="overflow-x:auto">
-<svg viewBox="0 0 600 256" role="img" aria-label="The agent&#x27;s deploy tool calls consume on the approval Actor. Without an approval it ends the turn and the UI shows the request. Approve calls approve on the approval Actor and prompts the agent, which calls deploy again." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+<svg viewBox="0 0 600 256" role="img" aria-label="The agent&#x27;s deploy tool creates an approval Actor and ends the run, and the UI shows the request. On the next call it calls consume on the approval Actor. Approve calls approve on the approval Actor and prompts the agent, which calls deploy again." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
   <defs>
     <marker id="human-in-the-loop-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
   </defs>
@@ -25,7 +25,7 @@ A tool can refuse to act until a person approves. The check is in the tool, so t
   <text x="490" y="72" text-anchor="middle" font-size="12" fill="#56524a">approved: true or false</text>
   <text x="120" y="213" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Approval UI</text>
   <g font-size="12" fill="#56524a">
-    <text x="300" y="50" text-anchor="middle">consume()</text>
+    <text x="300" y="50" text-anchor="middle">create, consume()</text>
     <text x="87" y="137" text-anchor="end">waiting</text>
     <text x="153" y="137" text-anchor="start">prompt</text>
     <text x="345" y="200" text-anchor="middle">approve()</text>
@@ -39,9 +39,11 @@ A tool can refuse to act until a person approves. The check is in the tool, so t
 <CodeSnippet file="examples/docs/human-in-the-loop/ApprovalDialog.tsx" title="ApprovalDialog.tsx" />
 </CodeGroup>
 
-- Each approval is an `approval` Actor keyed by the session and the version. Its `consume` action returns whether it was approved and resets it, so one approval allows one deploy.
-- Without an approval, the tool returns `terminate: true`, which ends the turn instead of letting the model try again. The agent can sleep while it waits.
-- The `ApprovalDialog` component shows the request from the `tool_execution_end` event. Approve calls `approve`, then prompts the agent, which calls `deploy` again. Passing `streamingBehavior: "followUp"` queues the answer if the agent is still running.
+- The first `deploy` call creates an `approval` Actor with a random id for that version. The tool returns `control: { terminate: true }`, which ends the run instead of letting the model try again. The agent can sleep while it waits.
+- The approval id is in the tool result, so the model passes it back on the next call. A made-up id fails, because no `approval` Actor has it.
+- The `consume` action returns whether that version was approved and resets it, so one approval allows one deploy.
+- The `ApprovalDialog` component watches the root conversation and shows the request from the `tool_execution_end` event. Approve calls `approve`, then prompts the agent, which calls `deploy` again.
+- The `deploy` tool leaves `replay` unset, so a deploy cut off by a crash isn't sent twice. See [Custom Tools](/agents/docs/custom-tools#after-a-crash).
 - Protect the `approval` Actor with [authentication](/docs/authentication) so only approvers can call `approve`.
 
 See [React SDK](/agents/docs/react-sdk) for the rest of a chat UI.

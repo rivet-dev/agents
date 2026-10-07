@@ -33,7 +33,7 @@ description: "Talk to an agent by mentioning it in a Slack channel or thread."
 
 <Step title="Create a Slack app">
 
-In [Slack's app settings](https://api.slack.com/apps), create an app, add the `app_mentions:read` and `chat:write` bot token scopes, and install it to your workspace. Copy the bot token and the signing secret.
+In <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer">Slack's app settings</a>, create an app, add the `app_mentions:read` and `chat:write` bot token scopes, and install it to your workspace. Copy the bot token and the signing secret.
 
 </Step>
 
@@ -73,9 +73,10 @@ Under **Event Subscriptions**, set the request URL to `https://<your-worker>/sla
 ## How it works
 
 - The route verifies Slack's signature against the raw body and rejects requests older than five minutes.
-- Each Slack thread gets its own agent, keyed by team, channel, and thread. Mentioning the app again in the thread continues the same session.
-- Slack expects a response within three seconds and an agent run takes longer, so the route only hands the message to the agent's `receive` action and returns. The `receive` action adds the message to the agent's queue and schedules `drain`, which prompts the agent with the oldest message and posts the answer in the thread with the Slack Web API. A message that arrives while the agent is answering waits in the queue. The queue is saved with the agent, so replies still run if the request that delivered a message goes away.
-- Slack retries events it thinks timed out. The route ignores retries, because the first delivery is already being answered.
+- Each Slack thread gets its own agent, keyed by team, channel, and thread. Mentioning the app again in the thread continues the same conversation.
+- Slack expects a response within three seconds and an agent run takes longer, so the route only hands the message to the agent's `receive` action and returns. The `receive` action schedules `reply`, which prompts the agent and posts the answer in the thread with the Slack Web API. The schedule is saved with the agent, so the reply still runs if the request that delivered the message goes away.
+- A message that arrives while the agent is answering waits as a follow-up, and gets its own reply when its run ends.
+- Slack retries events it thinks timed out. The route ignores retries, because the first delivery is already being answered. The prompt's `requestId` is Slack's event id, so a duplicate that gets through still runs the agent only once.
 
 ## Configure
 
@@ -89,7 +90,7 @@ Under **Event Subscriptions**, set the request URL to `https://<your-worker>/sla
 
 | Slack surface | Webhook path | What the route does |
 | --- | --- | --- |
-| [Event Subscriptions](https://docs.slack.dev/apis/events-api/), `app_mention` | `/slack/events` | Hands the message to the thread's agent, which replies in the thread. |
+| <a href="https://docs.slack.dev/apis/events-api/" target="_blank" rel="noopener noreferrer">Event Subscriptions</a>, `app_mention` | `/slack/events` | Hands the message to the thread's agent, which replies in the thread. |
 | URL verification | `/slack/events` | Answers Slack's challenge. |
 
 To answer direct messages too, subscribe to `message.im`, add the `im:history` scope, and handle `message` events the same way.

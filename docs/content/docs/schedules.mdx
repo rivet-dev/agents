@@ -34,6 +34,7 @@ Actor schedules wake an agent to run a prompt on a timer.
 
 - The cron calls the agent's `prompt` action every day at 9:00 UTC. The `onCreate` hook sets it once, when the agent is first created.
 - For a single run later, use `c.schedule.after(ms, "prompt", text)` or `c.schedule.at(time, "prompt", text)`.
+- Every run continues the same conversation. The client reads the latest summary from the conversation with `conversation.context`.
 - The agent sleeps between runs, and its sandbox is suspended while it sleeps.
 
 See [Schedules](/actors/docs/schedule) for cron expressions, time zones, and history.
