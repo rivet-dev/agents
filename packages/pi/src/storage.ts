@@ -33,6 +33,17 @@ export const migratePiTables = migrations({
 				) STRICT, WITHOUT ROWID;
 			`,
 		},
+		{
+			version: 3,
+			// Files of agents without a sandbox. Agents from 0.5.1 created this table on first use.
+			sql: `
+				CREATE TABLE IF NOT EXISTS pi_file (
+					path TEXT PRIMARY KEY,
+					content BLOB NOT NULL,
+					mtime_ms INTEGER NOT NULL
+				) STRICT;
+			`,
+		},
 	],
 });
 

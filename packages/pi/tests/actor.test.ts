@@ -181,6 +181,12 @@ function buildRegistry(mock: MockModel, root: string) {
 			nap: (c) => {
 				c.sleep();
 			},
+			// What 0.5.1 stored: `pi_file` with its rows, at schema version 2.
+			storeAs051: async (c) => {
+				await c.db.execute(
+					"UPDATE pi_durable_schema_version SET schema_version = 2",
+				);
+			},
 		},
 	});
 	const backoff = pi({
@@ -603,6 +609,26 @@ describe("pi actor", () => {
 		expect(results.find((result) => result.toolName === "bash")).toMatchObject({
 			isError: true,
 		});
+	});
+
+	test("files an agent without a sandbox stored on 0.5.1 stay readable after the upgrade", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["files-051", randomUUID()];
+		const handle = client.files.getOrCreate(key);
+		await handle.prompt("create hello.txt");
+		await handle.storeAs051();
+		await handle.nap();
+		await sleeps.waitFor(key, 1);
+
+		await handle.prompt("read line two of hello.txt");
+
+		const root = await handle.harness.root();
+		const { messages } = await handle.conversation.context(root.id);
+		const read = messages.findLast(
+			(message) => message.role === "toolResult" && message.toolName === "read",
+		);
+		expect(read).toMatchObject({ isError: false });
+		expect(JSON.stringify(read?.content)).toContain("line two");
 	});
 
 	test("sandbox tools cannot write outside the sandbox or read the actor host's environment", async (c) => {
