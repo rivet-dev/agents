@@ -27,7 +27,7 @@ export interface PiCredentialInfo {
 export interface PiCredentialSource {
 	/** Providers that have a credential. */
 	list(): Promise<PiCredentialInfo[]>;
-	/** A provider's credential, possibly expired. */
+	/** A provider's credential, possibly expired, or `undefined` when it has none. */
 	read(providerId: string): Promise<PiProviderCredential | undefined>;
 	/**
 	 * A provider's credential after the application refreshed it. Pi calls this
@@ -42,9 +42,10 @@ const PI_OAUTH_MIN_VALIDITY_MS = 5 * 60_000;
 
 /**
  * Adapts an application's credential source to Pi's credential store. It
- * reads only providers the source lists, asks the source each time Pi needs a
- * credential, so logins and logouts apply to the next model call, and never
- * writes.
+ * asks the source each time Pi needs a credential, so logins and logouts
+ * apply to the next model call, and never writes. Pi's `{ signal }` is not
+ * passed on, because a source is often an Actor handle, whose actions would
+ * receive the signal as an argument.
  */
 export class SourceCredentialStore implements PiCredentialStore {
 	readonly #source: PiCredentialSource;
@@ -58,8 +59,6 @@ export class SourceCredentialStore implements PiCredentialStore {
 	}
 
 	async read(providerId: string): Promise<PiCredential | undefined> {
-		if (!(await this.list()).some((entry) => entry.providerId === providerId))
-			return undefined;
 		return toPiCredential(await this.#source.read(providerId));
 	}
 
