@@ -23,13 +23,13 @@ import {
 
 /** One batch of agent events, one commit per batch. */
 export type PiEventsFrame = {
-	conversationId: number;
+	conversationId: ConversationId;
 	seq: number;
 	events: readonly AgentEvent[];
 };
 /** `seq` 0 carries the whole view; later frames carry Chord operations. */
 export type PiViewFrame = {
-	conversationId: number;
+	conversationId: ConversationId;
 	seq: number;
 	value?: ConversationView;
 	ops?: readonly Op[];
@@ -46,7 +46,7 @@ export type PiTaskGraphFrame = {
  */
 export type PiDocFrame = {
 	kind: string;
-	conversationId: number;
+	conversationId: ConversationId;
 	seq: number;
 	value: JsonObject | null;
 };
@@ -267,11 +267,7 @@ async function start(
 	switch (spec.kind) {
 		case "events": {
 			const conversationId = spec.conversationId;
-			const stream = await watchEvents(
-				harness,
-				conversationId as ConversationId,
-				context,
-			);
+			const stream = await watchEvents(harness, conversationId, context);
 			if (resend)
 				send("pi.events", {
 					conversationId,
@@ -287,10 +283,7 @@ async function start(
 		}
 		case "view": {
 			const conversationId = spec.conversationId;
-			const conversation = await harness.conversation(
-				conversationId as ConversationId,
-				context,
-			);
+			const conversation = await harness.conversation(conversationId, context);
 			if (!conversation)
 				throw new Error(`conversation ${conversationId} does not exist`);
 			const view = await conversation.watch(context);
@@ -336,7 +329,6 @@ async function startDoc(
 			`document ${spec.docKind} is not listed in pi({ documents })`,
 		);
 	const { docKind: kind, conversationId } = spec;
-	const conversation = conversationId as ConversationId;
 	let docWatch: WatchHandle<Readonly<JsonObject> | null> | undefined;
 	let unsubscribe: (() => void) | undefined;
 	let stopped = false;
@@ -364,7 +356,7 @@ async function startDoc(
 			try {
 				const handle = await harness.watchDoc(
 					token,
-					conversation,
+					conversationId,
 					BACKGROUND_CONTEXT,
 				);
 				if (stopped) {
@@ -394,7 +386,7 @@ async function startDoc(
 				(change) =>
 					change.type === "document" &&
 					change.record.kind === kind &&
-					change.conversationId === conversation &&
+					change.conversationId === conversationId &&
 					change.value !== null,
 			);
 			if (!created || attaching) return;
@@ -406,7 +398,7 @@ async function startDoc(
 
 	const existing = await harness.watchDoc(
 		token,
-		conversation,
+		conversationId,
 		BACKGROUND_CONTEXT,
 	);
 	if (existing) {

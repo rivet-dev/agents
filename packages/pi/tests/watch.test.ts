@@ -64,16 +64,14 @@ function buildRegistry(mock: MockModel) {
 			nap: (c) => {
 				c.sleep();
 			},
-			addTodo: async (c, conversationId: number, item: string) => {
+			addTodo: async (c, conversationId: ConversationId, item: string) => {
 				await c.pi.commit(async (tx) => {
-					(await tx.doc(Todos, conversationId as ConversationId)).items.push(
-						item,
-					);
+					(await tx.doc(Todos, conversationId)).items.push(item);
 				}, BACKGROUND_CONTEXT);
 			},
-			clearTodos: async (c, conversationId: number) => {
+			clearTodos: async (c, conversationId: ConversationId) => {
 				await c.pi.commit(
-					(tx) => tx.retireDoc(Todos, conversationId as ConversationId),
+					(tx) => tx.retireDoc(Todos, conversationId),
 					BACKGROUND_CONTEXT,
 				);
 			},

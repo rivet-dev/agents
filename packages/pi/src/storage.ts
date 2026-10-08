@@ -1,3 +1,4 @@
+import type { ConversationId } from "@earendil-works/pi-durable";
 import type { RawAccess } from "rivetkit/db";
 import { migrations } from "rivetkit/unstable/migrations";
 
@@ -55,10 +56,10 @@ export type StoredWatch = {
 };
 
 export type WatchSpec =
-	| { kind: "events"; conversationId: number }
-	| { kind: "view"; conversationId: number }
+	| { kind: "events"; conversationId: ConversationId }
+	| { kind: "view"; conversationId: ConversationId }
 	| { kind: "taskGraph" }
-	| { kind: "doc"; docKind: string; conversationId: number };
+	| { kind: "doc"; docKind: string; conversationId: ConversationId };
 
 export async function saveWatch(
 	db: PiDatabase,
