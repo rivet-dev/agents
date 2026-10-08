@@ -19,21 +19,29 @@ import type { Sandbox } from "../index.js";
 
 /**
  * Pi Durable's `ExecutionEnv` inside a sandbox, for Pi's built-in tools
- * (`CodingTools`). Paths outside the sandbox `cwd` are rejected, and commands
- * never receive the actor host's environment variables.
+ * (`CodingTools`). Paths outside `root` are rejected, and commands never
+ * receive the actor host's environment variables.
  *
  * Only the operations Pi's tools use are supported. Every other operation
  * returns a `not_supported` error. Operations return failures instead of
- * throwing. Building the environment throws when `cwd` is outside `root`.
- * `connect` runs on the first operation that needs the sandbox, so a tool
- * that never touches files or the shell never connects it.
+ * throwing. Building the environment throws when `root` is not absolute or
+ * `cwd` is outside it. `connect` runs on the first operation that needs the
+ * sandbox, so a tool that never touches files or the shell never connects it.
  */
 export function sandboxEnv(
-	id: string,
-	root: string,
 	connect: () => Promise<Sandbox>,
-	cwd: string | undefined,
+	options: {
+		id: string;
+		/** The sandbox directory every path must stay inside. */
+		root: string;
+		/** The starting working directory. Defaults to `root`. */
+		cwd?: string;
+	},
 ): ExecutionEnv {
+	const root = checkedRoot(options.root);
+	const initialCwd = resolveInside(root, options.cwd ?? root);
+	if (!initialCwd.ok) throw initialCwd.error;
+
 	/**
 	 * Connects on first use. A failed connect becomes this call's error result.
 	 * An aborted run stops before and after the connect. The connect itself
@@ -54,73 +62,60 @@ export function sandboxEnv(
 		if (context.abortSignal?.aborted) return err(fail(new Error("aborted")));
 		return use(sandbox);
 	};
-	const fileFailure = (path: string, context: Context) => (cause: Error) =>
-		new FileError(
-			context.abortSignal?.aborted ? "aborted" : "unknown",
-			cause.message,
-			path,
-			cause,
+	/** Runs a file operation on `path` once it is known to be inside the sandbox. */
+	const onFile = async <T>(
+		path: string,
+		context: Context,
+		run: (sandbox: Sandbox, target: string) => Promise<Result<T, FileError>>,
+	): Promise<Result<T, FileError>> => {
+		const target = resolveInside(root, path);
+		if (!target.ok) return target;
+		return withSandbox(
+			context,
+			(cause) =>
+				new FileError(
+					context.abortSignal?.aborted ? "aborted" : "unknown",
+					cause.message,
+					target.value,
+					cause,
+				),
+			(sandbox) => run(sandbox, target.value),
 		);
-	const inside = (path: string): Result<string, FileError> => {
-		try {
-			return ok(resolveSandboxPath(root, path));
-		} catch (error) {
-			const cause = toError(error);
-			return err(
-				new FileError("permission_denied", cause.message, path, cause),
-			);
-		}
 	};
-	const initialCwd = inside(cwd ?? root);
-	if (!initialCwd.ok) throw initialCwd.error;
 
 	const env: ExecutionEnv = {
-		id,
+		id: options.id,
 		cwd: initialCwd.value,
 
-		absolutePath: async (path) => inside(posix.resolve(env.cwd, path)),
+		absolutePath: async (path) =>
+			resolveInside(root, posix.resolve(env.cwd, path)),
 		joinPath: async (parts) => ok(posix.join(...parts)),
-		exists: async (path, context) => {
-			const resolved = inside(path);
-			if (!resolved.ok) return resolved;
-			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
-				onPath(resolved, (target) => sandbox.exists(target)),
-			);
-		},
-		readTextFile: async (path, context) => {
-			const resolved = inside(path);
-			if (!resolved.ok) return resolved;
-			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
-				read(sandbox, resolved.value, async () =>
-					new TextDecoder().decode(await sandbox.readFile(resolved.value)),
+		exists: (path, context) =>
+			onFile(path, context, (sandbox, target) =>
+				onPath(target, () => sandbox.exists(target)),
+			),
+		readTextFile: (path, context) =>
+			onFile(path, context, (sandbox, target) =>
+				read(sandbox, target, async () =>
+					new TextDecoder().decode(await sandbox.readFile(target)),
 				),
-			);
-		},
-		readBinaryFile: async (path, context) => {
-			const resolved = inside(path);
-			if (!resolved.ok) return resolved;
-			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
-				read(sandbox, resolved.value, () => sandbox.readFile(resolved.value)),
-			);
-		},
+			),
+		readBinaryFile: (path, context) =>
+			onFile(path, context, (sandbox, target) =>
+				read(sandbox, target, () => sandbox.readFile(target)),
+			),
 		// The sandbox reads whole files, so the reader holds the file it opened.
-		openBinaryReader: async (path, _options, context) => {
-			const resolved = inside(path);
-			if (!resolved.ok) return resolved;
-			return withSandbox(context, fileFailure(resolved.value, context), async (sandbox) => {
-				const info = await fileInfo(sandbox, resolved.value);
+		openBinaryReader: (path, _options, context) =>
+			onFile(path, context, async (sandbox, target) => {
+				const info = await fileInfo(sandbox, target);
 				if (!info.ok) return info;
 				if (info.value.kind === "directory") {
 					return err(
-						new FileError(
-							"is_directory",
-							`${path} is a directory`,
-							resolved.value,
-						),
+						new FileError("is_directory", `${path} is a directory`, target),
 					);
 				}
-				const bytes = await read(sandbox, resolved.value, () =>
-					sandbox.readFile(resolved.value),
+				const bytes = await read(sandbox, target, () =>
+					sandbox.readFile(target),
 				);
 				if (!bytes.ok) return bytes;
 				return ok(
@@ -129,33 +124,25 @@ export function sandboxEnv(
 						bytes.value,
 					),
 				);
-			});
-		},
+			}),
 		writeFile: async (path, content, context) => {
 			if (typeof content !== "string") {
 				return notSupported("writing binary content", path);
 			}
-			const resolved = inside(path);
-			if (!resolved.ok) return resolved;
-			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
-				onPath(resolved, async (target) => {
+			return onFile(path, context, (sandbox, target) =>
+				onPath(target, async () => {
 					await sandbox.mkdir(posix.dirname(target));
 					await sandbox.writeFile(target, content);
 				}),
 			);
 		},
-		fileInfo: async (path, context) => {
-			const resolved = inside(path);
-			if (!resolved.ok) return resolved;
-			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
-				fileInfo(sandbox, resolved.value),
-			);
-		},
+		fileInfo: (path, context) =>
+			onFile(path, context, (sandbox, target) => fileInfo(sandbox, target)),
 		// Pi's tools fall back to the absolute path when canonical paths are not supported.
 		canonicalPath: async (path) => notSupported("canonicalPath", path),
 
 		exec: async (command, options, context) => {
-			const cwd = inside(options?.cwd ?? env.cwd);
+			const cwd = resolveInside(root, options?.cwd ?? env.cwd);
 			if (!cwd.ok) {
 				return err(
 					new ExecutionError("spawn_error", cwd.error.message, cwd.error),
@@ -205,17 +192,16 @@ function notSupported<T>(
 	);
 }
 
-/** Runs a sandbox operation on a checked path and returns its failure as a `FileError`. */
+/** Runs a sandbox operation on `path` and returns its failure as a `FileError`. */
 async function onPath<T>(
-	path: Result<string, FileError>,
-	operation: (resolved: string) => Promise<T>,
+	path: string,
+	operation: () => Promise<T>,
 ): Promise<Result<T, FileError>> {
-	if (!path.ok) return path;
 	try {
-		return ok(await operation(path.value));
+		return ok(await operation());
 	} catch (error) {
 		const cause = toError(error);
-		return err(new FileError("unknown", cause.message, path.value, cause));
+		return err(new FileError("unknown", cause.message, path, cause));
 	}
 }
 
@@ -356,24 +342,30 @@ async function exec(
 	}
 }
 
-/** Resolves `path` against `root` and rejects anything outside it. */
-function resolveSandboxPath(root: string, path: string): string {
-	const normalizedRoot = normalizeRoot(root);
-	const resolved = posix.resolve(normalizedRoot, path);
-	const prefix = normalizedRoot === "/" ? "/" : `${normalizedRoot}/`;
-	if (resolved !== normalizedRoot && !resolved.startsWith(prefix)) {
-		throw new Error(`Path escapes the sandbox working directory: ${path}`);
-	}
-	return resolved;
-}
-
-function normalizeRoot(path: string): string {
-	if (!posix.isAbsolute(path)) {
-		throw new Error(
-			`sandbox cwd must be an absolute POSIX path, received ${path}`,
+/** Resolves `path` against `root`, an absolute normalized path, and refuses anything outside it. */
+function resolveInside(root: string, path: string): Result<string, FileError> {
+	const resolved = posix.resolve(root, path);
+	const prefix = root === "/" ? "/" : `${root}/`;
+	if (resolved !== root && !resolved.startsWith(prefix)) {
+		return err(
+			new FileError(
+				"permission_denied",
+				`Path escapes the sandbox working directory: ${path}`,
+				path,
+			),
 		);
 	}
-	return posix.normalize(path);
+	return ok(resolved);
+}
+
+/** Normalizes the sandbox root once, when the env is built. */
+function checkedRoot(root: string): string {
+	if (!posix.isAbsolute(root)) {
+		throw new Error(
+			`sandbox root must be an absolute POSIX path, received ${root}`,
+		);
+	}
+	return posix.resolve(root);
 }
 
 function shellQuote(value: string): string {
