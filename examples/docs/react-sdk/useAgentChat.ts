@@ -1,5 +1,5 @@
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
-import type { AgentEvent, EntryRecord, SnapshotEvent } from "@earendil-works/pi-durable";
+import type { AgentEvent, ConversationId, EntryRecord, SnapshotEvent } from "@earendil-works/pi-durable";
 import { createRivetKit } from "@rivetkit/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { registry } from "../pi/server";
@@ -11,7 +11,7 @@ export type ChatMessage = { id: string; role: "user" | "assistant"; text: string
 export function useAgentChat(key: string[]) {
 	const agent = useActor({ name: "agent", key });
 	const conn = agent.connection;
-	const [rootId, setRootId] = useState<number | null>(null);
+	const [rootId, setRootId] = useState<ConversationId | null>(null);
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [streaming, setStreaming] = useState("");
 	const [tool, setTool] = useState<string | null>(null);
