@@ -55,17 +55,19 @@ function daytonaSandbox(sandbox: DaytonaSandbox, cwd: string): Sandbox {
 	return {
 		cwd,
 		exec: async (command, options) => {
-			// Daytona's executeCommand has no cancel, so an aborted command runs until
-			// it exits or reaches options.timeoutMs.
+			if (options.signal?.aborted) throw new Error("aborted");
 			let result: Awaited<ReturnType<typeof sandbox.process.executeCommand>>;
 			try {
-				result = await sandbox.process.executeCommand(
-					command,
-					options.cwd,
-					options.env,
-					options.timeoutMs === undefined
-						? undefined
-						: Math.ceil(options.timeoutMs / 1000),
+				result = await untilAborted(
+					sandbox.process.executeCommand(
+						command,
+						options.cwd,
+						options.env,
+						options.timeoutMs === undefined
+							? undefined
+							: Math.ceil(options.timeoutMs / 1000),
+					),
+					options.signal,
 				);
 			} catch (error) {
 				// Daytona ends the command when the timeout elapses and throws.
@@ -102,4 +104,24 @@ function daytonaSandbox(sandbox: DaytonaSandbox, cwd: string): Sandbox {
 			}
 		},
 	};
+}
+
+/**
+ * Rejects with `Error("aborted")` when `signal` aborts first. Daytona has no
+ * way to stop a command, and deleting its session does not stop it either, so
+ * an aborted command keeps running in the sandbox until it exits or reaches
+ * its timeout. Only the wait ends.
+ */
+function untilAborted<T>(
+	operation: Promise<T>,
+	signal: AbortSignal | undefined,
+): Promise<T> {
+	if (!signal) return operation;
+	return new Promise((resolve, reject) => {
+		const abort = () => reject(new Error("aborted"));
+		signal.addEventListener("abort", abort, { once: true });
+		operation
+			.then(resolve, reject)
+			.finally(() => signal.removeEventListener("abort", abort));
+	});
 }
