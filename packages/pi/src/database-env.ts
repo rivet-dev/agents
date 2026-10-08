@@ -12,50 +12,22 @@ import {
 	type Result,
 	toError,
 } from "@earendil-works/pi-durable/env";
-
-/** The SQLite access `databaseEnv` needs, such as a Rivet Actor's `c.db`. */
-export interface FileDatabase {
-	execute<TRow extends Record<string, unknown> = Record<string, unknown>>(
-		sql: string,
-		...args: unknown[]
-	): Promise<TRow[]>;
-}
+import type { PiDatabase } from "./storage.js";
 
 const DEFAULT_CWD = "/workspace";
 
 /** Bytes per query when a scan walks a whole file. */
 const SCAN_CHUNK_BYTES = 64 * 1024;
 
-const created = new WeakMap<FileDatabase, Promise<void>>();
-
-/** Creates the `pi_file` table once per database object. */
-function ensureTable(db: FileDatabase): Promise<void> {
-	let ready = created.get(db);
-	if (!ready) {
-		ready = db
-			.execute(
-				`CREATE TABLE IF NOT EXISTS pi_file (
-					path TEXT PRIMARY KEY,
-					content BLOB NOT NULL,
-					mtime_ms INTEGER NOT NULL
-				) STRICT`,
-			)
-			.then(() => {});
-		ready.catch(() => created.delete(db));
-		created.set(db, ready);
-	}
-	return ready;
-}
-
 /**
- * Pi Durable's `ExecutionEnv` over files stored in a SQLite database, in the
- * `pi_file` table, for Pi's `read`, `write`, and `edit` tools. Directories
+ * Pi Durable's `ExecutionEnv` over files stored in the actor's database, in
+ * the `pi_file` table, for Pi's `read`, `write`, and `edit` tools. Directories
  * exist only as the paths of their files. There is no shell, so `exec` fails
  * with `shell_unavailable`, and operations the tools do not use return
  * `not_supported`.
  */
 export function databaseEnv(
-	db: FileDatabase,
+	db: PiDatabase,
 	options: { id: string; cwd?: string },
 ): ExecutionEnv {
 	const env: ExecutionEnv = {
@@ -142,7 +114,6 @@ export function databaseEnv(
 		const resolved = posix.resolve(env.cwd, path);
 		if (context.abortSignal?.aborted) return err(aborted(resolved));
 		try {
-			await ensureTable(db);
 			return ok(await operation(resolved));
 		} catch (error) {
 			if (error instanceof FileError) return err(error);
@@ -156,7 +127,7 @@ export function databaseEnv(
 
 /** The file or directory at `path`. A directory exists when a file below it does. */
 async function entry(
-	db: FileDatabase,
+	db: PiDatabase,
 	path: string,
 ): Promise<FileInfo | undefined> {
 	const [file] = await db.execute<{ size: number; mtime_ms: number }>(
@@ -189,7 +160,7 @@ async function entry(
 	};
 }
 
-async function requireFile(db: FileDatabase, path: string): Promise<FileInfo> {
+async function requireFile(db: PiDatabase, path: string): Promise<FileInfo> {
 	const info = await entry(db, path);
 	if (!info) throw notFound(path);
 	if (info.kind === "directory") {
@@ -198,7 +169,7 @@ async function requireFile(db: FileDatabase, path: string): Promise<FileInfo> {
 	return info;
 }
 
-async function readFile(db: FileDatabase, path: string): Promise<Uint8Array> {
+async function readFile(db: PiDatabase, path: string): Promise<Uint8Array> {
 	const [row] = await db.execute<{ content: Uint8Array }>(
 		`SELECT content FROM pi_file WHERE path = ?`,
 		path,
@@ -209,7 +180,7 @@ async function readFile(db: FileDatabase, path: string): Promise<Uint8Array> {
 }
 
 /** Reads byte ranges of the stored file with SQL, so a large file is never loaded whole. */
-function fileReader(db: FileDatabase, path: string): BinaryReader {
+function fileReader(db: PiDatabase, path: string): BinaryReader {
 	const range = async (offset: number, length: number) => {
 		const [row] = await db.execute<{ chunk: Uint8Array | null }>(
 			`SELECT substr(content, ?, ?) AS chunk FROM pi_file WHERE path = ?`,

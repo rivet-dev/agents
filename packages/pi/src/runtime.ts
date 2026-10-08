@@ -14,11 +14,12 @@ import {
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { SqliteStorage } from "@earendil-works/pi-durable/storage/sqlite";
 import type { Sandbox, SandboxProvider } from "@rivet-dev/sandbox-adapter";
-import { databaseEnv, sandboxEnv } from "@rivet-dev/sandbox-adapter/pi";
+import { sandboxEnv } from "@rivet-dev/sandbox-adapter/pi";
 import { type ActorContext, UserError } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
 import { actorSqlite } from "./actor-sqlite.js";
 import { SourceCredentialStore } from "./credentials.js";
+import { databaseEnv } from "./database-env.js";
 import { toClientError } from "./errors.js";
 import {
 	createActorModelRuntime,
