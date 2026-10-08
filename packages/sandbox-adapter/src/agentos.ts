@@ -18,6 +18,10 @@ type ProcessId = { generation: number | bigint; pid: number };
  */
 export interface AgentOSActorHandle {
 	v1: {
+		vm: {
+			status(input: Record<string, never>): Promise<{ lifecycle: string }>;
+			restart(input: Record<string, never>): Promise<unknown>;
+		};
 		process: {
 			spawn(input: {
 				command: string;
@@ -107,6 +111,10 @@ export function agentOSProvider(
 					},
 				},
 			});
+			// A VM whose boot failed stays failed until it is restarted.
+			if ((await handle.v1.vm.status({})).lifecycle === "failed") {
+				await handle.v1.vm.restart({});
+			}
 			await handle.v1.filesystem.mkdir({ path: cwd, recursive: true });
 			return agentOSSandbox(handle, cwd);
 		},
@@ -115,21 +123,30 @@ export function agentOSProvider(
 
 function agentOSSandbox(handle: AgentOSActorHandle, cwd: string): Sandbox {
 	const { process, filesystem } = handle.v1;
+	const run: Sandbox["exec"] = async (command, options) => {
+		// A spawned process keeps stdin open, so a command that reads it would wait forever.
+		const id = await process.spawn({
+			command: "sh",
+			args: ["-c", `exec </dev/null\n${command}`],
+			options: { cwd: options.cwd, env: options.env },
+		});
+		return runRemoteProcess(
+			{
+				poll: (after) => readOutput(handle, id, after),
+				kill: () => process.signal({ process: id, signal: "SIGKILL" }),
+			},
+			options,
+		);
+	};
+	// agentOS fails commands that start for the first time while another
+	// command runs in the same VM, so commands run one at a time.
+	let queue: Promise<unknown> = Promise.resolve();
 	return {
 		cwd,
-		exec: async (command, options) => {
-			const id = await process.spawn({
-				command: "sh",
-				args: ["-c", command],
-				options: { cwd: options.cwd, env: options.env },
-			});
-			return runRemoteProcess(
-				{
-					poll: (after) => readOutput(handle, id, after),
-					kill: () => process.signal({ process: id, signal: "SIGKILL" }),
-				},
-				options,
-			);
+		exec: (command, options) => {
+			const result = queue.then(() => run(command, options));
+			queue = result.catch(() => {});
+			return result;
 		},
 		readFile: (path) => filesystem.readFile({ path }),
 		writeFile: (path, content) => filesystem.writeFile({ path, content }),
