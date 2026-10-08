@@ -416,12 +416,11 @@ function sandboxEnvBuilder(
 	};
 	return async (target): Promise<ExecutionEnv> => {
 		const root = provider.cwd ?? (await connect()).cwd;
-		return sandboxEnv(
-			`${provider.name}:${c.actorId}`,
+		return sandboxEnv(connect, {
+			id: `${provider.name}:${c.actorId}`,
 			root,
-			connect,
-			target.cwd,
-		);
+			cwd: target.cwd,
+		});
 	};
 }
 
