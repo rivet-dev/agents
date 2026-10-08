@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/gigacode-win32-x64",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "gigacode CLI binary for Windows x64",
   "license": "Apache-2.0",
   "repository": {

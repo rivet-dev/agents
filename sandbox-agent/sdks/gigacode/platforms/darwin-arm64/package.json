@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/gigacode-darwin-arm64",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "gigacode CLI binary for macOS arm64",
   "license": "Apache-2.0",
   "repository": {

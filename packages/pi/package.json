@@ -1,6 +1,6 @@
 {
 	"name": "@rivet-dev/pi",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"description": "Run the Pi coding agent as a durable Rivet Actor",
 	"license": "Apache-2.0",
 	"repository": {
