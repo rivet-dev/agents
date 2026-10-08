@@ -56,9 +56,9 @@
 		"rivetkit": ">=2.3.23 <2.4.0"
 	},
 	"devDependencies": {
-		"@earendil-works/chord": "^1.0.4",
-		"@earendil-works/pi-ai": "^1.0.4",
-		"@earendil-works/pi-durable": "^1.0.4",
+		"@earendil-works/chord": "^1.1.0",
+		"@earendil-works/pi-ai": "^1.1.0",
+		"@earendil-works/pi-durable": "^1.1.0",
 		"@opentelemetry/sdk-trace-node": "2.11.0",
 		"@types/node": "^24.0.0",
 		"rivetkit": "2.3.23",
