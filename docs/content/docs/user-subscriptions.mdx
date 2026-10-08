@@ -45,7 +45,7 @@ Store each user's logins in a `credentials` Actor and pass it to `pi({ credentia
 
 The agent asks the `credentials` Actor on every model call, so a login or logout applies to the next model call, also in a run that is already going. The agent Actor never receives a refresh token and never writes credentials back. Errors from the `credentials` Actor reject the model call that needed the credential, so keep secrets out of their messages.
 
-Your app needs its own login flow, such as a settings page, that saves the result with the `credentials` Actor's `save` action. The files above are in <a href="https://github.com/rivet-dev/agents/tree/main/examples/docs/user-subscriptions" target="_blank" rel="noopener noreferrer">`examples/docs/user-subscriptions`</a>.
+Your app needs its own login flow, such as a settings page, that saves the result with the `credentials` Actor's `save` action. For a complete ChatGPT login flow, see [Sign in with ChatGPT](/guides/sign-in-with-chatgpt). The files above are in <a href="https://github.com/rivet-dev/agents/tree/main/examples/docs/user-subscriptions" target="_blank" rel="noopener noreferrer">`examples/docs/user-subscriptions`</a>.
 
 ## Share credentials across a team
 
