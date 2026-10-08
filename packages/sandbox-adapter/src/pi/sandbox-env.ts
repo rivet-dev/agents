@@ -34,21 +34,33 @@ export function sandboxEnv(
 	connect: () => Promise<Sandbox>,
 	cwd: string | undefined,
 ): ExecutionEnv {
-	/** Connects on first use. A failed connect becomes this call's error result. */
+	/**
+	 * Connects on first use. A failed connect becomes this call's error result.
+	 * An aborted run stops before and after the connect. The connect itself
+	 * keeps going, because other calls may wait on it.
+	 */
 	const withSandbox = async <T, E extends Error>(
+		context: Context,
 		fail: (cause: Error) => E,
 		use: (sandbox: Sandbox) => Promise<Result<T, E>>,
 	): Promise<Result<T, E>> => {
+		if (context.abortSignal?.aborted) return err(fail(new Error("aborted")));
 		let sandbox: Sandbox;
 		try {
 			sandbox = await connect();
 		} catch (error) {
 			return err(fail(toError(error)));
 		}
+		if (context.abortSignal?.aborted) return err(fail(new Error("aborted")));
 		return use(sandbox);
 	};
-	const fileFailure = (path: string) => (cause: Error) =>
-		new FileError("unknown", cause.message, path, cause);
+	const fileFailure = (path: string, context: Context) => (cause: Error) =>
+		new FileError(
+			context.abortSignal?.aborted ? "aborted" : "unknown",
+			cause.message,
+			path,
+			cause,
+		);
 	const inside = (path: string): Result<string, FileError> => {
 		try {
 			return ok(resolveSandboxPath(root, path));
@@ -68,34 +80,34 @@ export function sandboxEnv(
 
 		absolutePath: async (path) => inside(posix.resolve(env.cwd, path)),
 		joinPath: async (parts) => ok(posix.join(...parts)),
-		exists: async (path) => {
+		exists: async (path, context) => {
 			const resolved = inside(path);
 			if (!resolved.ok) return resolved;
-			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
 				onPath(resolved, (target) => sandbox.exists(target)),
 			);
 		},
-		readTextFile: async (path) => {
+		readTextFile: async (path, context) => {
 			const resolved = inside(path);
 			if (!resolved.ok) return resolved;
-			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
 				read(sandbox, resolved.value, async () =>
 					new TextDecoder().decode(await sandbox.readFile(resolved.value)),
 				),
 			);
 		},
-		readBinaryFile: async (path) => {
+		readBinaryFile: async (path, context) => {
 			const resolved = inside(path);
 			if (!resolved.ok) return resolved;
-			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
 				read(sandbox, resolved.value, () => sandbox.readFile(resolved.value)),
 			);
 		},
 		// The sandbox reads whole files, so the reader holds the file it opened.
-		openBinaryReader: async (path) => {
+		openBinaryReader: async (path, _options, context) => {
 			const resolved = inside(path);
 			if (!resolved.ok) return resolved;
-			return withSandbox(fileFailure(resolved.value), async (sandbox) => {
+			return withSandbox(context, fileFailure(resolved.value, context), async (sandbox) => {
 				const info = await fileInfo(sandbox, resolved.value);
 				if (!info.ok) return info;
 				if (info.value.kind === "directory") {
@@ -119,23 +131,23 @@ export function sandboxEnv(
 				);
 			});
 		},
-		writeFile: async (path, content) => {
+		writeFile: async (path, content, context) => {
 			if (typeof content !== "string") {
 				return notSupported("writing binary content", path);
 			}
 			const resolved = inside(path);
 			if (!resolved.ok) return resolved;
-			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
 				onPath(resolved, async (target) => {
 					await sandbox.mkdir(posix.dirname(target));
 					await sandbox.writeFile(target, content);
 				}),
 			);
 		},
-		fileInfo: async (path) => {
+		fileInfo: async (path, context) => {
 			const resolved = inside(path);
 			if (!resolved.ok) return resolved;
-			return withSandbox(fileFailure(resolved.value), (sandbox) =>
+			return withSandbox(context, fileFailure(resolved.value, context), (sandbox) =>
 				fileInfo(sandbox, resolved.value),
 			);
 		},
@@ -150,7 +162,13 @@ export function sandboxEnv(
 				);
 			}
 			return withSandbox(
-				(cause) => new ExecutionError("spawn_error", cause.message, cause),
+				context,
+				(cause) =>
+					new ExecutionError(
+						context.abortSignal?.aborted ? "aborted" : "spawn_error",
+						cause.message,
+						cause,
+					),
 				(sandbox) => exec(sandbox, command, options, context, cwd.value),
 			);
 		},

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -55,6 +55,9 @@ const toolRuns = { safe: 0, unsafe: 0 };
 
 /** Sandboxes the unreachable provider was asked to create. */
 let sandboxCreates = 0;
+
+/** When set, the cold-start provider's connect waits on it, as a sandbox that is still starting does. */
+let coldStart: (() => Promise<void>) | undefined;
 
 const Todos = defineDoc<{ items: string[] }>({
 	kind: "app.todos",
@@ -234,6 +237,30 @@ function buildRegistry(mock: MockModel, root: string) {
 		},
 		connect: async () => undefined,
 	};
+	// One sandbox directory whose working directory is known before it connects, like E2B's.
+	const coldRoot = join(root, "cold-start");
+	const coldSandboxes = localSandboxProvider(coldRoot);
+	const coldStarting: SandboxProvider = {
+		name: "cold-start",
+		cwd: join(coldRoot, "box"),
+		create: async () => {
+			await mkdir(join(coldRoot, "box"), { recursive: true });
+			return "box";
+		},
+		connect: async (c, id) => {
+			await coldStart?.();
+			return coldSandboxes.connect(c, id);
+		},
+	};
+	const coldCoder = pi({
+		...models,
+		registry: (() => {
+			const coding = createRegistry();
+			coding.install(CodingTools);
+			return coding;
+		})(),
+		sandbox: coldStarting,
+	});
 	const lookups = createRegistry();
 	lookups.install(
 		defineExtension({
@@ -264,6 +291,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		use: {
 			agent,
 			coder,
+			coldCoder,
 			files,
 			backoff,
 			backoffWithoutSchedules,
@@ -521,6 +549,37 @@ describe("pi actor", () => {
 		expect(read).toMatchObject({ isError: false });
 		expect(JSON.stringify(read?.content)).toContain("line two");
 		expect(JSON.stringify(read?.content)).not.toContain("hi from pi");
+	});
+
+	test("a run stopped while its sandbox starts writes nothing once the sandbox is up", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.coldCoder.getOrCreate([randomUUID()]);
+		const root = await handle.harness.root();
+		const connecting = Promise.withResolvers<void>();
+		const started = Promise.withResolvers<void>();
+		coldStart = () => {
+			started.resolve();
+			return connecting.promise;
+		};
+		try {
+			const prompt = handle.prompt("create hello.txt");
+			await started.promise;
+			const stopping = handle.conversation.abort(root.id);
+			// The abort waits for the write that holds the connect, so the test polls for Pi's abort mark before the sandbox comes up.
+			await vi.waitFor(async () => {
+				const { tasks } = await handle.harness.inspect();
+				expect(tasks.some((task) => task.record.abortRequested)).toBe(true);
+			});
+			connecting.resolve();
+			await stopping;
+			await prompt;
+		} finally {
+			coldStart = undefined;
+		}
+
+		await expect(
+			readFile(join(workdir, "cold-start", "box", "hello.txt"), "utf8"),
+		).rejects.toThrow();
 	});
 
 	test("without a sandbox, files live in the actor's database: they outlast sleep, a ranged read returns its lines, and there is no shell", async (c) => {

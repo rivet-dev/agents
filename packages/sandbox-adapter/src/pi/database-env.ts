@@ -1,4 +1,5 @@
 import { posix } from "node:path";
+import type { Context } from "@earendil-works/chord";
 import {
 	type BinaryReader,
 	type ExecutionEnv,
@@ -64,30 +65,31 @@ export function databaseEnv(
 		absolutePath: async (path) => ok(posix.resolve(env.cwd, path)),
 		joinPath: async (parts) => ok(posix.join(...parts)),
 		canonicalPath: async (path) => ok(posix.resolve(env.cwd, path)),
-		exists: (path) =>
+		exists: (path, context) =>
 			attempt(
 				path,
+				context,
 				async (resolved) => (await entry(db, resolved)) !== undefined,
 			),
-		fileInfo: (path) =>
-			attempt(path, async (resolved) => {
+		fileInfo: (path, context) =>
+			attempt(path, context, async (resolved) => {
 				const info = await entry(db, resolved);
 				if (!info) throw notFound(resolved);
 				return info;
 			}),
-		readTextFile: (path) =>
-			attempt(path, async (resolved) =>
+		readTextFile: (path, context) =>
+			attempt(path, context, async (resolved) =>
 				new TextDecoder().decode(await readFile(db, resolved)),
 			),
-		readBinaryFile: (path) =>
-			attempt(path, (resolved) => readFile(db, resolved)),
-		openBinaryReader: (path) =>
-			attempt(path, async (resolved) => {
+		readBinaryFile: (path, context) =>
+			attempt(path, context, (resolved) => readFile(db, resolved)),
+		openBinaryReader: (path, _options, context) =>
+			attempt(path, context, async (resolved) => {
 				await requireFile(db, resolved);
 				return fileReader(db, resolved);
 			}),
-		writeFile: (path, content) =>
-			attempt(path, async (resolved) => {
+		writeFile: (path, content, context) =>
+			attempt(path, context, async (resolved) => {
 				const bytes =
 					typeof content === "string"
 						? new TextEncoder().encode(content)
@@ -128,12 +130,17 @@ export function databaseEnv(
 		cleanup: async () => {},
 	};
 
-	/** Resolves `path`, runs `operation`, and returns a thrown error as a `FileError`. */
+	/**
+	 * Resolves `path`, runs `operation` unless the run is aborted, and returns a
+	 * thrown error as a `FileError`.
+	 */
 	async function attempt<T>(
 		path: string,
+		context: Context,
 		operation: (resolved: string) => Promise<T>,
 	): Promise<Result<T, FileError>> {
 		const resolved = posix.resolve(env.cwd, path);
+		if (context.abortSignal?.aborted) return err(aborted(resolved));
 		try {
 			await ensureTable(db);
 			return ok(await operation(resolved));
@@ -214,8 +221,10 @@ function fileReader(db: FileDatabase, path: string): BinaryReader {
 		return new Uint8Array(row.chunk ?? new Uint8Array());
 	};
 	const guarded = async <T>(
+		context: Context,
 		operation: () => Promise<T>,
 	): Promise<Result<T, FileError>> => {
+		if (context.abortSignal?.aborted) return err(aborted(path));
 		try {
 			return ok(await operation());
 		} catch (error) {
@@ -225,10 +234,11 @@ function fileReader(db: FileDatabase, path: string): BinaryReader {
 		}
 	};
 	return {
-		info: () => guarded(() => requireFile(db, path)),
-		read: (offset, length) => guarded(() => range(offset, length)),
-		scanLines: ({ startLine, endLine }) =>
-			guarded(async () => {
+		info: (context) => guarded(context, () => requireFile(db, path)),
+		read: (offset, length, context) =>
+			guarded(context, () => range(offset, length)),
+		scanLines: ({ startLine, endLine }, context) =>
+			guarded(context, async () => {
 				let scanner: LineScanner;
 				try {
 					scanner = new LineScanner(startLine, endLine);
@@ -236,6 +246,7 @@ function fileReader(db: FileDatabase, path: string): BinaryReader {
 					throw new FileError("invalid", "Invalid line range", path);
 				}
 				for (let offset = 0; ; offset += SCAN_CHUNK_BYTES) {
+					if (context.abortSignal?.aborted) throw aborted(path);
 					const chunk = await range(offset, SCAN_CHUNK_BYTES);
 					if (chunk.length > 0) scanner.push(chunk);
 					if (chunk.length < SCAN_CHUNK_BYTES) return scanner.finish();
@@ -243,6 +254,10 @@ function fileReader(db: FileDatabase, path: string): BinaryReader {
 			}),
 		close: async () => {},
 	};
+}
+
+function aborted(path: string): FileError {
+	return new FileError("aborted", "aborted", path);
 }
 
 function notFound(path: string): FileError {
