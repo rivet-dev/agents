@@ -136,15 +136,13 @@ function buildRegistry(mock: MockModel, root: string) {
 			nap: (c) => {
 				c.sleep();
 			},
-			addTodo: async (c, conversationId: number, item: string) => {
+			addTodo: async (c, conversationId: ConversationId, item: string) => {
 				const conversation = await c.pi.conversation(
-					conversationId as ConversationId,
+					conversationId,
 					BACKGROUND_CONTEXT,
 				);
 				await conversation!.commit(async (tx) => {
-					(await tx.doc(Todos, conversationId as ConversationId)).items.push(
-						item,
-					);
+					(await tx.doc(Todos, conversationId)).items.push(item);
 				}, BACKGROUND_CONTEXT);
 			},
 			failCommitsOfPoison: async (c) => {
@@ -493,7 +491,7 @@ describe("pi actor", () => {
 		expect(first).toMatchObject({ status: "done", text: STORY_ONE });
 		expect(second).toMatchObject({ status: "done", text: STORY_TWO });
 
-		const transcript = async (id: number) =>
+		const transcript = async (id: ConversationId) =>
 			JSON.stringify((await handle.conversation.context(id)).messages);
 		const transcriptOne = await transcript(one.id);
 		const transcriptTwo = await transcript(two.id);

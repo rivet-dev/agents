@@ -65,7 +65,7 @@ export interface PiCreateConversationOptions {
 /** Options for `prompt`. */
 export interface PiPromptOptions {
 	/** Defaults to the root conversation. */
-	conversationId?: number;
+	conversationId?: ConversationId;
 	/** Deduplicates retries: a second prompt with the same id returns the first one's submission. */
 	requestId?: string;
 	whenBusy?: "steer" | "followUp" | "reject";
@@ -142,7 +142,7 @@ export function createPiActions(options: PiOptions) {
 		return doc;
 	};
 
-	// Ids arrive as plain numbers and are cast to Pi's branded id types. Pi's
+	// Ids are Pi's branded id types, which clients get from responses. Pi's
 	// lookups check that each one exists, and a missing one is a `UserError`.
 	return {
 		harness: {
@@ -154,12 +154,9 @@ export function createPiActions(options: PiOptions) {
 						})
 					).id,
 				})),
-			conversation: (c: PiContext, id: number) =>
+			conversation: (c: PiContext, id: ConversationId) =>
 				run(c, (harness, context) =>
-					harness.commit(
-						(tx) => tx.conversation(id as ConversationId),
-						context,
-					),
+					harness.commit((tx) => tx.conversation(id), context),
 				),
 			createConversation: (c: PiContext, create: PiCreateConversationOptions) =>
 				run(c, async (harness, context) => ({
@@ -170,33 +167,35 @@ export function createPiActions(options: PiOptions) {
 						)
 					).id,
 				})),
-			submission: (c: PiContext, id: number) =>
+			submission: (c: PiContext, id: SubmissionId) =>
 				run(c, async (harness, context) =>
-					(await harness.submission(id as SubmissionId, context))?.status(
-						context,
-					),
+					(await harness.submission(id, context))?.status(context),
 				),
-			abortSubmission: (c: PiContext, id: number, conversationId?: number) =>
+			abortSubmission: (
+				c: PiContext,
+				id: SubmissionId,
+				conversationId?: ConversationId,
+			) =>
 				run(c, async (harness, context) => {
 					const result = await harness.abortSubmission(
-						id as SubmissionId,
+						id,
 						context,
-						conversationId as ConversationId | undefined,
+						conversationId,
 					);
 					if (result === "not_found") throw submissionNotFound(id);
 					return result;
 				}),
-			getTask: (c: PiContext, id: number) =>
-				run(c, (harness, context) => harness.getTask(id as TaskId, context)),
-			abortTask: (c: PiContext, id: number) =>
+			getTask: (c: PiContext, id: TaskId) =>
+				run(c, (harness, context) => harness.getTask(id, context)),
+			abortTask: (c: PiContext, id: TaskId) =>
 				run(c, async (harness, context) => {
 					await requireTask(harness, id, context);
-					return harness.abortTask(id as TaskId, context);
+					return harness.abortTask(id, context);
 				}),
-			waitForTask: (c: PiContext, id: number) =>
+			waitForTask: (c: PiContext, id: TaskId) =>
 				run(c, async (harness, context) => {
 					await requireTask(harness, id, context);
-					return harness.waitForTask(id as TaskId, context);
+					return harness.waitForTask(id, context);
 				}),
 			waitForIdle: (c: PiContext) =>
 				run(c, (harness, context) => harness.waitForIdle(context)),
@@ -230,13 +229,9 @@ export function createPiActions(options: PiOptions) {
 						graph.dispose();
 					}
 				}),
-			snapshot: (c: PiContext, kind: string, conversationId: number) =>
+			snapshot: (c: PiContext, kind: string, conversationId: ConversationId) =>
 				run(c, async (harness, context) =>
-					harness.snapshot(
-						requireDocument(kind),
-						conversationId as ConversationId,
-						context,
-					),
+					harness.snapshot(requireDocument(kind), conversationId, context),
 				),
 			/** The task graph; then `pi.taskGraph` frames to this connection. */
 			watchTaskGraph: (c: PiContext) =>
@@ -247,18 +242,24 @@ export function createPiActions(options: PiOptions) {
 			 * document that does not exist yet has value `undefined`, and its
 			 * first frame arrives when a commit creates it.
 			 */
-			watchDoc: (c: PiContext, kind: string, conversationId: number) =>
+			watchDoc: (c: PiContext, kind: string, conversationId: ConversationId) =>
 				watchFor<{ value: JsonObject | null | undefined }>(c, {
 					kind: "doc",
 					docKind: kind,
 					conversationId,
 				}),
-			unwatchDoc: (c: PiContext, kind: string, conversationId: number) =>
-				unwatchFor(c, { kind: "doc", docKind: kind, conversationId }),
+			unwatchDoc: (
+				c: PiContext,
+				kind: string,
+				conversationId: ConversationId,
+			) => unwatchFor(c, { kind: "doc", docKind: kind, conversationId }),
 		},
 
 		conversation: {
-			agent: (c: PiContext, conversationId: number): Promise<PiAgentInfo> =>
+			agent: (
+				c: PiContext,
+				conversationId: ConversationId,
+			): Promise<PiAgentInfo> =>
 				run(c, async (harness, context) =>
 					agentInfo(
 						await (
@@ -268,7 +269,7 @@ export function createPiActions(options: PiOptions) {
 				),
 			configure: (
 				c: PiContext,
-				conversationId: number,
+				conversationId: ConversationId,
 				change: PiAgentChange,
 			) =>
 				run(c, async (harness, context) => {
@@ -277,7 +278,11 @@ export function createPiActions(options: PiOptions) {
 						await requireConversation(harness, conversationId, context)
 					).configure(resolved, context);
 				}),
-			submit: (c: PiContext, conversationId: number, draft: SubmissionDraft) =>
+			submit: (
+				c: PiContext,
+				conversationId: ConversationId,
+				draft: SubmissionDraft,
+			) =>
 				run(c, async (harness, context) =>
 					(
 						await (
@@ -285,21 +290,25 @@ export function createPiActions(options: PiOptions) {
 						).submit(draft, context)
 					).status(context),
 				),
-			reset: (c: PiContext, conversationId: number, handoff?: string) =>
+			reset: (c: PiContext, conversationId: ConversationId, handoff?: string) =>
 				run(c, async (harness, context) =>
 					(await requireConversation(harness, conversationId, context)).reset(
 						handoff,
 						context,
 					),
 				),
-			compact: (c: PiContext, conversationId: number, instructions?: string) =>
+			compact: (
+				c: PiContext,
+				conversationId: ConversationId,
+				instructions?: string,
+			) =>
 				run(c, async (harness, context) =>
 					(await requireConversation(harness, conversationId, context)).compact(
 						instructions,
 						context,
 					),
 				),
-			context: (c: PiContext, conversationId: number) =>
+			context: (c: PiContext, conversationId: ConversationId) =>
 				run(c, async (harness, context) =>
 					(await requireConversation(harness, conversationId, context)).context(
 						context,
@@ -307,7 +316,7 @@ export function createPiActions(options: PiOptions) {
 				),
 			entries: (
 				c: PiContext,
-				conversationId: number,
+				conversationId: ConversationId,
 				query: Omit<EntryQuery, "conversationId">,
 				limit: number,
 				cursor?: Cursor,
@@ -322,8 +331,8 @@ export function createPiActions(options: PiOptions) {
 				),
 			fork: (
 				c: PiContext,
-				conversationId: number,
-				at: number,
+				conversationId: ConversationId,
+				at: EntryId,
 				fork: PiCreateConversationOptions,
 			) =>
 				run(c, async (harness, context) => {
@@ -333,7 +342,7 @@ export function createPiActions(options: PiOptions) {
 						context,
 					);
 					const forked = await conversation.fork(
-						at as EntryId,
+						at,
 						{ ownership: fork.ownership, agent: agentChange(fork.agent) },
 						context,
 					);
@@ -341,7 +350,7 @@ export function createPiActions(options: PiOptions) {
 				}),
 			abort: (
 				c: PiContext,
-				conversationId: number,
+				conversationId: ConversationId,
 				abortOptions?: ConversationAbortOptions,
 			) =>
 				run(c, async (harness, context) =>
@@ -350,40 +359,40 @@ export function createPiActions(options: PiOptions) {
 						abortOptions,
 					),
 				),
-			waitForIdle: (c: PiContext, conversationId: number) =>
+			waitForIdle: (c: PiContext, conversationId: ConversationId) =>
 				run(c, async (harness, context) =>
 					(
 						await requireConversation(harness, conversationId, context)
 					).waitForIdle(context),
 				),
 			/** The structural view; then `pi.view` frames with Chord operations to this connection. */
-			watch: (c: PiContext, conversationId: number) =>
+			watch: (c: PiContext, conversationId: ConversationId) =>
 				watchFor<{ value: ConversationView }>(c, {
 					kind: "view",
 					conversationId,
 				}),
-			unwatch: (c: PiContext, conversationId: number) =>
+			unwatch: (c: PiContext, conversationId: ConversationId) =>
 				unwatchFor(c, { kind: "view", conversationId }),
 			/** A snapshot, partial answer included; then `pi.events` batches to this connection. Nothing is replayed. */
-			watchEvents: (c: PiContext, conversationId: number) =>
+			watchEvents: (c: PiContext, conversationId: ConversationId) =>
 				watchFor<{ snapshot: SnapshotEvent }>(c, {
 					kind: "events",
 					conversationId,
 				}),
-			unwatchEvents: (c: PiContext, conversationId: number) =>
+			unwatchEvents: (c: PiContext, conversationId: ConversationId) =>
 				unwatchFor(c, { kind: "events", conversationId }),
 		},
 
 		submission: {
-			status: (c: PiContext, id: number) =>
+			status: (c: PiContext, id: SubmissionId) =>
 				run(c, async (harness, context) =>
 					(await requireSubmission(harness, id, context)).status(context),
 				),
-			wait: (c: PiContext, id: number) =>
+			wait: (c: PiContext, id: SubmissionId) =>
 				run(c, async (harness, context) =>
 					(await requireSubmission(harness, id, context)).wait(context),
 				),
-			abort: (c: PiContext, id: number) =>
+			abort: (c: PiContext, id: SubmissionId) =>
 				run(c, async (harness, context) =>
 					(await requireSubmission(harness, id, context)).abort(context),
 				),
@@ -465,13 +474,10 @@ function connectionId(c: PiContext): string {
 
 async function requireConversation(
 	harness: Harness,
-	id: number,
+	id: ConversationId,
 	context: Context,
 ): Promise<Conversation> {
-	const conversation = await harness.conversation(
-		id as ConversationId,
-		context,
-	);
+	const conversation = await harness.conversation(id, context);
 	if (!conversation) {
 		throw new UserError(`Conversation ${id} does not exist.`);
 	}
@@ -480,24 +486,24 @@ async function requireConversation(
 
 async function requireSubmission(
 	harness: Harness,
-	id: number,
+	id: SubmissionId,
 	context: Context,
 ): Promise<Submission> {
-	const submission = await harness.submission(id as SubmissionId, context);
+	const submission = await harness.submission(id, context);
 	if (!submission) throw submissionNotFound(id);
 	return submission;
 }
 
-function submissionNotFound(id: number) {
+function submissionNotFound(id: SubmissionId) {
 	return new UserError(`Submission ${id} does not exist.`);
 }
 
 async function requireTask(
 	harness: Harness,
-	id: number,
+	id: TaskId,
 	context: Context,
 ): Promise<void> {
-	if (!(await harness.getTask(id as TaskId, context))) {
+	if (!(await harness.getTask(id, context))) {
 		throw new UserError(`Task ${id} does not exist.`);
 	}
 }
