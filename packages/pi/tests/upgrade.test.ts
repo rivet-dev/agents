@@ -217,7 +217,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		bumpSchema: async (c: {
 			db: { execute: (sql: string) => Promise<unknown> };
 		}) => {
-			await c.db.execute("UPDATE durable_schema SET version = version + 1");
+			await c.db.execute("UPDATE pi_durable_schema SET version = version + 1");
 		},
 		// What the earlier session-based pi() stored: its own session table and
 		// `pi_sandbox`, and none of this pi()'s tables.

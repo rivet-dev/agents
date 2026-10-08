@@ -50,6 +50,19 @@ const LOG = Array.from({ length: 20_000 }, (_, i) => `line ${i + 1}`).join(
 	"\n",
 );
 
+/** Pi Durable's tables as 0.5.1 stored them, without a prefix. */
+const PI_DURABLE_TABLES_051 = [
+	"durable_schema",
+	"durable_metadata",
+	"record_ids",
+	"conversations",
+	"entries",
+	"tasks",
+	"submissions",
+	"documents",
+	"document_revisions",
+];
+
 /** Tool calls of the crash test. A tool's first run blocks until the stop aborts it; a rerun returns at once. */
 const toolRuns = { safe: 0, unsafe: 0 };
 
@@ -147,7 +160,7 @@ function buildRegistry(mock: MockModel, root: string) {
 			},
 			failCommitsOfPoison: async (c) => {
 				await c.db.execute(
-					`CREATE TRIGGER IF NOT EXISTS test_fail_poison BEFORE INSERT ON documents
+					`CREATE TRIGGER IF NOT EXISTS test_fail_poison BEFORE INSERT ON pi_documents
 					 WHEN NEW.kind = '"app.poison"' BEGIN SELECT RAISE(ABORT, 'injected storage failure'); END`,
 				);
 			},
@@ -179,11 +192,23 @@ function buildRegistry(mock: MockModel, root: string) {
 			nap: (c) => {
 				c.sleep();
 			},
-			// What 0.5.1 stored: `pi_file` with its rows, at schema version 2.
+			// What 0.5.1 stored: Pi Durable's tables without a prefix, and
+			// `pi_file` with its rows, at schema version 2.
 			storeAs051: async (c) => {
+				for (const table of PI_DURABLE_TABLES_051) {
+					await c.db.execute(`ALTER TABLE pi_${table} RENAME TO ${table}`);
+				}
 				await c.db.execute(
 					"UPDATE pi_durable_schema_version SET schema_version = 2",
 				);
+			},
+			// The app's own table, named like one of Pi Durable's.
+			addAppTask: async (c, title: string) => {
+				await c.db.execute(
+					"CREATE TABLE IF NOT EXISTS tasks (title TEXT NOT NULL) STRICT",
+				);
+				await c.db.execute("INSERT INTO tasks (title) VALUES (?)", title);
+				return c.db.execute<{ title: string }>("SELECT title FROM tasks");
 			},
 		},
 	});
@@ -609,7 +634,7 @@ describe("pi actor", () => {
 		});
 	});
 
-	test("files an agent without a sandbox stored on 0.5.1 stay readable after the upgrade", async (c) => {
+	test("an agent without a sandbox stored on 0.5.1 keeps its conversation and its files after the upgrade", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["files-051", randomUUID()];
 		const handle = client.files.getOrCreate(key);
@@ -622,11 +647,26 @@ describe("pi actor", () => {
 
 		const root = await handle.harness.root();
 		const { messages } = await handle.conversation.context(root.id);
+		expect(JSON.stringify(messages)).toContain("create hello.txt");
 		const read = messages.findLast(
 			(message) => message.role === "toolResult" && message.toolName === "read",
 		);
 		expect(read).toMatchObject({ isError: false });
 		expect(JSON.stringify(read?.content)).toContain("line two");
+	});
+
+	test("the app's own table named like one of Pi Durable's lives next to the agent's conversations", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.files.getOrCreate(["app-tables", randomUUID()]);
+		await handle.prompt("say hello");
+
+		expect(await handle.addAppTask("ship 0.5.2")).toEqual([
+			{ title: "ship 0.5.2" },
+		]);
+		expect(await handle.prompt("say hello")).toMatchObject({
+			status: "done",
+			text: "Hi there!",
+		});
 	});
 
 	test("sandbox tools cannot write outside the sandbox or read the actor host's environment", async (c) => {

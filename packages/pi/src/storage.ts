@@ -1,12 +1,14 @@
 import type { ConversationId } from "@earendil-works/pi-durable";
 import type { RawAccess } from "rivetkit/db";
 import { migrations } from "rivetkit/unstable/migrations";
+import { PI_DURABLE_TABLES } from "./actor-sqlite.js";
 
 export type PiDatabase = Pick<RawAccess, "execute">;
 
 /**
  * `pi()`'s own tables. Pi Durable creates its tables in the same database
- * itself. The `pi_durable` names are stored in actors' databases, so they stay.
+ * itself, with the `pi_` prefix `actorSqlite` adds. The `pi_durable` names are
+ * stored in actors' databases, so they stay.
  */
 export const migratePiTables = migrations({
 	tableName: "pi_durable_schema_version",
@@ -44,6 +46,20 @@ export const migratePiTables = migrations({
 					mtime_ms INTEGER NOT NULL
 				) STRICT;
 			`,
+		},
+		{
+			version: 4,
+			// Pi Durable's tables of agents from 0.5.1 and earlier have no prefix. Renaming them keeps their data.
+			up: async (db) => {
+				for (const table of PI_DURABLE_TABLES) {
+					const [found] = await db.execute(
+						"SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+						table,
+					);
+					if (found)
+						await db.execute(`ALTER TABLE ${table} RENAME TO pi_${table}`);
+				}
+			},
 		},
 	],
 });
