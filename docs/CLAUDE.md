@@ -17,6 +17,7 @@ docs/
   sidebar.json
   content/
     docs/**.mdx         -> /agents/docs/...
+    guides/*.mdx        -> /guides/...      (merged with other products' guides)
 examples/
   docs/<topic>/*.ts     snippets embedded with <CodeSnippet>
 ```
@@ -43,9 +44,25 @@ Navigation for the bundle. Icons travel as Font Awesome **export names** (for
 example `"faSquareInfo"`) or `{ "src": "/images/..." }` for website-hosted
 images, so this repo needs no dependency on the website's icon package.
 
-- `href` is the full site path the page renders at: `/agents/docs/...`.
+- `href` is the full site path the page renders at: `/agents/docs/...` under
+  `docs`, `/guides/...` under `guides`.
 - Adding a page to `content/` does not add it to the nav. Add it here too.
 - Deploy and self-hosting guides are website-owned and generated there.
+
+## Guides
+
+The Guides tab at `/guides/` merges the guides of every product repo (this
+repo, `rivet-dev/rivet`'s Actors bundle, and so on). Put a guide in the repo
+whose code it teaches, so its `<CodeSnippet>` paths resolve against that repo's
+`examples/`.
+
+- Put a guide in `content/guides/<slug>.mdx` and link it from the `guides` key
+  of `sidebar.json` as `/guides/<slug>`. Slugs share one namespace across
+  repos, and the website build fails on a duplicate.
+- `guides` is a list of groups. The website lists every repo's groups in
+  product order and merges groups with the same title.
+- Do not add an overview page or link. The website owns `/guides/`.
+- Link to a guide as `/guides/<slug>`, from docs pages and other guides alike.
 
 ## Code
 

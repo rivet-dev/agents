@@ -70,6 +70,10 @@
 							"href": "/agents/docs/instructions"
 						},
 						{
+							"title": "Extensions",
+							"href": "/agents/docs/extensions"
+						},
+						{
 							"title": "User Subscriptions",
 							"href": "/agents/docs/user-subscriptions"
 						},
@@ -166,6 +170,18 @@
 							"href": "/agents/docs/connectors/discord"
 						}
 					]
+				}
+			]
+		}
+	],
+	"guides": [
+		{
+			"title": "Agents",
+			"pages": [
+				{
+					"title": "Sign in with ChatGPT",
+					"href": "/guides/sign-in-with-chatgpt",
+					"icon": "faOpenai"
 				}
 			]
 		}

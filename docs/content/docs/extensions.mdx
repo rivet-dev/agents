@@ -1,0 +1,102 @@
+---
+title: "Extensions"
+description: "Bundle tools, prompt sections, hooks, and tasks into named extensions, and choose which ones each conversation uses."
+---
+
+An extension is a named bundle of what an agent runs with: tools, prompt sections, hooks, tool wrappers, and tasks. You install extensions in a registry and pass it to `pi()`. Each conversation stores the names of the extensions it uses.
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 660 236" role="img" aria-label="Your worker's registry holds three extensions: coding-tools, audit, and read-only. Conversation A selects coding-tools and audit. Conversation B selects all three, including read-only." style="width:100%;min-width:520px;max-width:660px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="extensions-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+  </defs>
+  <rect x="20" y="40" width="260" height="178" rx="10" style="fill:rgb(var(--site-paper-mid, 250 248 243));stroke:rgb(var(--site-pine, 46 64 52));stroke-width:1.4;stroke-dasharray:7 6"/>
+  <text x="20" y="30" font-size="11" font-family="ui-monospace, monospace" font-weight="600" letter-spacing="0.14em" style="fill:rgb(var(--site-pine, 46 64 52))">YOUR WORKER</text>
+  <text x="150" y="70" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Registry</text>
+  <g fill="#ffffff" stroke="#1b1916" stroke-width="1.4">
+    <rect x="50" y="86" width="200" height="30" rx="6"/>
+    <rect x="50" y="126" width="200" height="30" rx="6"/>
+    <rect x="50" y="166" width="200" height="30" rx="6"/>
+  </g>
+  <g text-anchor="middle" font-size="13" font-family="ui-monospace, monospace" fill="#1b1916">
+    <text x="150" y="106">coding-tools</text>
+    <text x="150" y="146">audit</text>
+    <text x="150" y="186">read-only</text>
+  </g>
+  <rect x="400" y="52" width="240" height="60" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="400" y="146" width="240" height="60" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <g text-anchor="middle">
+    <text x="520" y="77" font-size="14" font-weight="600" fill="#1b1916">Conversation A</text>
+    <text x="520" y="97" font-size="12" font-family="ui-monospace, monospace" fill="#56524a">coding-tools, audit</text>
+    <text x="520" y="171" font-size="14" font-weight="600" fill="#1b1916">Conversation B</text>
+    <text x="520" y="191" font-size="12" font-family="ui-monospace, monospace" fill="#56524a">coding-tools, audit, read-only</text>
+  </g>
+  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
+    <path d="M281 112 L398 82" marker-end="url(#extensions-arrow)"/>
+    <path d="M281 146 L398 176" marker-end="url(#extensions-arrow)"/>
+  </g>
+  <text x="340" y="133" text-anchor="middle" font-size="12" fill="#56524a">by name</text>
+</svg>
+</div>
+
+| Field | Adds | See |
+| --- | --- | --- |
+| `tools` | Functions the model can call. | [Custom Tools](/agents/docs/custom-tools) |
+| `sections` | Parts of the system prompt. | [Instructions](/agents/docs/instructions) |
+| `hooks` | Code that runs around model requests, tool calls, and compaction. | [Hooks](#hooks) |
+| `wraps` | Decorators for a tool or section, by name. | [Wrap a tool](#wrap-a-tool) |
+| `tasks` | Multi-step work that resumes after a crash. | [Tools and tasks](/agents/docs/pi#tools-and-tasks) |
+
+By default, every conversation uses every installed extension, in install order. When two selected extensions have a tool with the same name, the later one wins.
+
+## Hooks
+
+A hook runs inside a built-in task, such as a tool call, in every conversation that selects its extension. This extension blocks the tools that change files or run commands:
+
+<CodeSnippet file="examples/docs/extensions/read-only.ts" title="read-only.ts" />
+
+| Hook | Task | Runs | Can |
+| --- | --- | --- | --- |
+| `beforeTool` | `ToolTask` | Before a tool call runs. | Block the call or rewrite its arguments. A throw also blocks it. |
+| `afterTool` | `ToolTask` | After a tool call returns. | Replace the result. |
+| `beforeRequest` | `GenerationTask` | Before every model request. | Replace the messages of that request only. |
+| `afterResponse` | `GenerationTask` | After every model response. | Observe it. |
+| `afterTools` | `GenerationTask` | After every tool call of a round finishes. | Observe the results. |
+| `onYield` | `GenerationTask` | When the model gives a final answer. | Continue the run with another user message. |
+| `beforeCompact` | `CompactionTask` | Before a compaction summarizes the conversation. | Decline it or supply your own summary. |
+
+Hooks run in the agent Actor on your worker, so they can call your APIs. To enforce a rule in every conversation, keep its extension in the default selection. To approve tool calls one by one, see [Human in the Loop](/agents/docs/human-in-the-loop).
+
+## Wrap a tool
+
+`wrapTool` decorates a tool by name, whichever extension supplied it. This one logs every `bash` command:
+
+<CodeSnippet file="examples/docs/extensions/audit.ts" title="audit.ts" />
+
+`wrapSection` does the same for a prompt section.
+
+## Choose extensions per conversation
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/extensions/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/extensions/client.ts" title="client.ts" />
+</CodeGroup>
+
+- **`settings.extensions`** is the default selection. Without it, conversations use every installed extension.
+- **`{ add, remove }`** changes the default for one conversation. An array selects exactly those extensions, in order. `null` goes back to the default.
+- **Clients pass names.** A name that isn't installed rejects with a `UserError`.
+- **Changes apply to the next step.** A model request that already started keeps its tools and prompt. A tool call that hasn't started yet uses the new hooks.
+
+The `conversation.agent` action returns the conversation's extensions, tools, and prompt sections by name.
+
+## Deploys
+
+The registry lives in your worker's code, and every agent Actor on that worker shares it. Pi saves only the names of the extensions a conversation selects.
+
+- **Install extensions at startup.** Installing one later changes only the worker that runs the code.
+- **Keep names stable.** Renaming an extension is the same as removing it.
+- **A removed extension stops applying.** Conversations that select it lose its tools, sections, and hooks, and get them back when a later deploy installs it again.
+- **Tasks wait for their extension.** A task from an extension's `tasks` resumes only once that extension is installed, so keep it installed while its tasks can run.
+- **Running tool calls finish on the old code** while the Actor drains. See [Upgrades and crashes](/agents/docs/pi#upgrades-and-crashes).
+
+**Next:** [User Subscriptions](/agents/docs/user-subscriptions), how users run agents on their own Claude or ChatGPT plan.

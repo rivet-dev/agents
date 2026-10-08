@@ -41,7 +41,7 @@ npm add @earendil-works/pi-ai
 <CodeSnippet file="examples/docs/custom-tools/server.ts" title="server.ts" />
 </CodeGroup>
 
-Both `defineTool` and `defineExtension` come from `@earendil-works/pi-durable`. A tool is installed through an extension, and by default every conversation uses every installed extension.
+Both `defineTool` and `defineExtension` come from `@earendil-works/pi-durable`. A tool is installed through an [extension](/agents/docs/extensions), and by default every conversation uses every installed extension.
 
 - The model reads the tool's `description` and calls it with arguments that match `parameters`. Pi rejects a call whose arguments don't match.
 - The model reads `content` as the result. Clients get `details` for your UI.
