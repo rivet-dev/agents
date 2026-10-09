@@ -65,6 +65,10 @@ const deployTool = defineTool({
 	},
 });
 
+/** Actors whose `holdPi` action has read `c.pi`, by key. The action then waits for `holdRelease`. */
+const holding = new Set<string>();
+const holdRelease = Promise.withResolvers<void>();
+
 /** The tool of the waiting-caller test waits for `shipRelease`. */
 let shipRuns = 0;
 const shipRelease = Promise.withResolvers<void>();
@@ -190,6 +194,12 @@ function buildRegistry(mock: MockModel, root: string) {
 			},
 			destroySelf: (c) => {
 				c.destroy();
+			},
+			holdPi: async (c) => {
+				await c.pi.root(BACKGROUND_CONTEXT);
+				holding.add(keyOf(c));
+				await holdRelease.promise;
+				return (await c.pi.root(BACKGROUND_CONTEXT)).id;
 			},
 		},
 	});
@@ -391,6 +401,20 @@ describe("pi drain and upgrades", () => {
 		expect(await answer).toMatchObject({ status: "done", text: "shipped it" });
 	});
 
+	test("an app action still using c.pi when a sleep starts finishes before Pi Durable closes", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["holding-caller", randomUUID()];
+		const handle = client.drainer.getOrCreate(key);
+		const held = handle.holdPi();
+		// The action records that it holds c.pi in this process.
+		await vi.waitFor(() => expect(holding.has(JSON.stringify(key))).toBe(true));
+
+		await handle.nap();
+		await sleeps.waitFor(key, 1);
+		holdRelease.resolve();
+		expect(await held).toBe(ROOT_CONVERSATION_ID);
+	});
+
 	test("a run that outlasts the grace period still lets the sandbox suspend before the grace period ends, even when the app's onSleep is slow", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const handle = client.slowSleeper.getOrCreate(["slow-sleep", randomUUID()]);
@@ -495,7 +519,7 @@ describe("pi drain and upgrades", () => {
 		// Destroy closes Pi Durable, then disconnects the connection; the hook records what c.pi gave in this process.
 		await vi.waitFor(() =>
 			expect(disconnectOutcomes.get(JSON.stringify(key))).toBe(
-				"Pi Durable is closed because the actor is stopping.",
+				"Pi Durable is closed because the actor was destroyed.",
 			),
 		);
 		await conn.dispose();
