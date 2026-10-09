@@ -17,13 +17,13 @@
 		"@rivet-dev/pi": "workspace:*",
 		"@rivet-dev/sandbox-adapter": "workspace:*",
 		"@rivet-dev/workflows": "1.0.0",
-		"@rivetkit/react": "2.3.23",
+		"@rivetkit/react": "2.3.26",
 		"@slack/web-api": "^8.2.0",
 		"discord-interactions": "^4.4.0",
 		"e2b": "^2.51.0",
 		"hono": "^4.13.12",
 		"react": "^19.3.0",
-		"rivetkit": "2.3.23"
+		"rivetkit": "2.3.26"
 	},
 	"devDependencies": {
 		"@types/node": "^24.0.0",

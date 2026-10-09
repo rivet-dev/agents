@@ -22,7 +22,7 @@ import type { SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { pi } from "../src/index.js";
+import { type PiEventsFrame, pi } from "../src/index.js";
 import { localSandboxProvider } from "./helpers/local-sandbox.js";
 import {
 	createMockModel,
@@ -498,6 +498,41 @@ describe("pi actor", () => {
 		await expect(handle.writePoison()).rejects.toThrow();
 		const result = await handle.prompt("say hello");
 		expect(result).toMatchObject({ status: "done", text: "Hi there!" });
+	});
+
+	test("a watching connection gets a fresh snapshot when a failed commit reopens the harness, then the next run's batches", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const conn = client.agent
+			.getOrCreate(["poison-watch", randomUUID()])
+			.connect();
+		const frames: PiEventsFrame[] = [];
+		// SAFETY: RivetKit types event payloads as unknown on the client, and pi() sends only PiEventsFrame on pi.events.
+		conn.on("pi.events", (frame) => void frames.push(frame as PiEventsFrame));
+		const root = await conn.harness.root();
+		await conn.conversation.watchEvents(root.id);
+		await conn.failCommitsOfPoison();
+
+		await expect(conn.writePoison()).rejects.toThrow();
+		expect(await conn.prompt("say hello")).toMatchObject({
+			status: "done",
+			text: "Hi there!",
+		});
+
+		// The reopened harness reattaches the watch: a seq 0 snapshot, then the run's batches in order.
+		await vi.waitFor(() =>
+			expect(
+				frames.some((frame) =>
+					frame.events.some((event) => event.type === "run_end"),
+				),
+			).toBe(true),
+		);
+		const reattached = frames.findIndex((frame) => frame.seq === 0);
+		expect(frames[reattached]?.events).toEqual([
+			expect.objectContaining({ type: "snapshot" }),
+		]);
+		expect(frames.slice(reattached).map((frame) => frame.seq)).toEqual(
+			frames.slice(reattached).map((_, index) => index),
+		);
 	});
 
 	test("two conversations prompted at the same time each get their own answer, and neither transcript holds the other's messages", async (c) => {
