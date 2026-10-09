@@ -265,33 +265,38 @@ describe("pi watches", () => {
 		);
 	});
 
-	test("a connection that survives sleep gets its watch back with a fresh snapshot", async (c) => {
+	test("a connection that watches each time it opens gets the next run's events after sleep closes it", async (c) => {
 		const { client } = await setupTest(c, registry);
-		const key = ["reattach", randomUUID()];
+		const key = ["rewatch", randomUUID()];
 		const conn = client.agent.getOrCreate(key).connect();
 		const { frames: eventFrames, push } = received<PiEventsFrame>();
 		conn.on("pi.events", push);
 		const root = await conn.harness.root();
-		await conn.conversation.watchEvents(root.id);
+		// Sleep closes the connection, so the client watches again each time it opens.
+		const watches: Promise<unknown>[] = [];
+		conn.onOpen(() => {
+			watches.push(conn.conversation.watchEvents(root.id));
+		});
+		// The connection is already open, so onOpen runs in a microtask.
+		await vi.waitFor(() => expect(watches).toHaveLength(1));
+		await watches[0];
 
 		await conn.nap();
-		// Sleep completes after the nap action returns, and onSleep records it in this process.
-		await vi.waitFor(() =>
-			expect(sleeps.get(JSON.stringify(key)) ?? 0).toBe(1),
-		);
+		// The client reconnects on its own after sleep closes the connection, and that wakes the actor.
+		await vi.waitFor(() => expect(watches).toHaveLength(2));
+		await watches[1];
+		expect(sleeps.get(JSON.stringify(key))).toBe(1);
+		const afterWake = eventFrames.length;
 		expect(await conn.prompt("say hello")).toMatchObject({
 			status: "done",
 			text: "Hi there!",
 		});
 
-		// The reattached watch sends its snapshot when the actor wakes, before the prompt's batches.
-		await vi.waitFor(() => expect(hasEvent(eventFrames, "run_end")).toBe(true));
-		const reattached = eventFrames.findIndex((frame) => frame.seq === 0);
-		expect(eventFrames[reattached]?.events).toEqual([
-			expect.objectContaining({ type: "snapshot" }),
-		]);
-		expect(eventFrames.slice(reattached).map((frame) => frame.seq)).toEqual(
-			eventFrames.slice(reattached).map((_, index) => index),
+		// The new watch numbers its batches from 1, after the snapshot that watchEvents returned.
+		await vi.waitFor(() =>
+			expect(hasEvent(eventFrames.slice(afterWake), "run_end")).toBe(true),
 		);
+		const batches = eventFrames.slice(afterWake).map((frame) => frame.seq);
+		expect(batches).toEqual(batches.map((_, index) => index + 1));
 	});
 });
