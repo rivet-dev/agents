@@ -207,7 +207,21 @@ export type UserActorConfig<
 		TQueues,
 		TAccess
 	> &
-	TOptions & { actions?: TUserActions };
+	TOptions & {
+		// Typing `c` here rather than through a constraint on `TUserActions`
+		// lets `c.conn.state` take the type `createConnState` returns.
+		actions?: TUserActions &
+			UserActions<
+				TState,
+				TConnParams,
+				TConnState,
+				TVars,
+				TInput,
+				TEvents,
+				TQueues,
+				TAccess
+			>;
+	};
 
 /** The actor definition clients see: the app's actions and events plus the built-in ones. */
 export type PiActorDefinition<

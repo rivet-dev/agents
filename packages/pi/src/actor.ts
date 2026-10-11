@@ -93,15 +93,7 @@ export type PiActorConfigInput<
 	TInput = undefined,
 	TEvents extends EventSchemaConfig = Record<never, never>,
 	TQueues extends QueueSchemaConfig = Record<never, never>,
-	TUserActions extends PiUserActions<
-		TState,
-		TConnParams,
-		TConnState,
-		TVars,
-		TInput,
-		TEvents,
-		TQueues
-	> = Record<never, never>,
+	TUserActions extends Record<string, unknown> = Record<never, never>,
 > = UserActorConfig<
 	TState,
 	TConnParams,
@@ -149,23 +141,7 @@ export function pi<
 	TInput,
 	TEvents extends EventSchemaConfig = Record<never, never>,
 	TQueues extends QueueSchemaConfig = Record<never, never>,
-	TUserActions extends PiUserActions<
-		TState,
-		TConnParams,
-		TConnState,
-		TVars,
-		TInput,
-		TEvents,
-		TQueues
-	> = PiUserActions<
-		TState,
-		TConnParams,
-		TConnState,
-		TVars,
-		TInput,
-		TEvents,
-		TQueues
-	>,
+	TUserActions extends Record<string, unknown> = Record<never, never>,
 >(
 	config: PiActorConfigInput<
 		TState,
