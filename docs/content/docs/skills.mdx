@@ -1,0 +1,41 @@
+---
+title: "Skills"
+description: "Give an agent instructions for specific tasks that it loads only when a task needs them."
+---
+
+A skill is a `SKILL.md` file with a `name` and a `description`, followed by instructions for one kind of task. The model sees every skill's name and description in the [system prompt](/agents/docs/system-prompt) and loads a skill's instructions only when a task matches, so an agent can have many skills without filling its context.
+
+## Write a skill
+
+Put each skill in its own folder as `skills/<name>/SKILL.md`:
+
+```md
+---
+name: commit-style
+description: How to write commit messages in this project.
+---
+
+Write commit messages in the imperative mood and keep the subject under 50 characters.
+```
+
+The model decides when to use a skill from its `description` alone, so say which tasks it covers.
+
+## Load skills
+
+Pi doesn't discover skill files on its own. This extension lists them in a prompt section and loads them with a tool:
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/skills/skills.ts" title="skills.ts" />
+<CodeSnippet file="examples/docs/skills/server.ts" title="server.ts" />
+</CodeGroup>
+
+- **The `skills` section** lists every skill's name and description. Like every [section](/agents/docs/system-prompt#sections-for-every-conversation), it renders before each model call.
+- **The `skill` tool** returns a skill's instructions. It sets `replay: "safe"`, so a call cut off by a crash runs again.
+- **Skills ship with your worker.** They're read when the worker starts, and a deploy updates them. They work with or without a sandbox, and the agent can't change them.
+- **Skills can differ per agent.** Look them up from your database in the section and the tool instead of from files, and every agent gets its own list.
+
+## Skills in the workspace
+
+Skill files that are already in the workspace, such as `.agents/skills/` in a repository cloned into the [sandbox](/agents/docs/sandboxes), need no tool. Add a section that says where they are, and the model reads a skill's `SKILL.md` with Pi's `read` tool before it starts the task.
+
+**Next:** [Extensions](/agents/docs/extensions), how to bundle tools, sections, and hooks and choose them per conversation.

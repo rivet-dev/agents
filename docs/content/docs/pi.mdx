@@ -183,8 +183,7 @@ See [Architecture](/agents/docs/architecture).
 
 ## Known limitations
 
-- **Skills aren't supported yet.** Put the skill files in the workspace and add a prompt section that tells the model where they are, so it reads the right one before acting. See [Instructions](/agents/docs/instructions).
-- **Pi doesn't load `AGENTS.md` files.** Set `instructions` or add a prompt section. See [Instructions](/agents/docs/instructions).
+- **No automatic `AGENTS.md` or skill discovery.** Load them with prompt sections. See [System Prompt](/agents/docs/system-prompt) and [Skills](/agents/docs/skills).
 - **No shell without a sandbox.** `bash` needs a [sandbox](/agents/docs/sandboxes).
 - **Plain tool calls aren't rerun after a crash.** Use a task or `replay: "safe"`.
 - **A tool that ignores its abort signal blocks sleep.** An upgrade then waits up to `sleepGracePeriod` for it to finish.

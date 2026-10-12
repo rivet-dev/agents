@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { createRegistry, defineExtension, section } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { pi } from "@rivet-dev/pi";
@@ -11,9 +12,18 @@ extensions.install(
 		name: "payments-team",
 		sections: [
 			section("role", () => "You review pull requests for the payments team. Be brief and cite file paths."),
-			section("project-rules", () => "Run `npm test` before proposing a fix. Never edit files in `migrations/`."),
-			// The skill files are in the sandbox. This section tells the model where to find them.
-			section("skills", () => "The `skills/` folder has one folder per skill. Read a skill's SKILL.md before you start a task it covers."),
+			// Rendered again before every model call, so the date stays current.
+			section("date", () => `Today is ${new Date().toDateString()}.`),
+			// Read from the conversation's workspace, so an edit to AGENTS.md applies from the next model call.
+			section("agents_md", async (input, context) => {
+				if (!input.env) return undefined;
+				const file = await input.env.readTextFile(posix.join(input.env.cwd, "AGENTS.md"), context);
+				if (file.ok) return file.value;
+				// No AGENTS.md: leave the section out.
+				if (file.error.code === "not_found") return undefined;
+				// Any other failure keeps the text the model already has.
+				throw file.error;
+			}),
 		],
 	}),
 );

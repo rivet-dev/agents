@@ -1,6 +1,6 @@
 ---
-title: "Instructions"
-description: "Set an agent's system prompt and project rules, and add context to a single prompt."
+title: "System Prompt"
+description: "Build an agent's system prompt from sections, load AGENTS.md from the workspace, and add instructions to one conversation or context to one prompt."
 ---
 
 An agent's system prompt is built from prompt sections. Your extensions add sections that every conversation gets, and a conversation can add its own `instructions` after them. The agent renders the system prompt again before every model call.
@@ -32,25 +32,39 @@ An agent's system prompt is built from prompt sections. Your extensions add sect
 
 ## Sections for every conversation
 
-Add sections with an extension. Sections come in the order the extensions are installed.
+Add sections with an extension. A section is a key and a function that returns its text:
 
-<CodeSnippet file="examples/docs/instructions/server.ts" title="server.ts" />
+<CodeSnippet file="examples/docs/system-prompt/server.ts" title="server.ts" />
 
-The model gets the `payments-team` sections as tagged blocks:
+The model gets each section as a block tagged with its key:
 
 ```text
 <role>
 You review pull requests for the payments team. Be brief and cite file paths.
 </role>
-<project-rules>
+<date>
+Today is Mon Oct 12 2026.
+</date>
+<agents_md>
 Run `npm test` before proposing a fix. Never edit files in `migrations/`.
-</project-rules>
-<skills>
-The `skills/` folder has one folder per skill. Read a skill's SKILL.md before you start a task it covers.
-</skills>
+</agents_md>
 ```
 
-The agent runs each section's function again before every model call. A section can return text that changes, such as the current date or a value from your database.
+- **Sections render before every model call.** A section can return text that changes, such as the current date, a file, or a value from your database.
+- **Order follows the conversation's extensions,** which is install order by default. See [Extensions](/agents/docs/extensions).
+- **Return `undefined` to leave a section out.** Pass `{ tag: false }` as the third argument of `section()` to send the text without the tags.
+- **A section that throws keeps its previous text.** The model keeps what it already had, and the error is reported.
+- **`wrapSection`** changes a section from another extension by its key. See [Wrap a tool](/agents/docs/extensions#wrap-a-tool).
+
+## AGENTS.md
+
+Pi doesn't read `AGENTS.md` on its own. Load it with a section, as `agents_md` does above. The section gets the conversation's workspace as `input.env`, the same files Pi's `read` tool sees: the [sandbox](/agents/docs/sandboxes), or the files in the Actor's database when there is no sandbox. An edit to `AGENTS.md` reaches the model on its next call.
+
+With a sandbox, reading the file connects the sandbox on the first model call instead of the first tool call.
+
+## How changes reach the model
+
+The agent records a change to the system prompt in the conversation, at the point where it changed. After a restart, and in a fork, the conversation has exactly the system prompt the model saw at each point. On models that accept system prompt changes in the middle of a conversation, only the change is sent, so the provider's prompt cache stays valid.
 
 ## Instructions for one conversation
 
@@ -60,11 +74,6 @@ Call `conversation.configure(id, { instructions })` to give one conversation its
 
 Put context for a single turn in the prompt itself. The `prompt` action takes a string, or an array of text and image blocks. Each image is `{ type: "image", data, mimeType }`, with the image base64-encoded in `data`. The system prompt stays the same.
 
-<CodeSnippet file="examples/docs/instructions/client.ts" title="client.ts" />
+<CodeSnippet file="examples/docs/system-prompt/client.ts" title="client.ts" />
 
-## AGENTS.md and skills
-
-Pi doesn't support `AGENTS.md` files or skills yet. Use these workarounds:
-
-- **Project rules:** put the rules of your `AGENTS.md` in a section, as `project-rules` does above, or in a conversation's `instructions`.
-- **Skills:** put the skill files in the agent's workspace, such as the [sandbox](/agents/docs/sandboxes) or the files in the Actor's database. Then add a section that tells the model where the skills are and to read one before it acts, as `skills` does above.
+**Next:** [Skills](/agents/docs/skills), how to give an agent instructions it loads only when a task needs them.

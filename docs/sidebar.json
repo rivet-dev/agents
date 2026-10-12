@@ -66,8 +66,12 @@
 					"icon": "faRobot",
 					"pages": [
 						{
-							"title": "Instructions",
-							"href": "/agents/docs/instructions"
+							"title": "System Prompt",
+							"href": "/agents/docs/system-prompt"
+						},
+						{
+							"title": "Skills",
+							"href": "/agents/docs/skills"
 						},
 						{
 							"title": "Extensions",
