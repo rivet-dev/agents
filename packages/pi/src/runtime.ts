@@ -48,6 +48,9 @@ export type PiContext = ActorContext<
 	any
 >;
 
+/** Whether Pi Durable is open in this actor generation, or why it closed. */
+export type PiStatus = "open" | "sleeping" | "destroyed";
+
 /** How an actor generation stops. A sleep drains until `drainUntil`; a destroy stops at once. */
 export type PiStop =
 	| { reason: "sleep"; drainUntil: number }
@@ -111,8 +114,8 @@ export interface PiRuntime {
 	/** The open harness, or the open in progress. */
 	harness?: Promise<OpenHarness>;
 	sandbox?: Promise<ConnectedSandbox>;
-	/** Set when the actor starts to sleep or is destroyed. */
-	closing: boolean;
+	/** Pi Durable is open until the actor starts to sleep or is destroyed. */
+	status: PiStatus;
 	/**
 	 * The `onWake` context. Background work (keep-awake, scheduled wakes, the
 	 * sandbox, reopening) uses it, because an action's context is cancelled
@@ -121,12 +124,19 @@ export interface PiRuntime {
 	actor?: PiContext;
 	/** Open Pi watches of connections, for this generation. */
 	watches: ConnectionWatches;
+	/**
+	 * Calls that are using the harness and are not waiting on a run. A sleep
+	 * drains them, so it never closes the harness under a call it admitted.
+	 */
+	calls: number;
+	/** Called when a counted call ends. A drain sets it. */
+	callEnded?: () => void;
 }
 
 export const PI_RUNTIME: unique symbol = Symbol.for("@rivet-dev/pi/runtime");
 
 export function createPiRuntime(): PiRuntime {
-	return { closing: false, watches: createConnectionWatches() };
+	return { status: "open", watches: createConnectionWatches(), calls: 0 };
 }
 
 export function piRuntime(c: PiContext): PiRuntime {
@@ -161,7 +171,10 @@ async function ensureHarness(
 	open: { resume: boolean } = { resume: true },
 ): Promise<Harness> {
 	const runtime = piRuntime(c);
-	if (runtime.closing) throw harnessClosed();
+	// Callers check the status first, so a closed generation never reopens Pi Durable.
+	if (runtime.status !== "open") {
+		throw new Error(`pi durable cannot open after it closed (${runtime.status})`);
+	}
 	runtime.harness ??= openHarness(
 		runtime.actor ?? c,
 		runtime,
@@ -185,16 +198,41 @@ async function ensureHarness(
 export async function withHarness<T>(
 	c: PiContext,
 	options: PiOptions,
-	run: (harness: Harness, context: Context) => Promise<T>,
+	run: (harness: Harness, context: Context, waiting: Waiting) => Promise<T>,
 ): Promise<T> {
+	const runtime = piRuntime(c);
+	if (runtime.status !== "open") throw piClosed(runtime.status);
 	const harness = await ensureHarness(c, options);
+	const release = countCall(runtime);
 	try {
-		return await run(harness, BACKGROUND_CONTEXT);
+		return await run(harness, BACKGROUND_CONTEXT, (wait) => {
+			release();
+			return wait();
+		});
 	} catch (error) {
-		const runtime = piRuntime(c);
 		await recoverHarness(runtime.actor ?? c, runtime, options);
 		throw toClientError(error);
+	} finally {
+		release();
 	}
+}
+
+/**
+ * Runs a wait on a run, such as `submission.wait`, without holding a sleep.
+ * While the run is busy, the run itself holds the sleep.
+ */
+export type Waiting = <W>(wait: () => Promise<W>) => Promise<W>;
+
+/** Counts a call until the returned function runs. Calling it again does nothing. */
+function countCall(runtime: PiRuntime): () => void {
+	runtime.calls += 1;
+	let counted = true;
+	return () => {
+		if (!counted) return;
+		counted = false;
+		runtime.calls -= 1;
+		runtime.callEnded?.();
+	};
 }
 
 /**
@@ -213,7 +251,9 @@ export async function withPiAccess<T>(
 ): Promise<T> {
 	const runtime = piRuntime(c);
 	// Hooks such as onDisconnect still run after Pi Durable closed; only using c.pi fails.
-	if (runtime.closing) return withUnavailablePi(c, harnessClosed(), body);
+	if (runtime.status !== "open") {
+		return withUnavailablePi(c, piClosed(runtime.status), body);
+	}
 	if (!opensHarness && !runtime.harness) {
 		return withUnavailablePi(c, harnessNotOpen(), body);
 	}
@@ -228,11 +268,14 @@ export async function withPiAccess<T>(
 		return withUnavailablePi(c, error, body);
 	}
 	Object.defineProperty(c, "pi", { value: harness, configurable: true });
+	const release = countCall(runtime);
 	try {
 		return await body();
 	} catch (error) {
 		await recoverHarness(runtime.actor ?? c, runtime, options);
 		throw toClientError(error);
+	} finally {
+		release();
 	}
 }
 
@@ -242,8 +285,13 @@ function harnessNotOpen() {
 	);
 }
 
-function harnessClosed() {
-	return new UserError("Pi Durable is closed because the actor is stopping.");
+/** What a call gets once Pi Durable is closed for this generation. */
+function piClosed(status: Exclude<PiStatus, "open">) {
+	return new UserError(
+		status === "sleeping"
+			? "Pi Durable is closed because the actor is going to sleep."
+			: "Pi Durable is closed because the actor was destroyed.",
+	);
 }
 
 async function openHarness(
@@ -316,14 +364,18 @@ async function recoverHarness(
 	options: PiOptions,
 ): Promise<void> {
 	const current = runtime.harness;
-	if (!current || runtime.closing) return;
+	if (!current || runtime.status !== "open") return;
 	let open: OpenHarness;
 	try {
 		open = await current;
 	} catch {
 		return;
 	}
-	if (runtime.harness !== current || runtime.closing || isUsable(open.harness))
+	if (
+		runtime.harness !== current ||
+		runtime.status !== "open" ||
+		isUsable(open.harness)
+	)
 		return;
 
 	c.log.warn({
@@ -578,19 +630,22 @@ function watchBusy(
 }
 
 /**
- * Waits until no run is active, or until `drainUntil` passes. Idle sleep
- * never has live work, so this only waits on a forced stop, such as an upgrade.
- * The deadline ends before RivetKit's, so closing still fits in the grace
- * period. Pi's records are already stored, and the next wake resumes the work.
+ * Waits until no run is active and no admitted call is using the harness, or
+ * until `drainUntil` passes. Idle sleep has no live work, so it waits only for
+ * a call that arrived as the sleep started. The deadline ends before
+ * RivetKit's, so closing still fits in the grace period. Pi's records are
+ * already stored, and the next wake resumes the work.
  */
 async function drain(
 	c: PiContext,
+	runtime: PiRuntime,
 	open: OpenHarness,
 	drainUntil: number,
 ): Promise<void> {
 	let changed = () => {};
 	let timedOut = false;
 	const unsubscribe = open.harness.subscribeCommits(() => changed());
+	runtime.callEnded = () => changed();
 	const timer = setTimeout(
 		() => {
 			timedOut = true;
@@ -604,7 +659,7 @@ async function drain(
 			const next = new Promise<void>((resolve) => {
 				changed = resolve;
 			});
-			if (!(await open.isBusy())) return;
+			if (runtime.calls === 0 && !(await open.isBusy())) return;
 			await next;
 		}
 		c.log.warn({
@@ -613,6 +668,7 @@ async function drain(
 	} finally {
 		clearTimeout(timer);
 		unsubscribe();
+		runtime.callEnded = undefined;
 	}
 }
 
@@ -635,11 +691,11 @@ export async function closeHarness(
 	} catch {}
 	// Destroy has no next generation to resume in, so it stops running work at once.
 	if (open && stop.reason === "sleep") {
-		await drain(c, open, stop.drainUntil).catch((error: unknown) =>
+		await drain(c, runtime, open, stop.drainUntil).catch((error: unknown) =>
 			errors.push(error),
 		);
 	}
-	runtime.closing = true;
+	runtime.status = stop.reason === "sleep" ? "sleeping" : "destroyed";
 	runtime.harness = undefined;
 	if (open) {
 		await closeOpenHarness(open, runtime.watches).catch((error: unknown) =>

@@ -27,6 +27,7 @@ import {
 	documentsByKind,
 	type PiOptions,
 	piRuntime,
+	type Waiting,
 	withHarness,
 } from "./runtime.js";
 import type { WatchSpec } from "./storage.js";
@@ -94,7 +95,7 @@ export function createPiActions(options: PiOptions) {
 	const documents = documentsByKind(options);
 	const run = <T>(
 		c: PiContext,
-		body: (harness: Harness, context: Context) => Promise<T>,
+		body: (harness: Harness, context: Context, waiting: Waiting) => Promise<T>,
 	) => withHarness(c, options, body);
 	const agentChange = (change: PiAgentChange | undefined) =>
 		change === undefined ? undefined : resolveAgentChange(options, change);
@@ -193,12 +194,14 @@ export function createPiActions(options: PiOptions) {
 					return harness.abortTask(id, context);
 				}),
 			waitForTask: (c: PiContext, id: TaskId) =>
-				run(c, async (harness, context) => {
+				run(c, async (harness, context, waiting) => {
 					await requireTask(harness, id, context);
-					return harness.waitForTask(id, context);
+					return waiting(() => harness.waitForTask(id, context));
 				}),
 			waitForIdle: (c: PiContext) =>
-				run(c, (harness, context) => harness.waitForIdle(context)),
+				run(c, (harness, context, waiting) =>
+					waiting(() => harness.waitForIdle(context)),
+				),
 			inspect: (c: PiContext) =>
 				run(c, async (harness, context) => {
 					const inspection = await harness.inspect(context);
@@ -360,11 +363,14 @@ export function createPiActions(options: PiOptions) {
 					),
 				),
 			waitForIdle: (c: PiContext, conversationId: ConversationId) =>
-				run(c, async (harness, context) =>
-					(
-						await requireConversation(harness, conversationId, context)
-					).waitForIdle(context),
-				),
+				run(c, async (harness, context, waiting) => {
+					const conversation = await requireConversation(
+						harness,
+						conversationId,
+						context,
+					);
+					return waiting(() => conversation.waitForIdle(context));
+				}),
 			/** The structural view; then `pi.view` frames with Chord operations to this connection. */
 			watch: (c: PiContext, conversationId: ConversationId) =>
 				watchFor<{ value: ConversationView }>(c, {
@@ -389,9 +395,10 @@ export function createPiActions(options: PiOptions) {
 					(await requireSubmission(harness, id, context)).status(context),
 				),
 			wait: (c: PiContext, id: SubmissionId) =>
-				run(c, async (harness, context) =>
-					(await requireSubmission(harness, id, context)).wait(context),
-				),
+				run(c, async (harness, context, waiting) => {
+					const submission = await requireSubmission(harness, id, context);
+					return waiting(() => submission.wait(context));
+				}),
 			abort: (c: PiContext, id: SubmissionId) =>
 				run(c, async (harness, context) =>
 					(await requireSubmission(harness, id, context)).abort(context),
@@ -408,7 +415,7 @@ export function createPiActions(options: PiOptions) {
 			content: UserInput,
 			promptOptions?: PiPromptOptions,
 		) =>
-			run(c, async (harness, context): Promise<PiPromptResult> => {
+			run(c, async (harness, context, waiting): Promise<PiPromptResult> => {
 				const conversation =
 					promptOptions?.conversationId === undefined
 						? await harness.root(context)
@@ -431,7 +438,7 @@ export function createPiActions(options: PiOptions) {
 					c.actorId,
 					conversation.id,
 					model && `${model.provider}/${model.modelId}`,
-					() => submission.wait(context),
+					() => waiting(() => submission.wait(context)),
 				);
 				if (settled.status === "unanswered") {
 					return {
