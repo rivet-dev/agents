@@ -65,6 +65,9 @@ importers:
       e2b:
         specifier: ^2.51.0
         version: 2.52.0
+      freestyle:
+        specifier: ^0.2.16
+        version: 0.2.17
       hono:
         specifier: ^4.13.12
         version: 4.13.12
@@ -140,6 +143,9 @@ importers:
       e2b:
         specifier: ^2.51.0
         version: 2.52.0
+      freestyle:
+        specifier: ^0.2.16
+        version: 0.2.17
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
@@ -2325,6 +2331,10 @@ packages:
     resolution: {integrity: sha512-IGBwjF7tNk3cwypFNH/7bfzBcgSCbaMOD3GsaY1AU/JRrnHnYgEM0+9kQt52iZxjNsjBtJYtao146V+f8jFZNw==}
     engines: {node: '>=10'}
 
+  dotenv@17.4.2:
+    resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
+    engines: {node: '>=12'}
+
   drizzle-orm@0.45.2:
     resolution: {integrity: sha512-kY0BSaTNYWnoDMVoyY8uxmyHjpJW1geOmBMdSSicKo9CIIWkSxMIj2rkeSR51b8KAPB7m+qysjuHme5nKP+E5Q==}
     peerDependencies:
@@ -2665,6 +2675,10 @@ packages:
   forwarded@0.2.0:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
+
+  freestyle@0.2.17:
+    resolution: {integrity: sha512-SQRRJAP+y56/nIDwmqJG5Y5IqqKYAmABqv/gjyzANy0wUe3cqnV1iD14nU9lQAYWtQ5UCl+lnE38nXZFKO0J9Q==}
+    hasBin: true
 
   fresh@2.0.0:
     resolution: {integrity: sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==}
@@ -6674,6 +6688,8 @@ snapshots:
 
   domain-browser@4.22.0: {}
 
+  dotenv@17.4.2: {}
+
   drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(better-sqlite3@12.11.1):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
@@ -7026,6 +7042,17 @@ snapshots:
   forwarded-parse@2.1.2: {}
 
   forwarded@0.2.0: {}
+
+  freestyle@0.2.17:
+    dependencies:
+      dotenv: 17.4.2
+      ws: 8.22.0
+      yargs: 17.7.3
+    optionalDependencies:
+      undici: 8.10.2
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   fresh@2.0.0: {}
 

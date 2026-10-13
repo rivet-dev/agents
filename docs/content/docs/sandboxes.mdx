@@ -1,6 +1,6 @@
 ---
 title: "Sandboxes"
-description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, or a sandbox provider you write."
+description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, or a sandbox provider you write."
 ---
 
 An agent doesn't need a sandbox. Without one, its file tools work on files in the Actor's own database. Add a sandbox only when the agent needs a shell.
@@ -27,28 +27,30 @@ See [Built-in Tools](/agents/docs/built-in-tools) for what each tool does.
 When the agent needs to run commands, such as tests or a build, pass a sandbox provider. <a href="https://github.com/rivet-dev/agents/tree/main/packages/sandbox-adapter" target="_blank" rel="noopener noreferrer">`@rivet-dev/sandbox-adapter`</a> gives each Actor its own sandbox, and `CodingTools` run there.
 
 <div style="overflow-x:auto">
-<svg viewBox="0 0 676 246" role="img" aria-label="The agent Actor sends tool calls through the sandbox adapter, which creates and connects to one sandbox per Actor from a sandbox provider: agentOS, E2B, or Daytona." style="width:100%;min-width:520px;max-width:676px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+<svg viewBox="0 0 676 306" role="img" aria-label="The agent Actor sends tool calls through the sandbox adapter, which creates and connects to one sandbox per Actor from a sandbox provider: agentOS, E2B, Daytona, or Freestyle." style="width:100%;min-width:520px;max-width:676px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
   <defs>
     <marker id="sandboxes-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
   </defs>
-  <rect x="484" y="30" width="172" height="196" rx="10" style="fill:rgb(var(--site-paper-mid, 250 248 243));stroke:rgb(var(--site-pine, 46 64 52));stroke-width:1.4;stroke-dasharray:7 6"/>
+  <rect x="484" y="30" width="172" height="256" rx="10" style="fill:rgb(var(--site-paper-mid, 250 248 243));stroke:rgb(var(--site-pine, 46 64 52));stroke-width:1.4;stroke-dasharray:7 6"/>
   <text x="484" y="20" font-size="11" font-family="ui-monospace, monospace" font-weight="600" letter-spacing="0.14em" style="fill:rgb(var(--site-pine, 46 64 52))">SANDBOX PROVIDERS</text>
-  <rect x="20" y="100" width="140" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
-  <rect x="260" y="100" width="160" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
+  <rect x="20" y="130" width="140" height="56" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
+  <rect x="260" y="130" width="160" height="56" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
   <rect x="500" y="46" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
   <rect x="500" y="106" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
   <rect x="500" y="166" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
+  <rect x="500" y="226" width="140" height="44" rx="7" fill="#fecaca" stroke="#ef4444" stroke-width="2"/>
   <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
-    <path d="M161 128 L258 128" marker-end="url(#sandboxes-arrow)"/>
-    <path d="M421 128 L482 128" marker-end="url(#sandboxes-arrow)"/>
+    <path d="M161 158 L258 158" marker-end="url(#sandboxes-arrow)"/>
+    <path d="M421 158 L482 158" marker-end="url(#sandboxes-arrow)"/>
   </g>
-  <text x="90" y="133" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
-  <text x="340" y="125" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox adapter</text>
-  <text x="340" y="142" text-anchor="middle" font-size="12" fill="#56524a">SandboxProvider</text>
+  <text x="90" y="163" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Agent Actor</text>
+  <text x="340" y="155" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox adapter</text>
+  <text x="340" y="172" text-anchor="middle" font-size="12" fill="#56524a">SandboxProvider</text>
   <text x="570" y="73" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">agentOS</text>
   <text x="570" y="133" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">E2B</text>
   <text x="570" y="193" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Daytona</text>
-  <text x="209.5" y="119" text-anchor="middle" font-size="12" fill="#56524a">tool calls</text>
+  <text x="570" y="253" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Freestyle</text>
+  <text x="209.5" y="149" text-anchor="middle" font-size="12" fill="#56524a">tool calls</text>
 </svg>
 </div>
 
@@ -80,6 +82,7 @@ agentOS needs no provider account. To use E2B or Daytona instead, see
 | [agentOS](/agentos/docs) | None | Sleeps when idle, and keeps its files | Left in place |
 | <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer">E2B</a> | `e2b` | Paused | Deleted |
 | <a href="https://daytona.io" target="_blank" rel="noopener noreferrer">Daytona</a> | `@daytonaio/sdk` | Stopped | Deleted |
+| <a href="https://freestyle.sh" target="_blank" rel="noopener noreferrer">Freestyle</a> | `freestyle` | Paused | Deleted |
 
 Provider credentials stay on your worker and never enter the sandbox.
 
@@ -128,6 +131,22 @@ npm add @rivet-dev/sandbox-adapter @daytonaio/sdk
 | `create` | Options for Daytona's `create`. |
 
 The working directory is the sandbox's own working directory. A stopped sandbox is started again the next time the Actor uses it.
+
+### Freestyle
+
+```sh
+npm add @rivet-dev/sandbox-adapter freestyle
+```
+
+<CodeSnippet file="examples/docs/sandboxes/freestyle.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `create` | Options for Freestyle's `vms.create`, or a function that receives the Actor context and returns them. Required, because `firewall` is required. |
+| `client` | A Freestyle client. Defaults to `new Freestyle()`, which reads `FREESTYLE_API_KEY`. |
+| `cwd` | Working directory inside the VM. Created when the Actor connects. Defaults to `/workspace`. |
+
+A Freestyle VM has no network access until a `firewall` rule allows it. Commands run as `root` through Python 3, so the image must include it. Every `freestyle/ubuntu*` snapshot does.
 
 ## How the sandbox is managed
 

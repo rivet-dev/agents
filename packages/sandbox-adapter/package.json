@@ -14,6 +14,7 @@
 		"sandbox",
 		"e2b",
 		"daytona",
+		"freestyle",
 		"agent",
 		"ai",
 		"rivet",
@@ -44,6 +45,10 @@
 			"types": "./dist/daytona.d.ts",
 			"default": "./dist/daytona.js"
 		},
+		"./freestyle": {
+			"types": "./dist/freestyle.d.ts",
+			"default": "./dist/freestyle.js"
+		},
 		"./pi": {
 			"types": "./dist/pi/index.d.ts",
 			"default": "./dist/pi/index.js"
@@ -61,7 +66,8 @@
 	},
 	"peerDependencies": {
 		"@daytonaio/sdk": "^0.216.0",
-		"e2b": "^2.51.0"
+		"e2b": "^2.51.0",
+		"freestyle": "^0.2.16"
 	},
 	"peerDependenciesMeta": {
 		"@daytonaio/sdk": {
@@ -69,12 +75,16 @@
 		},
 		"e2b": {
 			"optional": true
+		},
+		"freestyle": {
+			"optional": true
 		}
 	},
 	"devDependencies": {
 		"@daytonaio/sdk": "^0.216.0",
 		"@types/node": "^24.0.0",
 		"e2b": "^2.51.0",
+		"freestyle": "^0.2.16",
 		"typescript": "^5.9.2"
 	},
 	"engines": {

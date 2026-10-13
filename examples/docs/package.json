@@ -21,6 +21,7 @@
 		"@slack/web-api": "^8.2.0",
 		"discord-interactions": "^4.4.0",
 		"e2b": "^2.51.0",
+		"freestyle": "^0.2.16",
 		"hono": "^4.13.12",
 		"react": "^19.3.0",
 		"rivetkit": "2.3.26"
