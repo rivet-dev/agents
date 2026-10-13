@@ -259,6 +259,25 @@ importers:
         specifier: latest
         version: 5.9.3
 
+  examples/mcp-parallel:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.27.1
+        version: 1.27.1(zod@4.3.6)
+      sandbox-agent:
+        specifier: workspace:*
+        version: link:../../sdks/typescript
+    devDependencies:
+      '@types/node':
+        specifier: latest
+        version: 25.5.0
+      tsx:
+        specifier: latest
+        version: 4.21.0
+      typescript:
+        specifier: latest
+        version: 5.9.3
+
   examples/mcp-custom-tool:
     dependencies:
       '@modelcontextprotocol/sdk':
