@@ -220,7 +220,9 @@ async function waitForHealth(baseUrl: string, timeoutMs: number): Promise<void> 
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     try {
-      const response = await fetch(`${baseUrl}/v1/health`);
+      // A request can connect and then never get a response, so time out each
+      // attempt. Without this, one stuck request outlives timeoutMs.
+      const response = await fetch(`${baseUrl}/v1/health`, { signal: AbortSignal.timeout(2_000) });
       if (response.ok) {
         return;
       }
