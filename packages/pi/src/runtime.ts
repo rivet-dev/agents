@@ -173,7 +173,9 @@ async function ensureHarness(
 	const runtime = piRuntime(c);
 	// Callers check the status first, so a closed generation never reopens Pi Durable.
 	if (runtime.status !== "open") {
-		throw new Error(`pi durable cannot open after it closed (${runtime.status})`);
+		throw new Error(
+			`pi durable cannot open after it closed (${runtime.status})`,
+		);
 	}
 	runtime.harness ??= openHarness(
 		runtime.actor ?? c,
