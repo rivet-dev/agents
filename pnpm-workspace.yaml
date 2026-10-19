@@ -4,6 +4,7 @@ packages:
   - packages/*
   - examples/*
   - scripts/release
+  - scripts/pipboy
 
 onlyBuiltDependencies:
   - '@biomejs/biome'
