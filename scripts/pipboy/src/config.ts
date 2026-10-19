@@ -27,6 +27,9 @@ export const GATED_PLATFORM = PLATFORMS[0];
  */
 export const PACKAGE_PARENTS = ["packages", "sandbox-agent/sdks"];
 
+/** The Cargo workspace, relative to the repository root. */
+export const CARGO_WORKSPACE = "sandbox-agent";
+
 /**
  * Environment for building packages before packing, matching the release.
  * The `sandbox-agent` SDK reads the committed OpenAPI spec instead of running
