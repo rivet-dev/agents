@@ -104,6 +104,26 @@ await sdk.destroySandbox(); // provider-defined cleanup + disposes client
 
 Use `sdk.dispose()` to disconnect without changing sandbox state, `sdk.pauseSandbox()` for graceful suspension when supported, or `sdk.killSandbox()` for permanent deletion.
 
+## Adapter authentication
+
+Both `SandboxAgent.connect(...)` and `SandboxAgent.start(...)` accept an optional `authentication` setting. Its `selectMethod(agent, methods)` callback receives the agent name and advertised methods before a session is created. Return the selected request, including any required metadata, or `undefined` to skip authentication. The callback may be asynchronous.
+
+```ts
+import { SandboxAgent } from "sandbox-agent";
+
+const sdk = await SandboxAgent.connect({
+  baseUrl: "http://127.0.0.1:2468",
+  authentication: {
+    selectMethod: (_agent, methods) => {
+      const method = methods.find((method) => method.id === "api-key");
+      return method ? { methodId: method.id } : undefined;
+    },
+  },
+});
+```
+
+Use `authentication.clientCapabilities` when an adapter requires capabilities to advertise a custom gateway login. Authentication errors and callback failures propagate to the caller. Without a selector, the SDK retains its best-effort automatic selection of the legacy environment-backed methods. Credentials needed by an environment-backed method must already be available to the adapter process.
+
 ## Session flow
 
 ```ts
