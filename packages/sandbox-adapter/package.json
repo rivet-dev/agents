@@ -15,6 +15,7 @@
 		"e2b",
 		"daytona",
 		"freestyle",
+		"docker",
 		"agent",
 		"ai",
 		"rivet",
@@ -45,6 +46,10 @@
 			"types": "./dist/daytona.d.ts",
 			"default": "./dist/daytona.js"
 		},
+		"./docker": {
+			"types": "./dist/docker.d.ts",
+			"default": "./dist/docker.js"
+		},
 		"./freestyle": {
 			"types": "./dist/freestyle.d.ts",
 			"default": "./dist/freestyle.js"
@@ -58,7 +63,8 @@
 	"types": "./dist/index.d.ts",
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
-		"check-types": "tsc --noEmit"
+		"check-types": "tsc --noEmit",
+		"test": "vitest run"
 	},
 	"dependencies": {
 		"@earendil-works/chord": "^1.0.0",
@@ -85,7 +91,8 @@
 		"@types/node": "^24.0.0",
 		"e2b": "^2.51.0",
 		"freestyle": "^0.2.16",
-		"typescript": "^5.9.2"
+		"typescript": "^5.9.2",
+		"vitest": "3.2.7"
 	},
 	"engines": {
 		"node": ">=22.19.0"

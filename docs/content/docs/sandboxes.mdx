@@ -1,6 +1,6 @@
 ---
 title: "Sandboxes"
-description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, or a sandbox provider you write."
+description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, Docker, or a sandbox provider you write."
 ---
 
 An agent doesn't need a sandbox. Without one, its file tools work on files in the Actor's own database. Add a sandbox only when the agent needs a shell.
@@ -83,6 +83,7 @@ agentOS needs no provider account. To use E2B or Daytona instead, see
 | <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer">E2B</a> | `e2b` | Paused | Deleted |
 | <a href="https://daytona.io" target="_blank" rel="noopener noreferrer">Daytona</a> | `@daytonaio/sdk` | Stopped | Deleted |
 | <a href="https://freestyle.sh" target="_blank" rel="noopener noreferrer">Freestyle</a> | `freestyle` | Paused | Deleted |
+| <a href="https://docs.docker.com" target="_blank" rel="noopener noreferrer">Docker</a> | None. Uses the `docker` CLI. | Stopped | Removed |
 
 Provider credentials stay on your worker and never enter the sandbox.
 
@@ -147,6 +148,28 @@ npm add @rivet-dev/sandbox-adapter freestyle
 | `cwd` | Working directory inside the VM. Created when the Actor connects. Defaults to `/workspace`. |
 
 A Freestyle VM has no network access until a `firewall` rule allows it. Commands run as `root` through Python 3, so the image must include it. Every `freestyle/ubuntu*` snapshot does.
+
+### Docker
+
+For local development. The provider runs the `docker` CLI on your worker, so it uses the current Docker context.
+
+```sh
+npm add @rivet-dev/sandbox-adapter
+```
+
+<CodeSnippet file="examples/docs/sandboxes/docker.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `image` | Image to run. It must include `/bin/sh`. Defaults to `ubuntu:24.04`. |
+| `cwd` | Working directory inside the container. Created when the Actor connects. Defaults to `/workspace`. |
+| `env` | Environment variables of the container. |
+| `network` | Docker network to join. Set `"none"` for no network access. Defaults to `bridge`. The `host` network is rejected. |
+| `ports` | Container ports to publish on a random `127.0.0.1` port. Read the address with `dockerPortAddress(sandboxId, port)`. |
+| `keepImageEntrypoint` | Runs the image's own entrypoint, for images such as `cloudflare/sandbox` that start a server. By default the container runs an idle process. |
+| `docker` | Path of the Docker CLI. Defaults to `docker`. |
+
+Each sandbox is one container with the label `dev.rivet.sandbox-adapter.sandbox-id`. The container has no host mounts, no host environment, no privileged mode, and no host network. A kill or timeout ends the command and every process it started.
 
 ## How the sandbox is managed
 
