@@ -11,6 +11,7 @@
 		"@earendil-works/pi-ai": "^1.0.4",
 		"@earendil-works/pi-coding-agent": "^1.0.4",
 		"@earendil-works/pi-durable": "^1.0.4",
+		"@hono/node-server": "^2.1.5",
 		"@linear/sdk": "^97.0.0",
 		"@octokit/rest": "^22.0.1",
 		"@octokit/webhooks-methods": "^6.0.0",

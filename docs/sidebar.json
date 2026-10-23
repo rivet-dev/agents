@@ -12,6 +12,12 @@
 					"title": "Quickstart",
 					"href": "/agents/docs/quickstart",
 					"icon": "faForwardFast"
+				},
+				{
+					"title": "Guides",
+					"icon": "faBookOpen",
+					"collapsible": true,
+					"mirror": "guides"
 				}
 			]
 		},
@@ -182,6 +188,11 @@
 		{
 			"title": "Agents",
 			"pages": [
+				{
+					"title": "Personal Agent over SMS",
+					"href": "/guides/personal-agent",
+					"icon": "faCommentSms"
+				},
 				{
 					"title": "Sign in with ChatGPT",
 					"href": "/guides/sign-in-with-chatgpt",
