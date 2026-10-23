@@ -82,6 +82,32 @@ export type PiPromptResult =
 	  }
 	| { status: "unanswered"; reason: string; submissionId: SubmissionId };
 
+/** What `submit` returns: the submission, which `submission.status` and `submission.wait` take. */
+export type PiSubmitResult = { submissionId: SubmissionId };
+
+/** Submits user input to the conversation in `options`, or the root conversation. */
+async function submitInput(
+	harness: Harness,
+	content: UserInput,
+	options: PiPromptOptions | undefined,
+	context: Context,
+) {
+	const conversation =
+		options?.conversationId === undefined
+			? await harness.root(context)
+			: await requireConversation(harness, options.conversationId, context);
+	const submission = await conversation.submit(
+		{
+			type: "input",
+			content,
+			requestId: options?.requestId,
+			whenBusy: options?.whenBusy,
+		},
+		context,
+	);
+	return { conversation, submission };
+}
+
 /** The built-in actions of a `pi()` actor, as clients call them. */
 export type PiActions = ReturnType<typeof createPiActions>;
 
@@ -416,21 +442,10 @@ export function createPiActions(options: PiOptions) {
 			promptOptions?: PiPromptOptions,
 		) =>
 			run(c, async (harness, context, waiting): Promise<PiPromptResult> => {
-				const conversation =
-					promptOptions?.conversationId === undefined
-						? await harness.root(context)
-						: await requireConversation(
-								harness,
-								promptOptions.conversationId,
-								context,
-							);
-				const submission = await conversation.submit(
-					{
-						type: "input",
-						content,
-						requestId: promptOptions?.requestId,
-						whenBusy: promptOptions?.whenBusy,
-					},
+				const { conversation, submission } = await submitInput(
+					harness,
+					content,
+					promptOptions,
 					context,
 				);
 				const model = (await conversation.agent(context)).model;
@@ -455,6 +470,26 @@ export function createPiActions(options: PiOptions) {
 							: undefined,
 					submissionId: submission.id,
 				};
+			}),
+
+		/**
+		 * Submits user input and returns without waiting for the run. Pair it
+		 * with `onAnswer` to deliver the answer, such as from a webhook that must
+		 * respond quickly.
+		 */
+		submit: (
+			c: PiContext,
+			content: UserInput,
+			submitOptions?: PiPromptOptions,
+		) =>
+			run(c, async (harness, context): Promise<PiSubmitResult> => {
+				const { submission } = await submitInput(
+					harness,
+					content,
+					submitOptions,
+					context,
+				);
+				return { submissionId: submission.id };
 			}),
 
 		pi: {

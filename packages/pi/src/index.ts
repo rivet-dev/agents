@@ -5,6 +5,7 @@ export type {
 	PiCreateConversationOptions,
 	PiPromptOptions,
 	PiPromptResult,
+	PiSubmitResult,
 } from "./actions.js";
 export {
 	type PiAccess,
@@ -13,6 +14,7 @@ export {
 	type PiUserActions,
 	pi,
 } from "./actor.js";
+export type { PiAnswer, PiOnAnswer } from "./answers.js";
 export type {
 	PiCredentialInfo,
 	PiCredentialSource,
