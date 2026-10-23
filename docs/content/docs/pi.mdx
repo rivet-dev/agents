@@ -139,14 +139,27 @@ The `prompt` action sends input, waits, and returns `{ status: "done", text }` o
 | To | Call |
 | --- | --- |
 | Prompt and wait | `prompt(text, { requestId })` |
-| Start a run without waiting | `conversation.submit(id, { type: "input", content, requestId })` |
+| Start a run without waiting | `submit(text, { requestId })` |
 | Steer a run | `prompt(text, { whenBusy: "steer" })` |
 | Cancel a run | `conversation.abort(id)` |
 | Switch models | `conversation.configure(id, { model: { provider, modelId } })` |
 | Get the root conversation | `harness.root()` |
 | Start a conversation | `harness.createConversation({ ownership: { kind: "ownerless" } })` |
 
-Actions wait up to ten minutes, and a timed-out wait leaves the run going. A prompt sent during a run queues as a follow-up. See the <a href="https://github.com/rivet-dev/agents/blob/main/packages/pi/src/actions.ts" target="_blank" rel="noopener noreferrer">source</a> for every action.
+Actions wait up to ten minutes, and a timed-out wait leaves the run going. A prompt sent during a run queues as a follow-up. `submit` takes the same options as `prompt` and returns `{ submissionId }` at once. Pair it with `onAnswer` to deliver the answer. See the <a href="https://github.com/rivet-dev/agents/blob/main/packages/pi/src/actions.ts" target="_blank" rel="noopener noreferrer">source</a> for every action.
+
+## Deliver answers
+
+`onAnswer` runs in the agent Actor for every final answer, with the Actor's context. Use it to send answers somewhere, such as a chat app or a text message, without a client waiting on `prompt`:
+
+<CodeSnippet file="examples/docs/personal-agent/assistant.ts" title="assistant.ts" region="answer" />
+
+- It gets `{ conversationId, text, message }`. Responses that only call tools aren't final answers, so they don't call it.
+- It runs inside the run, so an answer that finishes after a crash or restart is still delivered. If the Actor stops while `onAnswer` is running, it can run again for the same answer.
+- A throw goes to `onReport` and leaves the answer in the conversation.
+- It runs in conversations that use the default extensions. A conversation that selects its extensions by name doesn't get it.
+
+See [Personal Agent over SMS](/guides/personal-agent) for a complete example.
 
 ## Stream a conversation
 
@@ -211,6 +224,7 @@ The `pi()` function accepts every [`actor()`](/actors/docs/actor-configuration) 
 | `sandbox` | Where `CodingTools` run. Without one, files live in the Actor's database. See [Sandboxes](/agents/docs/sandboxes). |
 | `documents` | Documents clients may read. |
 | `settings` | Pi Durable settings, such as `retry` and `compaction`. |
+| `onAnswer` | Runs for every final answer. See [Deliver answers](#deliver-answers). |
 
 Other options, such as `thinkingLevel` and `env`, pass through to Pi Durable. By default, `actionTimeout` is ten minutes and `sleepGracePeriod` is 15 minutes. A `ConversationBusy` error reaches clients as a `UserError`, and other Pi Durable errors as internal errors.
 

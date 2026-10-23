@@ -47,6 +47,9 @@ images, so this repo needs no dependency on the website's icon package.
 - `href` is the full site path the page renders at: `/agents/docs/...` under
   `docs`, `/guides/...` under `guides`.
 - Adding a page to `content/` does not add it to the nav. Add it here too.
+- A docs group with `"mirror": "guides"` and no `pages` lists this bundle's
+  guides, so the Agents tab shows them without repeating the list. The links
+  open on the Guides tab.
 - Deploy and self-hosting guides are website-owned and generated there.
 
 ## Guides

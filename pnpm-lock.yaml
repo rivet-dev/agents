@@ -35,6 +35,9 @@ importers:
       '@earendil-works/pi-durable':
         specifier: ^1.0.4
         version: 1.1.0(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.32.0(zod@4.6.5))(@smithy/signature-v4@5.7.4)(undici@8.12.3)(ws@8.22.0)(zod@4.6.5)
+      '@hono/node-server':
+        specifier: ^2.1.5
+        version: 2.1.5(hono@4.13.12)
       '@linear/sdk':
         specifier: ^97.0.0
         version: 97.0.0(graphql@17.0.2)
@@ -209,48 +212,61 @@ packages:
 
   '@agentos-software/claude-code@0.2.7':
     resolution: {integrity: sha512-gXmqqOUWT98QvLkQXHn1UU8OOvqMO8BRSj+0PT99mOL6XNpBlPW6L065FJ9dC4IwJC5xeGzB1XFevjOdP7LwQg==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
     hasBin: true
 
   '@agentos-software/codex-cli@0.3.4':
     resolution: {integrity: sha512-SAw3EOTa90dJLgEVVoE7JJIxHwticzdD9cEM9v00gpxhxC9vdLkeBva6rgWIUB9+qD1JEYBvUCyNkIpD2kT5YQ==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@agentos-software/common@0.2.22':
     resolution: {integrity: sha512-Q8bUR9AzkWF7+4pHPH4Rw6rU85NwfRcYPkAPH+leYQelxRhFl7uTSNhzddyCblYEoDUmQHFSQoHB7TWtdRM6CQ==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@agentos-software/coreutils@0.3.5':
     resolution: {integrity: sha512-Drxq0QsYYIRxwRvZ5ok4dKjX8FR1ZKITCjeop9yoFHcAN7NVY9Xm4iq6fC7sX5FYD+b6yqG1KKrg0bmg9v79hA==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@agentos-software/diffutils@0.3.4':
     resolution: {integrity: sha512-a5Do+ERMdHPwT0Vrp35fxSgrsJNK8wCsYX8dOAomH9N+xJyV2Hb7/LLyp7XxqGk9BEjMeA6UhbH5ZY/HAlx5sQ==}
 
   '@agentos-software/findutils@0.3.4':
     resolution: {integrity: sha512-wjBWE3lkXe70fRj6da1+2MM/7KlPcBRhr2BycvgvAtglOT/0PtabFU9CrDuX3Vm/8acU/8tw35+WeitPOLi9mg==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@agentos-software/gawk@0.3.4':
     resolution: {integrity: sha512-NlU6nGxoqIUc1I2zdBHFwH04gE0tBygP2FcBO12VBptty7lbgq1CNLk909jIcSNFEwlm3VRPHeZNkbdVKZ2Ujg==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@agentos-software/grep@0.3.5':
     resolution: {integrity: sha512-HlQgGCOWrc9DcFQmgeuIui00irUtWjNEYxDioCPpX8LO/Z85598jl8Eh0dlWaMLpI0reO4XD59pr7DOnyqoXoQ==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@agentos-software/gzip@0.3.4':
     resolution: {integrity: sha512-l7Y/Vwiwsqgna68yYwdNCnUBPGBg5zdmtjEFeG3hnDDFLe/02h17q0gUIqJmDBIAy1q9GoizqcFi7zXO2xygKg==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@agentos-software/manifest@0.2.22':
     resolution: {integrity: sha512-v3vjHIfjmiD4s5R/wUdMDyyHJc2tH+YiQBbGpv+5v1vvxiF4fJfHMSprluzVzFMi92rkao3w/3tOH2ckSE7bDQ==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@agentos-software/opencode@0.2.7':
     resolution: {integrity: sha512-lZspCiMgM0+kPAA08CEvyNy8lfBx463wObKpAwbYyaVvc0KfGvbAPS6VmnuZQWmaBmJJuRMtSo14nmb8XCD16g==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
     hasBin: true
 
   '@agentos-software/pi@0.2.7':
     resolution: {integrity: sha512-nOdwksByJgTqt92Ya84CzTGxpVFwGI6gkGWaCD/mmvP11JRA++1nshNdbig2mtiaxT7VG3ovWJmK7ZLTTzkhPA==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
     hasBin: true
 
   '@agentos-software/sed@0.3.4':
     resolution: {integrity: sha512-J10nZnZmme2SvXK5WMK2unQlOVncMQVUCS20GZB579a2gNoayLJYHGvfJ9a4+42wOHgDKL1u74byWlydCkEyOQ==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@agentos-software/tar@0.3.5':
     resolution: {integrity: sha512-hSf6PY4q1luIomFSDgVHxVDDIPdAVZxdgwrQFEYH4aIE6TXX9qatVmzR36uYLWpnFGAZTR6srREGoTnmOGV4Lg==}
+    deprecated: 'No longer published to npm. agentOS software ships as .aospkg packages: https://rivet.dev/agentos/docs/software'
 
   '@anthropic-ai/claude-agent-sdk@0.2.87':
     resolution: {integrity: sha512-WWmgBPxPhBOvNT0ujI8vPTI2lK+w5YEkEZ/y1mH0EDkK/0kBnxVJNhCtG5vnueiAViwLoUOFn66pbkDiivijdA==}
@@ -1063,11 +1079,11 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hono/node-server@2.1.3':
-    resolution: {integrity: sha512-TA//nWMqPhbfdfneACk6t5a9eqbS9lABEPyKn0/xZTah3H3U2XaVg85rJFl0/Fyit0I552YDHgXGVSf3GwqbUw==}
+  '@hono/node-server@2.1.5':
+    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: ^4
+      hono: ^4 || ^5.0.0-0
 
   '@hono/zod-openapi@1.6.3':
     resolution: {integrity: sha512-VYR82Y60plu8g3pN60OUXMVKpmxh3R04Qs++3DY9vtwZ9/sA/BRY0PcRIR+Z37/3itWtM7pYwT9bKiH9JhqV6Q==}
@@ -1546,6 +1562,7 @@ packages:
   '@opentelemetry/sdk-trace-node@2.11.0':
     resolution: {integrity: sha512-CuvCMJmZxswhNLlM2LfuLOW3h3fZujA4hsG4B+Sz4dX2zvaXO8Ng74cnDHWD64gLszTlhiG3c0iNUjj4g+0/sA==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -5012,7 +5029,7 @@ snapshots:
       '@smithy/node-http-handler': 4.12.1
       http-proxy-agent: 9.1.0
       https-proxy-agent: 9.1.0
-      openai: 7.19.0(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.4)(undici@8.10.2)(ws@8.22.0)(zod@4.6.5)
+      openai: 7.19.0(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.4)(undici@8.12.3)(ws@8.22.0)(zod@4.6.5)
       partial-json: 0.1.7
       typebox: 1.3.27
     transitivePeerDependencies:
@@ -5463,7 +5480,7 @@ snapshots:
       protobufjs: 7.6.6
       yargs: 17.7.3
 
-  '@hono/node-server@2.1.3(hono@4.13.12)':
+  '@hono/node-server@2.1.5(hono@4.13.12)':
     dependencies:
       hono: 4.13.12
 
@@ -5702,7 +5719,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.0(zod@4.6.5)':
     dependencies:
-      '@hono/node-server': 2.1.3(hono@4.13.12)
+      '@hono/node-server': 2.1.5(hono@4.13.12)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
