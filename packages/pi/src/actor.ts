@@ -123,6 +123,7 @@ const piOptionKeys = [
 	"credentials",
 	"sandbox",
 	"documents",
+	"onAnswer",
 ] as const satisfies readonly (keyof PiOptions)[];
 
 /**

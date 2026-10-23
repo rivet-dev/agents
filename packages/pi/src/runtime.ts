@@ -18,6 +18,7 @@ import { sandboxEnv } from "@rivet-dev/sandbox-adapter/pi";
 import { type ActorContext, UserError } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
 import { actorSqlite } from "./actor-sqlite.js";
+import { type PiOnAnswer, withAnswerHook } from "./answers.js";
 import { SourceCredentialStore } from "./credentials.js";
 import { databaseEnv } from "./database-env.js";
 import { toClientError } from "./errors.js";
@@ -91,6 +92,13 @@ export interface PiOptions extends PiModelOptions {
 	sandbox?: SandboxProvider;
 	/** App documents that clients may read by `kind` with `harness.snapshot`. */
 	documents?: readonly ConversationDocToken<any>[];
+	/**
+	 * Called with the actor's context for every final answer, such as to text
+	 * it to the user. A run that resumes after a crash can call it again for
+	 * the same answer if it didn't return. A throw goes to `onReport` and
+	 * leaves the run as it is.
+	 */
+	onAnswer?: PiOnAnswer;
 }
 
 /**
@@ -304,12 +312,18 @@ async function openHarness(
 ): Promise<OpenHarness> {
 	const storage = await SqliteStorage.open(actorSqlite(c.db));
 	const now = options.now ?? Date.now;
+	const { registry, settings } = options.onAnswer
+		? withAnswerHook(options, c, options.onAnswer, (error) => {
+				c.log.error({ msg: "pi onAnswer failed", error: String(error) });
+				options.onReport?.(error);
+			})
+		: options;
 	const harness = await Harness.open(
 		storage,
 		{
 			models: options.models ?? (await createModels(c, options)),
-			registry: options.registry,
-			settings: options.settings,
+			registry,
+			settings,
 			env:
 				options.env ??
 				(options.sandbox
