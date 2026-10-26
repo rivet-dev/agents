@@ -52,6 +52,7 @@
 	},
 	"peerDependencies": {
 		"@earendil-works/chord": "^1.0.0",
+		"@earendil-works/pi-ai": "^1.0.0",
 		"@earendil-works/pi-durable": "^1.0.0",
 		"rivetkit": ">=2.3.28 <2.4.0"
 	},
