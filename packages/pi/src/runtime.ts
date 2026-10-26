@@ -342,9 +342,11 @@ async function openHarness(
 			now: options.now,
 			onWake: wake.onWake,
 			onReport: (error, info) => {
-				// A commit that failed after storage admitted it leaves Pi Durable
-				// unusable. Background work reports it here, with no action to catch it.
-				queueMicrotask(() => void recoverHarness(c, runtime, options));
+				// A failed storage call closes the Session. Background work reports it
+				// here, with no action to catch it.
+				if (info.type === "session_failed") {
+					queueMicrotask(() => void recoverHarness(c, runtime, options));
+				}
 				options.onReport?.(error, info);
 			},
 		},
