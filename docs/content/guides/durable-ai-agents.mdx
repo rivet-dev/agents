@@ -1,0 +1,171 @@
+---
+title: "Durable AI Agents"
+description: "Run an agent whose conversation, in-flight tool calls, and plan survive crashes, deploys, and restarts."
+---
+
+import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
+
+<ExampleLinkBar href="https://github.com/rivet-dev/agents/tree/main/examples/docs/durable-ai-agents" />
+
+<Diagram
+  id="durable-ai-agents"
+  label="The chat client connects to the chatAgent for its conversation and calls watchEvents. Each message the user types goes straight to the agent with submit, which returns right away. The agent calls the LLM provider and makes tool calls to your API, and saves each step to its SQLite database. The client receives the agent's pi.events stream as it works. The agent sleeps when idle and resumes from SQLite on the next call. The numbers show the order of the calls. There is one agent per conversation."
+  stackLabel="One per conversation"
+  nodes={[
+    { id: "client", x: 20, y: 90, w: 150, title: "Chat client", subtitle: "terminal or browser" },
+    { id: "agent", x: 380, y: 90, product: "agents", stack: true, title: "`chatAgent`", subtitle: "history and plan" },
+    { id: "llm", x: 720, y: 90, w: 150, title: "LLM provider", subtitle: "Anthropic" },
+    { id: "api", x: 380, y: 250, title: "Your API", subtitle: "flights and bookings" },
+  ]}
+  edges={[
+    { from: "client", to: "agent", fromOffset: -12, toOffset: -12, label: "`watchEvents`", step: 1 },
+    { from: "client", to: "agent", fromOffset: 12, toOffset: 12, label: "`submit`", labelAt: [275, 154], step: 2 },
+    { from: "agent", to: "llm", label: "model calls", step: 3 },
+    { from: "agent", to: "api", label: "tool calls", step: 4 },
+    { from: "agent", to: "client", kind: "reply", fromSide: "top", toSide: "top", via: [[465, 40], [95, 40]], label: "`pi.events` stream", step: 5 },
+  ]}
+  notes={[{ x: 590, y: 274, text: "Saves each step to SQLite." }, { x: 590, y: 292, text: "Sleeps when idle and wakes from SQLite." }]}
+/>
+
+A durable agent saves every step of its work as it goes, so a crash, deploy, or restart in the middle of an answer loses nothing. Here a travel assistant keeps its conversation, its plan, and its tool calls in its own SQLite database, and a chat client picks the answer back up after a reload.
+
+What we'll build:
+
+- A `chatAgent` per conversation, keyed by the conversation id, that keeps its history and plan in its own SQLite database.
+- Tools that call your API and don't book a flight twice after a crash.
+- A chat client that sends each message straight to the agent with `submit`, streams the agent's events, and picks the answer back up after a reload.
+
+<Steps>
+
+<Step title="Install">
+
+```sh
+npm add @rivet-dev/pi @earendil-works/pi-durable @earendil-works/pi-ai rivetkit
+```
+
+</Step>
+
+<Step title="Create the agent">
+
+Each conversation gets its own `chatAgent`, keyed by the conversation id:
+
+<CodeSnippet file="examples/docs/durable-ai-agents/chat-agent.ts" title="chat-agent.ts" highlight="agent" />
+
+- There's no step that creates an agent. The client calls `chatAgent.getOrCreate([conversationId])`, so the first message creates the agent and every later message reaches the same one.
+- The agent is a Rivet Actor that runs [Pi](/agents/docs/pi). Pi saves each model call and tool call to the Actor's SQLite database before the next one starts, so there is no separate workflow engine, queue, or database to run.
+- An idle agent sleeps and uses no memory. The next message wakes it with its whole conversation.
+
+</Step>
+
+<Step title="Keep a plan">
+
+The plan is a document: typed state that Pi saves in the same database as the conversation.
+
+<CodeSnippet file="examples/docs/durable-ai-agents/chat-agent.ts" title="chat-agent.ts" highlight="plan" />
+
+- The model calls `update_plan` when a request takes more than one step, and again as each step is done. The tool writes the plan in one commit with `api.commit`.
+- The `plan` section adds the saved plan to the system prompt before every model call. When the context fills up and older messages are summarized, the plan stays in full.
+- `documents: [Plan]` lets a client read the plan with `harness.snapshot("travel.plan", conversationId)`, such as to show a checklist next to the chat.
+
+</Step>
+
+<Step title="Add tools that call your API">
+
+<CodeSnippet file="examples/docs/durable-ai-agents/tools.ts" title="tools.ts" highlight="search,book" />
+
+If the worker crashes while a tool runs, the agent decides on restart whether to run it again:
+
+- `search_flights` only reads, so it sets `replay: "safe"` and simply runs again.
+- `book_flight` changes something, so a second run must not book a second seat. `api.memo` saves an idempotency key with the tool call before the booking, and a rerun gets the same key. Your API returns the first booking when it sees that key again.
+- A tool without `replay: "safe"` isn't run again. The model gets a result saying the call stopped partway and decides what to do. Use that for an API that has no idempotency key.
+- The mocks at the bottom of the file stand in for your API. Replace them with your own calls.
+
+<Note>
+For work with several steps that must each finish once, such as charging a card and then sending a receipt, launch a [task](/agents/docs/pi#tools-and-tasks) from the tool. A task saves a checkpoint after each step and resumes from the last one.
+</Note>
+
+</Step>
+
+<Step title="Start the agent">
+
+Register the agent and start the worker:
+
+<CodeSnippet file="examples/docs/durable-ai-agents/server.ts" title="server.ts" />
+
+There are no HTTP routes. Clients call the agent's actions directly through RivetKit.
+
+</Step>
+
+<Step title="Stream the answer">
+
+The client connects to the agent for its conversation, prints each event, and sends each message with `submit`:
+
+<CodeSnippet file="examples/docs/durable-ai-agents/client.ts" title="client.ts" highlight="stream,send" />
+
+- Events go only to a connection that called `conversation.watchEvents`. Each `pi.events` frame carries a batch of events, such as `text_delta` changes while the model writes and `tool_execution_start` when a tool starts. See [Session Lifecycle](/agents/docs/session-lifecycle#events).
+- A short answer can arrive whole in `message_end`, with no `text_delta` before it, so the client prints the rest of the text there.
+- When the agent restarts while the client is connected, it sends a `snapshot` event on the same stream. The client prints the answer in progress from it and keeps streaming.
+- `submit` saves the message and returns without waiting for the answer. The answer arrives as events, so a slow answer never holds a call open.
+- Each message gets its own `requestId`. If the call is retried with the same id, such as after a network error, it reaches the same submission and the agent doesn't answer twice.
+- A message sent while the agent is still answering waits as a follow-up and runs next.
+
+<Warning>
+This client reads your Rivet credentials from the environment, so it can reach any conversation. A browser should connect with a short-lived token that your backend issues for that user's own agent. See [Client SDK](/agents/docs/client-sdk#browsers).
+</Warning>
+
+</Step>
+
+<Step title="Pick up after a reload">
+
+When the client starts, `watchEvents` returns a snapshot of the conversation before any events arrive:
+
+<CodeSnippet file="examples/docs/durable-ai-agents/client.ts" title="client.ts" region="resume" />
+
+- `snapshot.entries` holds every message so far, so a reload shows the whole conversation without a separate history call.
+- `snapshot.generation.message` is the answer the model is writing right now. The client prints it, sets `printed` to it, and the next `text_delta` continues where it stopped.
+- The run never depended on the client. Closing the tab, or the worker restarting, doesn't stop the answer.
+
+</Step>
+
+<Step title="Try it">
+
+Set your model key and start the worker:
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...
+npx tsx server.ts
+```
+
+In another terminal, start the client with a conversation id:
+
+```sh
+npx tsx client.ts trip-1
+```
+
+Type "Find me a flight from SFO to HND on December 10, then book the cheaper one for Ada Lovelace." The agent saves a plan, searches, and asks you to confirm. Reply `Yes, book it`. Then test a crash:
+
+1. While the agent is writing an answer, kill the worker with `pkill -9 -f server.ts`.
+2. Start it again with `npx tsx server.ts`. The agent wakes from SQLite and carries on with the same run. The model call that was cut off is sent again, and `[resumed]` appears in the client.
+3. Stop the client and run `npx tsx client.ts trip-1` again. It prints the whole conversation, including the booking, which was made once.
+
+See [Resuming a run](/agents/docs/architecture#resuming-a-run) for what happens to each kind of step.
+
+</Step>
+
+</Steps>
+
+## Next steps
+
+- [Multi-Agent Systems](/guides/multi-agent-system): split a job across specialist agents that each survive restarts.
+- [Human in the Loop](/agents/docs/human-in-the-loop): wait for a person to approve the booking.
+- [Schedules](/agents/docs/schedules): check the flight's status every morning without being asked.
+- [Sandboxes](/agents/docs/sandboxes): give the agent a computer to run code and browse.
+- [React SDK](/agents/docs/react-sdk): build the chat client in React.
+
+## Related docs
+
+- [Architecture](/agents/docs/architecture): what survives sleep, crashes, and upgrades.
+- [Pi](/agents/docs/pi): documents, tasks, and every action the agent has.
+- [Custom Tools](/agents/docs/custom-tools): how tools run and what `replay` does.
+- [Session Lifecycle](/agents/docs/session-lifecycle): every event in the stream.
+- [Client SDK](/agents/docs/client-sdk): connections, snapshots, and browser tokens.

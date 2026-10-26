@@ -140,6 +140,10 @@
 						{
 							"title": "Schedules",
 							"href": "/agents/docs/schedules"
+						},
+						{
+							"title": "Sandbox Adapter",
+							"href": "/agents/docs/sandbox-adapter"
 						}
 					]
 				},
@@ -190,13 +194,40 @@
 			"pages": [
 				{
 					"title": "Personal Agent over SMS",
-					"href": "/guides/personal-agent",
-					"icon": "faCommentSms"
+					"href": "/guides/personal-agent"
 				},
 				{
 					"title": "Sign in with ChatGPT",
-					"href": "/guides/sign-in-with-chatgpt",
-					"icon": "faOpenai"
+					"href": "/guides/sign-in-with-chatgpt"
+				},
+				{
+					"title": "Durable AI Agents",
+					"href": "/guides/durable-ai-agents"
+				},
+				{
+					"title": "Multi-Agent Systems",
+					"href": "/guides/multi-agent-system"
+				}
+			]
+		},
+		{
+			"title": "Coding Agents",
+			"pages": [
+				{
+					"title": "Claude Code",
+					"href": "/guides/run-claude-code"
+				},
+				{
+					"title": "Codex",
+					"href": "/guides/run-codex"
+				},
+				{
+					"title": "OpenCode",
+					"href": "/guides/run-opencode"
+				},
+				{
+					"title": "Amp",
+					"href": "/guides/run-amp"
 				}
 			]
 		}

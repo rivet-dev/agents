@@ -7,52 +7,26 @@ import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
 
 <ExampleLinkBar href="https://github.com/rivet-dev/agents/tree/main/examples/docs/sign-in-with-chatgpt" />
 
-<div style="overflow-x:auto">
-<svg viewBox="0 0 700 430" role="img" aria-label="The user calls start on the chatgptLogin Actor, which returns a sign-in URL. The user signs in at OpenAI and chooses Continue. OpenAI redirects the browser to a 127.0.0.1 URL. The user passes that URL to finish. The chatgptLogin Actor exchanges the code with OpenAI for tokens and saves the login to the user's credentials Actor." style="width:100%;min-width:600px;max-width:700px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
-  <defs>
-    <marker id="siwc-request-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
-    <marker id="siwc-response-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:rgb(var(--site-pine, 46 64 52))"/></marker>
-  </defs>
-  <rect x="20" y="20" width="120" height="44" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
-  <rect x="190" y="20" width="140" height="44" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
-  <rect x="380" y="20" width="120" height="44" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
-  <rect x="550" y="20" width="130" height="44" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
-  <g text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">
-    <text x="80" y="47">User</text>
-    <text x="260" y="47" font-family="ui-monospace, monospace" font-size="13">chatgptLogin</text>
-    <text x="440" y="47">OpenAI</text>
-    <text x="615" y="47" font-family="ui-monospace, monospace" font-size="13">credentials</text>
-  </g>
-  <g stroke="#8a8578" stroke-width="1.3" stroke-dasharray="5 5">
-    <line x1="80" y1="64" x2="80" y2="410"/>
-    <line x1="260" y1="64" x2="260" y2="410"/>
-    <line x1="440" y1="64" x2="440" y2="410"/>
-    <line x1="615" y1="64" x2="615" y2="410"/>
-  </g>
-  <g font-size="12" fill="#56524a" text-anchor="middle">
-    <text x="170" y="102" font-family="ui-monospace, monospace">start()</text>
-    <text x="170" y="142">sign-in URL</text>
-    <text x="350" y="182">sign in, Continue</text>
-    <text x="350" y="222">redirect to 127.0.0.1</text>
-    <text x="170" y="262" font-family="ui-monospace, monospace">finish(url)</text>
-    <text x="350" y="302">exchange code</text>
-    <text x="350" y="342">tokens</text>
-    <text x="527" y="382">save login</text>
-  </g>
-  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
-    <line x1="80" y1="110" x2="258" y2="110" marker-end="url(#siwc-request-arrow)"/>
-    <line x1="80" y1="190" x2="438" y2="190" marker-end="url(#siwc-request-arrow)"/>
-    <line x1="80" y1="270" x2="258" y2="270" marker-end="url(#siwc-request-arrow)"/>
-    <line x1="260" y1="310" x2="438" y2="310" marker-end="url(#siwc-request-arrow)"/>
-    <line x1="260" y1="390" x2="613" y2="390" marker-end="url(#siwc-request-arrow)"/>
-  </g>
-  <g stroke-width="1.4" stroke-dasharray="5 4" fill="none" style="stroke:rgb(var(--site-pine, 46 64 52))">
-    <line x1="260" y1="150" x2="82" y2="150" marker-end="url(#siwc-response-arrow)"/>
-    <line x1="440" y1="230" x2="82" y2="230" marker-end="url(#siwc-response-arrow)"/>
-    <line x1="440" y1="350" x2="262" y2="350" marker-end="url(#siwc-response-arrow)"/>
-  </g>
-</svg>
-</div>
+<Diagram
+  id="sign-in-with-chatgpt"
+  label="The user calls start on the chatgptLogin Actor, which returns a sign-in URL. The user signs in at OpenAI and chooses Continue. OpenAI redirects the browser to a 127.0.0.1 URL. The user passes that URL to finish. The chatgptLogin Actor exchanges the code with OpenAI for tokens and saves the login to the user's credentials Actor. The numbers show the order of the steps. There is one chatgptLogin Actor and one credentials Actor per user."
+  stackLabel="One per user"
+  nodes={[
+    { id: "user", x: 20, y: 140, w: 150, h: 84, title: "User", subtitle: "your app" },
+    { id: "login", x: 300, y: 140, h: 84, product: "actors", stack: true, title: "`chatgptLogin`", subtitle: "runs the sign-in" },
+    { id: "openai", x: 600, y: 30, title: "OpenAI", subtitle: "sign-in and tokens" },
+    { id: "credentials", x: 600, y: 270, product: "actors", stack: true, title: "`credentials`", subtitle: "keeps the login" },
+  ]}
+  edges={[
+    { from: "user", to: "login", fromOffset: -26, toOffset: -26, label: "`start`", step: 1 },
+    { from: "login", to: "user", kind: "reply", label: "sign-in URL", step: 2 },
+    { from: "user", to: "openai", fromSide: "top", fromOffset: -20, toOffset: -14, via: [[75, 46]], label: "sign in, Continue", step: 3 },
+    { from: "openai", to: "user", toSide: "top", fromOffset: 14, toOffset: 20, via: [[115, 74]], kind: "reply", label: "redirect to 127.0.0.1", step: 4 },
+    { from: "user", to: "login", fromOffset: 26, toOffset: 26, label: "`finish`", step: 5 },
+    { from: "login", to: "openai", toSide: "bottom", toOffset: 15, via: [[700, 182]], label: "exchange code for tokens", step: 6 },
+    { from: "login", to: "credentials", fromSide: "bottom", via: [[385, 300]], label: "save login", step: 7 },
+  ]}
+/>
 
 What we'll build:
 
@@ -99,6 +73,10 @@ The `credentials` Actor holds each user's login. It gives the agent the access t
 
 <CodeSnippet file="examples/docs/sign-in-with-chatgpt/credentials.ts" title="credentials.ts" />
 
+<Warning>
+Protect both Actors with [authentication](/docs/authentication). `credentials` returns access tokens, and anyone who can call `finish` can save a login to that user.
+</Warning>
+
 </Step>
 
 <Step title="Run the sign-in">
@@ -111,6 +89,7 @@ The `chatgptLogin` Actor drives pi-ai's Sign in with ChatGPT flow:
 - OpenAI sends the browser back to `http://127.0.0.1:1455/auth/callback`. When the worker runs on another machine, that page doesn't load, and the user pastes its URL into your app.
 - `finish` exchanges the code and saves the login with the provider id `openai`.
 - A sign-in that isn't finished within ten minutes is cancelled.
+- pi-ai listens on port 1455 during a sign-in, so each worker runs one sign-in at a time. A second user's `start` on the same worker fails until the first finishes or is cancelled.
 
 </Step>
 
@@ -119,6 +98,10 @@ The `chatgptLogin` Actor drives pi-ai's Sign in with ChatGPT flow:
 <CodeSnippet file="examples/docs/sign-in-with-chatgpt/server.ts" title="server.ts" />
 
 The agent reads the user's credential before every model call, so it can use OpenAI models as soon as the user signs in.
+
+<Note>
+ChatGPT plan tokens only work with the Responses API, so they can't call OpenAI classifier models. Usage counts against the user's plan, and users can set limits for your app in their ChatGPT settings.
+</Note>
 
 </Step>
 
@@ -130,14 +113,34 @@ In a web app, open the URL in a new tab and show a field for the pasted URL. Lab
 
 </Step>
 
+<Step title="Try it">
+
+Start the worker with your host ID set:
+
+```sh
+CHATGPT_HOST_ID=<your host ID> npx tsx server.ts
+```
+
+In another terminal, run the client:
+
+```sh
+npx tsx client.ts
+```
+
+Open the URL it prints, choose **Continue**, and paste the URL you land on if the page asks. The client then prints a five-word greeting from the agent, answered on your ChatGPT plan.
+
+</Step>
+
 </Steps>
 
-## Limitations
+## Next steps
 
-- **One sign-in at a time per worker.** pi-ai listens on port 1455 during a sign-in, so a second user's `start` on the same worker fails until the first finishes or is cancelled.
-- **Only the Responses API.** ChatGPT plan tokens can't call OpenAI classifier models.
-- **Usage counts against the user's plan.** Users set limits for your app in their ChatGPT settings.
+- [User Subscriptions](/agents/docs/user-subscriptions): run each user's agent on their own Claude or ChatGPT plan.
+- [Personal Agent over SMS](/guides/personal-agent): give each signed-in user their own long-lived agent.
+- [Custom Tools](/agents/docs/custom-tools): add tools that call your own APIs.
 
-<Warning>
-Protect both Actors with [authentication](/docs/authentication). `credentials` returns access tokens, and anyone who can call `finish` can save a login to that user.
-</Warning>
+## Related docs
+
+- [Authentication](/docs/authentication): protect the `credentials` and `chatgptLogin` Actors.
+- [Scoped Access](/agents/docs/scoped-access): limit what each caller can do with an agent.
+

@@ -1,0 +1,179 @@
+---
+title: "Multi-Agent Systems"
+description: "Split a large task across an orchestrator agent and specialist agents that work in parallel."
+---
+
+import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
+
+<ExampleLinkBar href="https://github.com/rivet-dev/agents/tree/main/examples/docs/multi-agent-system" />
+
+<Diagram
+  id="multi-agent-system"
+  label="Your app calls submit on the orchestrator agent for a job, which returns right away. The orchestrator's ask_specialist tool fans the work out to one researcher agent per subtask, in parallel, and waits for every answer as the tool result. When the orchestrator finishes its report, its onAnswer hook calls requestReview on the reviewer agent for the job, which returns right away. Your app reads the review with getReview. The numbers show the order of the calls. There is one orchestrator and one reviewer per job, and one researcher per subtask."
+  stackLabel="One per job or subtask"
+  nodes={[
+    { id: "app", x: 20, y: 50, w: 150, title: "Your app", subtitle: "starts a job" },
+    { id: "orchestrator", x: 300, y: 50, product: "agents", stack: true, title: "`orchestrator`", subtitle: "plan and answers" },
+    { id: "researcher", x: 650, y: 50, product: "agents", stack: true, title: "`researcher`", subtitle: "one per subtask" },
+    { id: "reviewer", x: 300, y: 220, product: "agents", stack: true, title: "`reviewer`", subtitle: "checks the report" },
+  ]}
+  edges={[
+    { from: "app", to: "orchestrator", label: "`submit`", step: 1 },
+    { from: "orchestrator", to: "researcher", fromOffset: -12, toOffset: -12, label: "`ask_specialist`", step: 2 },
+    { from: "researcher", to: "orchestrator", kind: "reply", fromOffset: 12, toOffset: 12, label: "answers", labelAt: [566, 112], step: 3 },
+    { from: "orchestrator", to: "reviewer", label: "`requestReview`", step: 4 },
+    { from: "app", to: "reviewer", fromSide: "bottom", via: [[95, 250]], label: "`getReview`", step: 5 },
+  ]}
+/>
+
+An orchestrator agent splits a job into subtasks, hands each one to its own specialist agent, and combines what comes back. Here a research job fans out to researchers that work in parallel, and a reviewer checks the finished report.
+
+What we'll build:
+
+- An `orchestrator` agent per job that breaks the job into subtasks and keeps the plan and the collected answers in its conversation.
+- An `ask_specialist` tool that starts one `researcher` agent per subtask, runs them in parallel, and waits for every answer.
+- A `reviewer` agent per job that gets the finished report as an agent-to-agent message, without the orchestrator waiting for the review.
+- A client that starts each job by calling its orchestrator directly and reads the review from its reviewer.
+- Recovery after a crash, so a finished subtask is not asked again and an unfinished one carries on where it stopped.
+
+<Steps>
+
+<Step title="Install">
+
+```sh
+npm add @rivet-dev/pi @earendil-works/pi-durable @earendil-works/pi-ai @earendil-works/chord rivetkit
+```
+
+</Step>
+
+<Step title="Create the researcher">
+
+Each subtask gets its own `researcher`, with its own tools and a fresh conversation:
+
+<CodeSnippet file="examples/docs/multi-agent-system/researcher.ts" title="researcher.ts" />
+
+- The researcher only sees the question it's given, not the orchestrator's conversation, so its context stays small and on topic.
+- `fetch_page` reads a web page. Give a specialist only the tools its job needs. See [Custom Tools](/agents/docs/custom-tools).
+- It runs on a smaller, cheaper model than the orchestrator, because each subtask is narrow.
+
+</Step>
+
+<Step title="Fan out to researchers">
+
+The orchestrator's `ask_specialist` tool takes every subtask at once and starts one researcher for each:
+
+<CodeSnippet file="examples/docs/multi-agent-system/orchestrator.ts" title="orchestrator.ts" highlight="fan-out" />
+
+- The model writes the plan as the list of `subtasks`. Each researcher is keyed by its own id, so every subtask gets a new agent.
+- `Promise.all` prompts every researcher at once and waits for all of them. The combined answers go back to the model as one tool result, which stays in the orchestrator's conversation.
+- If the orchestrator's run is cancelled, the tool cancels every researcher's run too.
+- `maxItems` caps how many researchers one call can start.
+
+<Note>
+An action waits up to ten minutes. A researcher that takes longer keeps working, but its `prompt` rejects and the tool call fails. Keep subtasks small enough to finish in that time.
+</Note>
+
+</Step>
+
+<Step title="Create the orchestrator">
+
+The orchestrator has `ask_specialist` and a prompt that tells it how to split a job:
+
+<CodeSnippet file="examples/docs/multi-agent-system/orchestrator.ts" title="orchestrator.ts" highlight="agent" />
+
+- Each job gets its own `orchestrator`, keyed by the job id, so jobs never share a conversation.
+- `onAnswer` runs for every final answer, with the orchestrator's own context, so `c.key` is the job id. It sends the report to that job's reviewer.
+- It runs inside the orchestrator's run, so a report that finishes just before a crash still reaches the reviewer. If it runs twice for the same answer, the reviewer gets the same `requestId` and reviews it once.
+
+</Step>
+
+<Step title="Create the reviewer">
+
+The reviewer takes the report as a message and returns before reviewing it:
+
+<CodeSnippet file="examples/docs/multi-agent-system/reviewer.ts" title="reviewer.ts" highlight="review" />
+
+- `requestReview` submits the report to the reviewer's conversation and returns, so the orchestrator never waits for the review. The request is saved before the action returns. See [Agent-to-Agent Messages](/agents/docs/agent-to-agent).
+- The reviewer runs on a different model family than the orchestrator, so it doesn't share the same blind spots.
+- Its `onAnswer` saves the review in the reviewer's state, and `getReview` returns it to your app.
+
+</Step>
+
+<Step title="Register the agents">
+
+All three agents go in one registry:
+
+<CodeSnippet file="examples/docs/multi-agent-system/server.ts" title="server.ts" />
+
+There are no routes to write. Clients call each agent's actions by key through the RivetKit client.
+
+</Step>
+
+<Step title="Start a job">
+
+Your app calls `submit` on the orchestrator for the job:
+
+<CodeSnippet file="examples/docs/multi-agent-system/client.ts" title="client.ts" highlight="start" />
+
+- The app picks the job id and keys the orchestrator by it. The first call creates that job's orchestrator.
+- `submit` starts the job and returns without waiting, so a job that takes many minutes never holds a call open.
+- The job id is also the `requestId`, so a retried call runs the job once.
+
+<Warning>
+Any client can start a job or read a review. In production, protect the Actors with [authentication](/docs/authentication).
+</Warning>
+
+</Step>
+
+<Step title="Recover from a crash">
+
+Nothing extra is needed. Each agent is its own Rivet Actor that saves every step to its own SQLite database, and the fan-out tool is written so a rerun is safe:
+
+- `ask_specialist` sets `replay: "safe"`, so if the orchestrator crashes while researchers are working, the tool runs again when the orchestrator restarts.
+- `api.memo` saves the researcher ids with the tool call, so the rerun reaches the same researchers instead of starting new ones.
+- A researcher that already answered returns its saved answer for the same `requestId` without running again.
+- A researcher that was still working kept going in its own Actor, or resumed from its last saved step if it crashed too. The rerun waits for that run instead of asking again.
+
+See [Resuming a run](/agents/docs/architecture#resuming-a-run) for what happens to each kind of step.
+
+</Step>
+
+<Step title="Try it">
+
+Set the keys for both model providers and start the server:
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+npx tsx server.ts
+```
+
+In another terminal, start a job and wait for its review:
+
+<CodeSnippet file="examples/docs/multi-agent-system/client.ts" title="client.ts" highlight="review" />
+
+```sh
+npx tsx client.ts
+```
+
+To test recovery, kill the server with `kill -9` while the researchers are working, then start it again. The job finishes, and the client prints the review.
+
+</Step>
+
+</Steps>
+
+## Next steps
+
+- [Durable AI Agents](/guides/durable-ai-agents): stream each agent's work to a client as it happens.
+- [Sandboxes](/agents/docs/sandboxes): give a specialist a computer to run code and browse.
+- [Workflows](/agents/docs/workflows): run agents as fixed steps with retries and waits.
+- [Human in the Loop](/agents/docs/human-in-the-loop): ask a person before a report goes out.
+- [Observability](/agents/docs/observability): trace each agent's runs.
+
+## Related docs
+
+- [Subagents](/agents/docs/subagents): one lead agent that waits for one specialist.
+- [Agent-to-Agent Messages](/agents/docs/agent-to-agent): hand work to another agent without waiting.
+- [Design Patterns](/agents/docs/design-patterns): how to key agents per job, user, or task.
+- [Pi](/agents/docs/pi): `onAnswer`, `c.pi`, and every action an agent has.
+- [Architecture](/agents/docs/architecture): what survives sleep, crashes, and upgrades.

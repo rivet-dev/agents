@@ -1,0 +1,169 @@
+---
+title: "Codex"
+description: "Run the OpenAI Codex CLI in a cloud sandbox from your app, one session per Rivet Actor, and stream its output as it works."
+---
+
+import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
+
+<ExampleLinkBar href="https://github.com/rivet-dev/agents/tree/main/examples/docs/run-codex" />
+
+<Diagram
+  id="run-codex"
+  label="Your app calls prompt on the codexSession Actor for that session. The Actor calls create or connect on the sandbox adapter to get its sandbox on E2B, Daytona, or Freestyle. The adapter's exec runs codex exec in the sandbox, and Codex calls the OpenAI API. The adapter passes the output back to the Actor through onData, and the Actor broadcasts each event to your app as an output event. The Actor keeps the transcript and the sandbox id. The numbers show the order of the calls. There is one Actor and one sandbox per session."
+  stackLabel="One per session"
+  width={940}
+  nodes={[
+    { id: "app", x: 20, y: 90, w: 150, title: "Your app", subtitle: "prompt, live output" },
+    { id: "actor", x: 300, y: 90, w: 190, product: "actors", stack: true, title: "`codexSession`", subtitle: "transcript, sandbox id" },
+    { id: "adapter", x: 655, y: 90, title: "`sandbox-adapter`", subtitle: "`Sandbox` API" },
+    { id: "sandbox", x: 595, y: 250, w: 290, title: "Sandbox", subtitle: "E2B, Daytona, or Freestyle" },
+    { id: "model", x: 300, y: 250, w: 145, title: "OpenAI API", subtitle: "runs the model" },
+  ]}
+  edges={[
+    { from: "app", to: "actor", label: "`prompt`", step: 1 },
+    { from: "actor", to: "adapter", fromOffset: -12, toOffset: -12, label: "`create`, `connect`", step: 2 },
+    { from: "adapter", to: "sandbox", label: "`exec` runs `codex exec`", step: 3 },
+    { from: "sandbox", to: "model", label: "model calls", step: 4 },
+    { from: "adapter", to: "actor", kind: "reply", fromOffset: 12, toOffset: 12, label: "`onData`", labelAt: [572, 160], step: 5 },
+    { from: "actor", to: "app", kind: "reply", fromSide: "top", toSide: "top", via: [[395, 40], [95, 40]], label: "`output` events", step: 6 },
+  ]}
+/>
+
+Run the Codex CLI for your users in cloud sandboxes, with one Rivet Actor per session that remembers the conversation and the sandbox.
+
+What we'll build:
+
+- A `codexSession` Rivet Actor per session, keyed by your session id, that stores the transcript, the sandbox id, and Codex's own thread id.
+- An E2B sandbox per session, created through the sandbox adapter, with the Codex CLI installed on first use.
+- A `prompt` action that runs `codex exec` with `exec` and streams each JSON event to connected clients as it arrives.
+- Follow-up prompts that reconnect to the same sandbox and resume the same Codex thread.
+
+<Steps>
+
+<Step title="Install">
+
+```sh
+npm add @rivet-dev/sandbox-adapter e2b rivetkit
+```
+
+Codex itself isn't installed on your worker. Each sandbox installs its own copy.
+
+</Step>
+
+<Step title="Set the keys">
+
+Create an API key in the <a href="https://e2b.dev/dashboard" target="_blank" rel="noopener noreferrer">E2B dashboard</a> and one on the <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI platform</a>, then set both on your worker:
+
+```sh
+E2B_API_KEY=e2b_...
+CODEX_API_KEY=sk-...
+```
+
+The E2B key never enters the sandbox. The OpenAI key reaches only the Codex process, as the next step shows.
+
+</Step>
+
+<Step title="Build the command">
+
+`cli.ts` holds everything that is specific to Codex: how to install it, how to run it without a terminal, and how to read what it prints:
+
+<CodeSnippet file="examples/docs/run-codex/cli.ts" title="cli.ts" highlight="command,events" />
+
+- `INSTALL` runs the standalone Codex installer, which puts the CLI at `~/.local/bin/codex`. The `test -x` check skips the download when the sandbox already has it.
+- `codex exec` runs one prompt and exits. `--json` prints every event, such as the start of the thread, each command Codex runs, and each message, as one JSON line.
+- `--skip-git-repo-check` lets Codex work in the sandbox's home directory, which isn't a Git repository. Without it, Codex refuses to start there.
+- `--sandbox danger-full-access` turns off Codex's own sandbox, which is read-only by default in `codex exec`. The cloud sandbox is the boundary, and commands such as `npm install` need to write files and reach the network.
+- `resume` continues the thread from an earlier run. Codex keeps its sessions under `~/.codex` inside the sandbox, so this works for as long as the sandbox exists.
+- `readEvent` takes the thread id from the first event, `thread.started`, and the answer from the last finished agent message.
+
+<Warning>
+`cliEnv` passes `CODEX_API_KEY` in the `env` of a single `exec` call. The provider hands it to that one process, and it is never written to the sandbox's disk. Commands that Codex runs inherit it, though, so code in the sandbox can read it. Give the sandbox a key with a spending limit.
+</Warning>
+
+</Step>
+
+<Step title="Create the session Actor">
+
+Each session is a `codexSession` Actor, keyed by your session id:
+
+<CodeSnippet file="examples/docs/run-codex/session.ts" title="session.ts" highlight="state" />
+
+- `state` is saved with the Actor, so it survives sleep, crashes, and upgrades. It holds the transcript, the session's sandbox id, and the thread id Codex gave its own session, which is different from your session id.
+- `output` is the event that carries Codex's JSON events to every connected client.
+- `running` lives in `vars`, which are not saved. It stops a second prompt from starting a second Codex in the same sandbox while the first one works.
+- `actionTimeout` raises RivetKit's 60-second limit on an action, because one coding task can take many minutes.
+
+<Warning>
+Any client that knows a session id can prompt it, and every prompt runs commands with your API key. In production, protect the Actor with [authentication](/docs/authentication).
+</Warning>
+
+</Step>
+
+<Step title="Connect the sandbox">
+
+The Actor creates its sandbox on the first prompt and reconnects to it on every prompt after that:
+
+<CodeSnippet file="examples/docs/run-codex/session.ts" title="session.ts" highlight="provider,sandbox,lifecycle" />
+
+- `e2bProvider` starts sandboxes from E2B's `base` template. E2B stops a sandbox when its timeout runs out, so the one-hour timeout covers a long task, and the provider pauses the sandbox at the timeout instead of deleting it.
+- `openSandbox` connects with the stored id. On the first prompt, or after the provider has deleted the sandbox, it creates a new one, saves its id, and clears Codex's thread id, since the new sandbox has none of the earlier files.
+- `INSTALL` runs on every connect but returns right away once Codex is installed, so an install that failed partway is retried on the next prompt.
+- `onSleep` pauses the sandbox while the Actor sleeps. The next prompt resumes it with its files and Codex's sessions intact. `onDestroy` deletes it.
+
+<Note>
+agentOS can't run Codex, because it only runs software from its own registry, not binaries downloaded with `curl`. Daytona can: pass `daytonaProvider()` from `@rivet-dev/sandbox-adapter/daytona` instead, but Daytona returns a command's output only when it exits, so clients get the events all at once at the end. Freestyle works too, with a firewall rule that allows HTTPS out. See [Providers](/agents/docs/sandboxes#providers).
+</Note>
+
+</Step>
+
+<Step title="Run a prompt">
+
+The `prompt` action runs Codex once and streams what it prints:
+
+<CodeSnippet file="examples/docs/run-codex/session.ts" title="session.ts" highlight="prompt" />
+
+- `exec` runs the command in the sandbox's working directory. Its `onData` callback receives output as the sandbox reports it, and `jsonLines` turns that into one event per JSON line.
+- Each event is broadcast to connected clients right away, so your app can show commands and messages while Codex works.
+- The first event carries Codex's thread id, which the Actor saves so the next prompt passes it to `resume`.
+- The transcript gets the prompt and the final answer only after Codex exits cleanly. A failed run throws a `UserError` that the client receives with the reason.
+- `c.abortSignal` stops Codex if the Actor shuts down mid-run, and `timeoutMs` stops it if it runs too long.
+
+</Step>
+
+<Step title="Try it">
+
+Register the Actor and start the worker:
+
+<CodeSnippet file="examples/docs/run-codex/server.ts" title="server.ts" />
+
+```sh
+npx tsx server.ts
+```
+
+In another terminal, connect to a session and send a prompt and a follow-up:
+
+<CodeSnippet file="examples/docs/run-codex/client.ts" title="client.ts" />
+
+```sh
+npx tsx client.ts
+```
+
+The first prompt takes longer because it creates the sandbox and installs Codex. The follow-up reuses both and continues the same thread, so "it" refers to `fib.py`. Run `client.ts` again later with the same session id and it picks up where it left off. Call `getTranscript` to show the earlier turns.
+
+</Step>
+
+</Steps>
+
+## Next steps
+
+- [Claude Code](/guides/run-claude-code), [OpenCode](/guides/run-opencode), and [Amp](/guides/run-amp): the same setup with other coding agents.
+- [Sandbox Agent](/sandbox-agent/docs): drive Codex, Claude Code, OpenCode, Amp, and others through one HTTP API with a shared event format and permission requests, instead of each CLI's own flags.
+- [Pi](/agents/docs/pi): a coding agent that runs inside the Actor, with a durable conversation and tools that run in a sandbox.
+- [Authentication](/docs/authentication): check that the caller may use a session before it runs a prompt.
+
+## Related docs
+
+- [Sandboxes](/agents/docs/sandboxes): every provider and what each does while the Actor sleeps.
+- [Sandbox Adapter](/agents/docs/sandbox-adapter): the `create`, `connect`, and `exec` API this guide uses.
+- [Events](/actors/docs/events) and [State](/actors/docs/state): how the Actor broadcasts output and keeps the session.
+- <a href="https://developers.openai.com/codex/noninteractive" target="_blank" rel="noopener noreferrer">Codex non-interactive mode</a>: every option `codex exec` accepts.
