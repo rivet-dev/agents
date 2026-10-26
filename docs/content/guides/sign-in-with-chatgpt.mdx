@@ -73,6 +73,10 @@ The `credentials` Actor holds each user's login. It gives the agent the access t
 
 <CodeSnippet file="examples/docs/sign-in-with-chatgpt/credentials.ts" title="credentials.ts" />
 
+<Warning>
+Protect both Actors with [authentication](/docs/authentication). `credentials` returns access tokens, and anyone who can call `finish` can save a login to that user.
+</Warning>
+
 </Step>
 
 <Step title="Run the sign-in">
@@ -85,6 +89,7 @@ The `chatgptLogin` Actor drives pi-ai's Sign in with ChatGPT flow:
 - OpenAI sends the browser back to `http://127.0.0.1:1455/auth/callback`. When the worker runs on another machine, that page doesn't load, and the user pastes its URL into your app.
 - `finish` exchanges the code and saves the login with the provider id `openai`.
 - A sign-in that isn't finished within ten minutes is cancelled.
+- pi-ai listens on port 1455 during a sign-in, so each worker runs one sign-in at a time. A second user's `start` on the same worker fails until the first finishes or is cancelled.
 
 </Step>
 
@@ -93,6 +98,10 @@ The `chatgptLogin` Actor drives pi-ai's Sign in with ChatGPT flow:
 <CodeSnippet file="examples/docs/sign-in-with-chatgpt/server.ts" title="server.ts" />
 
 The agent reads the user's credential before every model call, so it can use OpenAI models as soon as the user signs in.
+
+<Note>
+ChatGPT plan tokens only work with the Responses API, so they can't call OpenAI classifier models. Usage counts against the user's plan, and users can set limits for your app in their ChatGPT settings.
+</Note>
 
 </Step>
 
@@ -104,14 +113,34 @@ In a web app, open the URL in a new tab and show a field for the pasted URL. Lab
 
 </Step>
 
+<Step title="Try it">
+
+Start the worker with your host ID set:
+
+```sh
+CHATGPT_HOST_ID=<your host ID> npx tsx server.ts
+```
+
+In another terminal, run the client:
+
+```sh
+npx tsx client.ts
+```
+
+Open the URL it prints, choose **Continue**, and paste the URL you land on if the page asks. The client then prints a five-word greeting from the agent, answered on your ChatGPT plan.
+
+</Step>
+
 </Steps>
 
-## Limitations
+## Next steps
 
-- **One sign-in at a time per worker.** pi-ai listens on port 1455 during a sign-in, so a second user's `start` on the same worker fails until the first finishes or is cancelled.
-- **Only the Responses API.** ChatGPT plan tokens can't call OpenAI classifier models.
-- **Usage counts against the user's plan.** Users set limits for your app in their ChatGPT settings.
+- [User Subscriptions](/agents/docs/user-subscriptions): run each user's agent on their own Claude or ChatGPT plan.
+- [Personal Agent over SMS](/guides/personal-agent): give each signed-in user their own long-lived agent.
+- [Custom Tools](/agents/docs/custom-tools): add tools that call your own APIs.
 
-<Warning>
-Protect both Actors with [authentication](/docs/authentication). `credentials` returns access tokens, and anyone who can call `finish` can save a login to that user.
-</Warning>
+## Related docs
+
+- [Authentication](/docs/authentication): protect the `credentials` and `chatgptLogin` Actors.
+- [Scoped Access](/agents/docs/scoped-access): limit what each caller can do with an agent.
+
