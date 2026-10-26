@@ -189,7 +189,7 @@ A fork with `fork: "current"` starts with a copy of the document. Clients can al
 
 - When you ship new code, running work gets up to `sleepGracePeriod` (15 minutes) to finish before the Actor restarts.
 - Anything cut off resumes from its last saved step, after your `onWake` runs.
-- A retry wait longer than a minute lets the Actor sleep, and a scheduled wake resumes it.
+- A retry wait lets the Actor sleep, and a scheduled wake resumes it when the wait ends.
 - Destroying the Actor stops it immediately.
 
 See [Architecture](/agents/docs/architecture).

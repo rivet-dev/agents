@@ -51,7 +51,7 @@ A conversation is idle until a prompt starts a run, and goes back to idle when t
 
 An idle agent sleeps and frees its memory. The next action on its key wakes it: the agent opens Pi from SQLite, resumes interrupted work, and reconnects to the same sandbox the first time a tool needs it, so clients don't do anything different. While the agent sleeps, its sandbox is suspended.
 
-During a retry or poll wait longer than a minute, the Actor also sleeps, and a scheduled wake resumes the work when the wait ends.
+During a retry or poll wait, the Actor also sleeps, and a scheduled wake resumes the work when the wait ends.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 640 280" role="img" aria-label="The agent loop runs in memory and saves each step to the Actor&#x27;s SQLite database, which also holds the sandbox id. On wake, the loop is restored from SQLite and reconnects to the same sandbox. Sleep, a crash, or an upgrade clears memory, and SQLite is kept." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">

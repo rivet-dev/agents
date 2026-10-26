@@ -1,4 +1,4 @@
-import type { Context, JsonValue } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Models, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import {
@@ -10,6 +10,7 @@ import {
 	type HarnessOptions,
 	type HarnessSettings,
 	type ModelRef,
+	type Wake,
 } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { SqliteStorage } from "@earendil-works/pi-durable/storage/sqlite";
@@ -105,20 +106,16 @@ export interface PiOptions extends PiModelOptions {
 	onAnswer?: PiOnAnswer;
 }
 
-/**
- * One minute, as in Cloudflare's Pi harness. A retry or poll wait longer than
- * this lets the actor sleep, and a scheduled wake reopens Pi Durable at the
- * deadline.
- */
-const LONG_WAIT_MS = 60_000;
-
 /** The internal action a scheduled wake calls. */
 const WAKE_ACTION = "pi.wake";
 
 interface OpenHarness {
 	harness: Harness;
-	stopBusyWatch: () => void;
-	isBusy: () => Promise<boolean>;
+	/** Calls `listener` whenever Pi's wake value changes. Returns a function that stops it. */
+	onWakeChange: (listener: () => void) => () => void;
+	/** Resumes Pi's due sleeps, for the scheduled `pi.wake`. */
+	resumeDue: () => void;
+	stopWake: () => void;
 }
 
 /** Per-actor-generation state, stored on `c.vars` under `PI_RUNTIME`. */
@@ -325,6 +322,7 @@ async function openHarness(
 				});
 			})
 		: options;
+	const wake = wakeActor(c, now);
 	const harness = await Harness.open(
 		storage,
 		{
@@ -342,6 +340,7 @@ async function openHarness(
 							})),
 			conversationCreated: startingAgent(options),
 			now: options.now,
+			onWake: wake.onWake,
 			onReport: (error, info) => {
 				// A commit that failed after storage admitted it leaves Pi Durable
 				// unusable. Background work reports it here, with no action to catch it.
@@ -351,14 +350,16 @@ async function openHarness(
 		},
 		BACKGROUND_CONTEXT,
 	);
+	wake.attach(harness);
 	reportBlockedTasks(c, await harness.inspect(BACKGROUND_CONTEXT));
 	if (open.resume) harness.resume();
-	const isBusy = async () =>
-		busyState(await harness.inspect(BACKGROUND_CONTEXT), now(), LONG_WAIT_MS)
-			.kind === "busy";
-	const stopBusyWatch = watchBusy(c, harness, now, LONG_WAIT_MS);
 	await reattachWatches(c, runtime.watches, harness, documentsByKind(options));
-	return { harness, stopBusyWatch, isBusy };
+	return {
+		harness,
+		onWakeChange: wake.subscribe,
+		resumeDue: wake.resumeDue,
+		stopWake: wake.stop,
+	};
 }
 
 /** App documents by `kind`, for clients that name a document. */
@@ -423,7 +424,7 @@ async function closeOpenHarness(
 	open: OpenHarness,
 	watches: ConnectionWatches,
 ): Promise<void> {
-	open.stopBusyWatch();
+	open.stopWake();
 	await stopAllWatches(watches);
 	await open.harness.close(BACKGROUND_CONTEXT);
 }
@@ -512,73 +513,35 @@ function reportBlockedTasks(c: PiContext, inspection: HarnessInspection): void {
 	}
 }
 
-type BusyState =
-	| { kind: "busy" }
-	| { kind: "idle" }
-	/** Every live task waits for a deadline further away than the long wait threshold. */
-	| { kind: "waiting"; until: number };
-
 /**
- * Whether live work should keep the actor awake. Tasks that run or are ready
- * to run do. A task in a retry or poll wait longer than `longWaitMs` does not;
- * the actor sleeps and a scheduled wake reopens it at the deadline. Waiting
- * and completing tasks depend on other tasks, which decide. Blocked tasks
- * never run, so they never keep the actor awake.
+ * Keeps the actor awake while Pi Durable can run work, and schedules a wake
+ * for its earliest sleeping task, such as a retry backoff. Pi calls `onWake`
+ * after open and whenever the value changes. With `onWake`, Pi keeps no timer
+ * for sleeps, so the scheduled `pi.wake` action resumes them.
+ *
+ * Pi runs a sleep only once its time has passed, and reports a wake only when
+ * the value changes. So a wake that fires early, even by a millisecond,
+ * re-reads the value and schedules again.
  */
-function busyState(
-	inspection: HarnessInspection,
-	now: number,
-	longWaitMs: number,
-): BusyState {
-	let until: number | undefined;
-	for (const task of inspection.tasks) {
-		switch (task.state.kind) {
-			case "running":
-			case "ready": {
-				const deadline = waitDeadline(task.record.state.checkpoint);
-				if (deadline === undefined || deadline - now <= longWaitMs)
-					return { kind: "busy" };
-				until = Math.min(until ?? deadline, deadline);
-				break;
-			}
-			case "waiting":
-			case "completing":
-			case "blocked":
-				break;
-		}
-	}
-	return until === undefined ? { kind: "idle" } : { kind: "waiting", until };
-}
-
-/** The deadline of a task checkpoint in Pi's retry or poll phase. */
-function waitDeadline(checkpoint: JsonValue | undefined): number | undefined {
-	if (
-		typeof checkpoint !== "object" ||
-		checkpoint === null ||
-		Array.isArray(checkpoint)
-	)
-		return undefined;
-	if (checkpoint.phase === "retry" && typeof checkpoint.until === "number")
-		return checkpoint.until;
-	if (checkpoint.phase === "poll" && typeof checkpoint.pollAt === "number")
-		return checkpoint.pollAt;
-	return undefined;
-}
-
-/**
- * Keeps the actor awake while Pi Durable has live work, rechecking after
- * every commit. Returns a function that stops watching.
- */
-function watchBusy(
+function wakeActor(
 	c: PiContext,
-	harness: Harness,
 	now: () => number,
-	longWaitMs: number,
-): () => void {
+): {
+	onWake: (wake: Wake) => void;
+	attach: (harness: Harness) => void;
+	subscribe: (listener: () => void) => () => void;
+	resumeDue: () => void;
+	stop: () => void;
+} {
+	const listeners = new Set<() => void>();
+	let harness: Harness | undefined;
+	let latest: Wake = { active: false };
 	let release: (() => void) | undefined;
-	let scheduledWakeAt: number | undefined;
-	let checking = false;
-	let dirty = false;
+	let scheduledAt: number | undefined;
+	let scheduling = false;
+	let fallback:
+		| { at: number; timer: ReturnType<typeof setTimeout> }
+		| undefined;
 	let stopped = false;
 
 	const stayAwake = () => {
@@ -591,64 +554,72 @@ function watchBusy(
 		release?.();
 		release = undefined;
 	};
-	const check = async () => {
-		if (checking) {
-			dirty = true;
-			return;
-		}
-		checking = true;
-		try {
-			do {
-				dirty = false;
-				const busy = busyState(
-					await harness.inspect(BACKGROUND_CONTEXT),
-					now(),
-					longWaitMs,
-				);
-				if (stopped) return;
-				if (busy.kind === "waiting" && busy.until !== scheduledWakeAt) {
-					// The actor may sleep through a long wait only once its wake is written.
-					stayAwake();
-					try {
-						await c.schedule.at(busy.until, WAKE_ACTION);
-						scheduledWakeAt = busy.until;
-					} catch (error) {
-						// Pi's own timer then ends the wait, and its commit checks again.
-						c.log.warn({
-							msg: "pi durable could not schedule its wake, so the actor stays awake through the wait",
-							error,
-						});
-					}
-					if (stopped) return;
-				}
-				const canSleep =
-					busy.kind === "idle" ||
-					(busy.kind === "waiting" && busy.until === scheduledWakeAt);
-				if (canSleep) letGo();
-				else stayAwake();
-			} while (dirty && !stopped);
-		} catch (error) {
-			if (!stopped) c.log.warn({ msg: "pi durable busy check failed", error });
-		} finally {
-			checking = false;
-		}
+	const apply = () => {
+		if (stopped) return;
+		const { active, at } = latest;
+		if (active) return stayAwake();
+		if (at === undefined || at === scheduledAt) return letGo();
+		// The actor may sleep only once its wake is written.
+		stayAwake();
+		if (scheduling || fallback?.at === at) return;
+		scheduling = true;
+		c.schedule
+			.at(at, WAKE_ACTION)
+			.then(
+				() => {
+					scheduledAt = at;
+				},
+				(error: unknown) => {
+					c.log.warn({
+						msg: "pi durable could not schedule its wake, so the actor stays awake until it",
+						error,
+					});
+					if (fallback) clearTimeout(fallback.timer);
+					fallback = {
+						at,
+						timer: setTimeout(resumeDue, Math.max(0, at - now())),
+					};
+				},
+			)
+			.finally(() => {
+				scheduling = false;
+				apply();
+			});
 	};
-
-	// Commit listeners must not call Pi Durable, so the check runs after the listener returns.
-	const unsubscribe = harness.subscribeCommits(() =>
-		queueMicrotask(() => void check()),
-	);
+	const resumeDue = () => {
+		if (stopped || !harness) return;
+		harness.resume();
+		if (fallback) clearTimeout(fallback.timer);
+		fallback = undefined;
+		scheduledAt = undefined;
+		latest = harness.wake();
+		apply();
+	};
 	const stop = () => {
 		stopped = true;
-		unsubscribe();
+		if (fallback) clearTimeout(fallback.timer);
 		letGo();
 	};
 	// Keep-awake only blocks idle sleep. Once shutdown starts it would only delay it.
 	c.abortSignal.addEventListener("abort", stop, { once: true });
-	void check();
-	return () => {
-		c.abortSignal.removeEventListener("abort", stop);
-		stop();
+	return {
+		onWake: (wake) => {
+			latest = wake;
+			apply();
+			for (const listener of listeners) listener();
+		},
+		attach: (opened) => {
+			harness = opened;
+		},
+		subscribe: (listener) => {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+		resumeDue,
+		stop: () => {
+			c.abortSignal.removeEventListener("abort", stop);
+			stop();
+		},
 	};
 }
 
@@ -668,6 +639,8 @@ async function drain(
 	let changed = () => {};
 	let timedOut = false;
 	const unsubscribe = open.harness.subscribeCommits(() => changed());
+	// Pi can settle its wake value after the last commit, so its change counts too.
+	const unsubscribeWake = open.onWakeChange(() => changed());
 	runtime.callEnded = () => changed();
 	const timer = setTimeout(
 		() => {
@@ -682,7 +655,7 @@ async function drain(
 			const next = new Promise<void>((resolve) => {
 				changed = resolve;
 			});
-			if (runtime.calls === 0 && !(await open.isBusy())) return;
+			if (runtime.calls === 0 && !open.harness.wake().active) return;
 			await next;
 		}
 		c.log.warn({
@@ -691,6 +664,7 @@ async function drain(
 	} finally {
 		clearTimeout(timer);
 		unsubscribe();
+		unsubscribeWake();
 		runtime.callEnded = undefined;
 	}
 }
@@ -736,6 +710,11 @@ export async function closeHarness(
 	if (errors.length === 1) throw errors[0];
 	if (errors.length > 1)
 		throw new AggregateError(errors, "pi durable shutdown failed");
+}
+
+/** Resumes Pi's due sleeps when the scheduled `pi.wake` fires. Call it once the harness is open. */
+export async function resumeDueSleeps(c: PiContext): Promise<void> {
+	(await piRuntime(c).harness)?.resumeDue();
 }
 
 /** Runs `body` with a `c.pi` that throws `error` when read. */
