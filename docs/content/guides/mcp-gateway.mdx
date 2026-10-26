@@ -1,0 +1,50 @@
+---
+title: "MCP Gateway"
+description: "Put one MCP endpoint in front of your internal MCP servers, with per-user tool access and an audit log."
+---
+
+<Diagram
+  id="mcp-gateway"
+  label="An MCP client such as Claude, Cursor, or ChatGPT connects over Streamable HTTP with the user's token to the /mcp route of your server. The route calls handle on the gatewaySession Actor for that user session. The Actor checks the token with your identity provider, then returns only the tools the user may use and forwards each tools/call to the internal MCP server that owns the tool. It writes an audit entry for every call to its SQLite database and streams the results back to the client. The numbers show the order of the calls. There is one gatewaySession Actor per user session."
+  stackLabel="One per user session"
+  nodes={[
+    { id: "client", x: 20, y: 120, w: 160, title: "MCP client", subtitle: "Claude, Cursor, ChatGPT" },
+    { id: "server", kind: "group", x: 360, y: 98, w: 170, h: 84, title: "Your server" },
+    { id: "mcp", kind: "slot", x: 375, y: 132, w: 140, h: 36, title: "`/mcp`" },
+    { id: "gateway", x: 650, y: 120, w: 180, product: "actors", stack: true, title: "`gatewaySession`", subtitle: "tool policy, audit log" },
+    { id: "idp", x: 655, y: 270, w: 170, title: "Identity provider", subtitle: "Okta, Entra ID" },
+    { id: "upstream", kind: "boundary", x: 980, y: 25, w: 210, h: 250, title: "Internal MCP servers" },
+    { id: "github", x: 1000, y: 60, h: 50, title: "GitHub MCP" },
+    { id: "tickets", x: 1000, y: 125, h: 50, title: "Tickets MCP" },
+    { id: "billing", x: 1000, y: 190, h: 50, title: "Billing MCP" },
+  ]}
+  edges={[
+    { from: "client", to: "mcp", label: "Streamable HTTP", step: 1 },
+    { from: "mcp", to: "gateway", label: "`handle`", step: 2 },
+    { from: "gateway", to: "idp", label: "check token", labelAt: [768, 238], labelAnchor: "start", step: 3 },
+    { from: "gateway", to: "upstream", label: "`tools/call`", step: 4 },
+    { from: "gateway", to: "client", kind: "reply", fromSide: "top", toSide: "top", via: [[740, 40], [100, 40]], label: "allowed tools and results", step: 5 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- An `/mcp` route that speaks Streamable HTTP and maps each signed-in user session to one `gatewaySession` Actor.
+- A sign-in check that validates the user's token with your identity provider and loads their groups.
+- A tool policy that merges `tools/list` from every upstream server and hides the tools the user's groups may not call.
+- A router that sends each `tools/call` to the upstream server that owns the tool and streams the result back.
+- An audit table in the Actor's SQLite database with the user, tool, arguments, and outcome of every call.
+
+### Similar tools
+
+This is the same job as the Docker MCP Gateway, Cloudflare MCP server portals, the Lasso MCP Gateway, or Kong AI Gateway's MCP support. On Rivet each user session is an Actor that holds the user's identity, allowed tools, and upstream connections in one place, so a reconnect does not repeat the sign-in or the tool discovery.
+
+### Open questions
+
+- Rivet has no MCP adapter that maps Streamable HTTP sessions to Actors, and no MCP client for the upstream side. Both would be written by hand with the MCP TypeScript SDK.
+- Rivet has no per-user OAuth flow for MCP. Confirm which identity provider the guide uses and whether upstream servers get the user's token or a service token.
+- Whether the audit log should stay in each session's SQLite database or be copied to a central store for search across users.

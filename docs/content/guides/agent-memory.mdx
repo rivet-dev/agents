@@ -1,0 +1,44 @@
+---
+title: "Long-Term Memory"
+description: "Give an agent memory of each user that carries over from one conversation to the next."
+---
+
+<Diagram
+  id="agent-memory"
+  label="The chat client calls prompt on the chat agent for a conversation. The agent's recall and remember tools call the userMemory Actor for that user, which stores facts in its SQLite database with full-text search. Optionally, when a conversation ends, a summarize workflow reads it and calls remember with the facts it finds. The memory Actor can optionally use an external vector store or embedding API. The numbers show the order of the calls. There is one userMemory Actor per user, shared by all of that user's conversations."
+  stackLabel="One per user"
+  nodes={[
+    { id: "client", x: 20, y: 40, w: 150, title: "Chat client", subtitle: "signed-in user" },
+    { id: "agent", x: 300, y: 40, product: "agents", title: "`chatAgent`", subtitle: "per conversation" },
+    { id: "memory", x: 640, y: 40, product: "actors", stack: true, title: "`userMemory`", subtitle: "facts in SQLite" },
+    { id: "vector", x: 900, y: 40, w: 150, optional: true, title: "Vector store", subtitle: "optional embeddings" },
+    { id: "summarize", x: 300, y: 180, product: "workflows", optional: true, title: "`summarize`", subtitle: "optional" },
+  ]}
+  edges={[
+    { from: "client", to: "agent", label: "`prompt`", step: 1 },
+    { from: "agent", to: "memory", label: "`recall`, `remember`", step: 2 },
+    { from: "agent", to: "summarize", kind: "optional", label: "conversation ended" },
+    { from: "summarize", to: "memory", toSide: "bottom", via: [[725, 210]], label: "`remember` facts", step: 3 },
+    { from: "memory", to: "vector", kind: "optional" },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- A `userMemory` Actor per user that stores facts in its SQLite database and searches them with full-text search.
+- `remember` and `recall` tools that every conversation's agent shares, so a fact learned in one chat is available in the next.
+- An optional `summarize` workflow that reads a finished conversation and saves the facts it finds.
+- An optional hook for an embedding API or vector store when keyword search is not enough.
+
+### Similar tools
+
+This is the same job as Mem0, Zep, Letta, the LangGraph memory store, or Cloudflare Agents memory. On Rivet the memory is one Actor per user with its own database, so there is no shared memory service to run, and each user's facts stay apart from everyone else's.
+
+### Open questions
+
+- Actor SQLite has no vector search yet, such as sqlite-vec. Semantic recall needs an external vector store or embedding API for now.
+- FTS5 full-text search in Actor SQLite is unverified. Confirm it is compiled in before the guide depends on it.

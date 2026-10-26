@@ -1,0 +1,46 @@
+---
+title: "HIPAA-Ready Agents"
+description: "Run an AI agent on patient data in your own cloud, with each patient's records isolated and every access logged."
+---
+
+<Diagram
+  id="hipaa-agents"
+  label="A clinician's app sends a question to your backend, which runs in your own cloud next to a self-hosted Rivet deployment. The backend calls prompt on the patientAgent for that patient. The agent reads the chart with getChart from the patient Actor, which keeps that patient's PHI in its own SQLite database. The patient Actor writes every access to the auditLog Actor with record. The agent calls a model endpoint covered by your BAA, such as Azure OpenAI or Amazon Bedrock. The numbers show the order of the calls. There is one patientAgent and one patient Actor per patient."
+  stackLabel="One per patient"
+  nodes={[
+    { id: "app", x: 20, y: 60, w: 140, title: "Clinician app", subtitle: "EHR or portal" },
+    { id: "cloud", kind: "boundary", x: 290, y: 20, w: 540, h: 280, title: "Your cloud" },
+    { id: "backend", x: 320, y: 60, title: "Your backend", subtitle: "sign-in, scoped JWT" },
+    { id: "agent", x: 620, y: 60, product: "agents", stack: true, title: "`patientAgent`", subtitle: "answers questions" },
+    { id: "patient", x: 620, y: 200, product: "actors", stack: true, title: "`patient`", subtitle: "PHI in SQLite" },
+    { id: "audit", x: 320, y: 200, product: "actors", title: "`auditLog`", subtitle: "every access" },
+    { id: "model", x: 970, y: 60, w: 160, title: "Model endpoint", subtitle: "Azure OpenAI, Bedrock" },
+  ]}
+  edges={[
+    { from: "app", to: "backend", label: "question", step: 1 },
+    { from: "backend", to: "agent", label: "`prompt`", step: 2 },
+    { from: "agent", to: "patient", label: "`getChart`", step: 3 },
+    { from: "patient", to: "audit", label: "`record`", step: 4 },
+    { from: "agent", to: "model", label: "call under BAA", labelAt: [855, 82], labelAnchor: "start", step: 5 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- A self-hosted Rivet deployment in your own AWS or Azure account, so PHI stays on infrastructure you control.
+- A `patient` Actor per patient that keeps that patient's PHI in its own SQLite database.
+- A `patientAgent` per patient that answers clinician questions and can only read its own patient's chart.
+- An `auditLog` Actor that records who read which record and when.
+- Model calls sent only to Azure OpenAI or Amazon Bedrock under a signed BAA.
+
+### Similar tools
+
+This is the same job as building on AWS HealthLake, Azure Health Bot, or Hathr. On Rivet each patient's data and agent live in Actors keyed by patient, so one patient's records are never loaded next to another's, and the whole stack runs in your account.
+
+### Open questions
+
+- Rivet Cloud has no published BAA. The guide targets a self-hosted Rivet deployment and does not cover Rivet Cloud.

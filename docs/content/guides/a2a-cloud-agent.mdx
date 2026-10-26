@@ -1,0 +1,45 @@
+---
+title: "Cloud Agent over A2A"
+description: "Expose a Rivet agent as an A2A server so agents built on other frameworks can call it."
+---
+
+<Diagram
+  id="a2a-cloud-agent"
+  label="A remote agent built on another framework fetches the agent card from /.well-known/agent-card.json on your server, then sends message/stream to the /a2a JSON-RPC route. The route calls prompt on the a2aAgent for that A2A task id. The agent makes tool calls to your API and streams task updates back to the remote agent. The numbers show the order of the calls. There is one a2aAgent per A2A task."
+  stackLabel="One per A2A task"
+  nodes={[
+    { id: "remote", x: 20, y: 88, w: 150, h: 80, title: "Remote agent", subtitle: "ADK, LangGraph, more" },
+    { id: "server", kind: "group", x: 320, y: 40, w: 250, h: 150, title: "Your server" },
+    { id: "card", kind: "slot", x: 335, y: 80, w: 220, h: 36, title: "`/.well-known/agent-card.json`" },
+    { id: "rpc", kind: "slot", x: 335, y: 136, w: 220, h: 36, title: "`/a2a` JSON-RPC" },
+    { id: "agent", x: 700, y: 124, product: "agents", stack: true, title: "`a2aAgent`", subtitle: "task history, tools" },
+    { id: "api", x: 700, y: 270, title: "Your API", subtitle: "tools the agent calls" },
+  ]}
+  edges={[
+    { from: "remote", to: "card", fromOffset: -30, label: "fetch card", step: 1 },
+    { from: "remote", to: "rpc", fromOffset: 26, label: "`message/stream`", step: 2 },
+    { from: "rpc", to: "agent", label: "`prompt`", step: 3 },
+    { from: "agent", to: "api", fromOffset: 40, toOffset: 40, label: "tool call", step: 4 },
+    { from: "agent", to: "remote", kind: "reply", fromSide: "bottom", toSide: "bottom", fromOffset: -40, via: [[745, 230], [95, 230]], label: "task updates over SSE", step: 5 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- An agent card at `/.well-known/agent-card.json` that lists the agent's skills and where to call it.
+- An `/a2a` JSON-RPC route that handles `message/send`, `message/stream`, `tasks/get`, and `tasks/cancel`.
+- An `a2aAgent` per A2A task that keeps the task's history and state, so a client can reconnect and read it later.
+- A test that calls the agent from an agent built with Google ADK.
+
+### Similar tools
+
+This is the same job as A2A servers in Google ADK, LangGraph, the Microsoft Agent Framework, or AWS Bedrock AgentCore. On Rivet each A2A task is its own agent, so a long task keeps running after the caller disconnects, and its state is there when the caller comes back.
+
+### Open questions
+
+- Rivet has agent-to-agent messages between its own agents, but no A2A protocol endpoint. The agent card, task methods, streaming, and push notifications would be written by hand for now.
+- A2A push notifications to a caller's webhook are not covered by this design. Confirm whether the first version needs them.

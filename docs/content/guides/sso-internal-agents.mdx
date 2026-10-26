@@ -1,0 +1,44 @@
+---
+title: "SSO-Gated Internal Agents"
+description: "Let employees sign in with Okta or Entra ID and use an internal agent that acts with their own identity."
+---
+
+<Diagram
+  id="sso-internal-agents"
+  label="An employee's browser signs in with Okta or Entra ID. The identity provider redirects to the /auth/callback route of your backend, which checks the user and returns a scoped Rivet JWT from issueToken. The browser connects with that JWT to the employee's own employeeAgent. The agent calls internal APIs such as HR, IT, and docs as that user. The numbers show the order of the calls. There is one employeeAgent per employee."
+  stackLabel="One per employee"
+  nodes={[
+    { id: "browser", x: 20, y: 60, w: 150, title: "Browser", subtitle: "employee" },
+    { id: "idp", x: 20, y: 182, w: 150, title: "Okta or Entra ID", subtitle: "SSO sign-in" },
+    { id: "backend", kind: "group", x: 300, y: 170, w: 170, h: 84, title: "Your backend" },
+    { id: "callback", kind: "slot", x: 315, y: 204, w: 140, h: 36, title: "`/auth/callback`" },
+    { id: "agent", x: 620, y: 60, product: "agents", stack: true, title: "`employeeAgent`", subtitle: "runs as the user" },
+    { id: "api", x: 620, y: 210, title: "Internal APIs", subtitle: "HR, IT, docs" },
+  ]}
+  edges={[
+    { from: "browser", to: "idp", label: "sign in", step: 1 },
+    { from: "idp", to: "callback", toOffset: -10, label: "OIDC code", step: 2 },
+    { from: "backend", to: "browser", kind: "reply", fromSide: "top", toSide: "right", toOffset: 20, via: [[385, 110]], label: "scoped JWT", step: 3 },
+    { from: "browser", to: "agent", fromOffset: -10, toOffset: -10, label: "connect with JWT", step: 4 },
+    { from: "agent", to: "api", label: "call as the user", step: 5 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- An OIDC sign-in with Okta or Microsoft Entra ID in front of your internal agent.
+- A callback route that reads the user's identity and groups and issues a short-lived scoped Rivet JWT.
+- An `employeeAgent` per employee that the JWT can reach, and nothing else.
+- Tools that call internal APIs with the signed-in employee's identity, so each system applies its own access rules.
+
+### Similar tools
+
+This is the same job as Glean, Microsoft Copilot Studio, or Vercel Connect. On Rivet each employee gets their own agent, and the JWT your backend issues decides which agent a browser can reach, so the SSO session maps straight to one Actor.
+
+### Open questions
+
+- Rivet has no built-in SSO gate. The guide does the OIDC sign-in in your backend and only uses Rivet for the scoped JWT.

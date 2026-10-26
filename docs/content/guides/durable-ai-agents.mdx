@@ -1,0 +1,42 @@
+---
+title: "Durable AI Agents"
+description: "Run an agent whose conversation, in-flight tool calls, and plan survive crashes, deploys, and restarts."
+---
+
+<Diagram
+  id="durable-ai-agents"
+  label="The chat client sends a message to the /chat route of your backend, which calls submit on the agent for that conversation and returns right away. The agent calls the LLM provider, makes tool calls to your API, and saves each step to its SQLite database. The client receives the agent's pi.events stream as it works. The agent sleeps when idle and resumes from SQLite on the next call. The numbers show the order of the calls. There is one agent per conversation."
+  stackLabel="One per conversation"
+  nodes={[
+    { id: "client", x: 20, y: 90, w: 150, title: "Chat client", subtitle: "browser or app" },
+    { id: "server", kind: "group", x: 300, y: 68, w: 170, h: 84, title: "Your backend" },
+    { id: "chat", kind: "slot", x: 315, y: 102, w: 140, h: 36, title: "`/chat`" },
+    { id: "agent", x: 590, y: 90, product: "agents", stack: true, title: "`chatAgent`", subtitle: "history in SQLite" },
+    { id: "llm", x: 900, y: 90, w: 150, title: "LLM provider", subtitle: "OpenAI, Anthropic" },
+    { id: "api", x: 590, y: 230, title: "Your API", subtitle: "tools the agent calls" },
+  ]}
+  edges={[
+    { from: "client", to: "chat", label: "message", step: 1 },
+    { from: "chat", to: "agent", label: "`submit`", step: 2 },
+    { from: "agent", to: "llm", label: "model calls", step: 3 },
+    { from: "agent", to: "api", label: "tool call", step: 4 },
+    { from: "agent", to: "client", kind: "reply", fromSide: "top", toSide: "top", via: [[675, 40], [95, 40]], label: "`pi.events` stream", step: 5 },
+  ]}
+  notes={[{ x: 800, y: 254, text: "Sleeps when idle." }, { x: 800, y: 272, text: "Wakes from SQLite on the next call." }]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- A `chatAgent` per conversation, keyed by the conversation id, that keeps its history and plan in its own SQLite database.
+- A backend route that hands each message to the agent with `submit` and returns without waiting for the answer.
+- A chat client that streams the agent's events and picks the answer back up after a reload.
+- Tools that call your API and are not run twice after a crash.
+- A test that kills the worker mid-run and shows the agent finishing the same run after a restart.
+
+### Similar tools
+
+This is the same job as Temporal AI agents, Inngest AgentKit, Vercel Workflow DevKit agents, or the Cloudflare Agents SDK. On Rivet the agent is itself the durable unit: each step is saved to the agent's own SQLite database, so there is no separate workflow engine, queue, or database to run next to it.

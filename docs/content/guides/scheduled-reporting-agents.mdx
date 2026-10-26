@@ -1,0 +1,44 @@
+---
+title: "Scheduled Reporting Agents"
+description: "Give each team an agent that writes a metrics digest on a schedule, posts it to Slack or email, and answers questions about it."
+---
+
+<Diagram
+  id="scheduled-reporting-agents"
+  label="A cron schedule set on each team's reportAgent calls prompt every Monday morning. The agent fetches metrics from your APIs, writes a digest, and posts it to the team's Slack channel or sends it by email. When someone replies in the digest's thread, Slack posts the reply to the /slack/events route of your server, which calls receive on the same team's agent so it can answer with the digest's context. The numbers show the order of the calls. There is one reportAgent per team."
+  stackLabel="One per team"
+  nodes={[
+    { id: "cron", x: 20, y: 40, w: 150, title: "Schedule", subtitle: "cron, Mondays 9:00" },
+    { id: "slack", x: 20, y: 150, w: 150, title: "Slack or email", subtitle: "digest, replies" },
+    { id: "server", kind: "group", x: 300, y: 128, w: 170, h: 84, title: "HTTP server" },
+    { id: "events", kind: "slot", x: 315, y: 162, w: 140, h: 36, title: "`/slack/events`" },
+    { id: "agent", x: 600, y: 150, w: 180, product: "agents", stack: true, title: "`reportAgent`", subtitle: "past digests, history" },
+    { id: "api", x: 930, y: 150, title: "Your APIs", subtitle: "metrics, KPIs" },
+  ]}
+  edges={[
+    { from: "cron", to: "agent", toSide: "top", via: [[690, 70]], label: "`prompt`", step: 1 },
+    { from: "agent", to: "api", label: "fetch metrics", step: 2 },
+    { from: "agent", to: "slack", fromSide: "bottom", toSide: "bottom", via: [[690, 262], [95, 262]], label: "post digest", step: 3 },
+    { from: "slack", to: "events", label: "thread reply", step: 4 },
+    { from: "events", to: "agent", label: "`receive`", step: 5 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- A `reportAgent` per team with a cron schedule, set when the agent is created, that calls `prompt` at the time the team picks.
+- Tools that fetch the team's metrics from your APIs and compare them with the last digest the agent saved.
+- A digest posted to the team's Slack channel with the Slack connector, or sent by email.
+- Thread replies routed back to the same agent, so "why did signups drop?" gets answered with the numbers it already pulled.
+
+### Similar tools
+
+This is the same job as Zapier AI agents, a scheduled workflow in n8n, or Lindy. On Rivet the schedule lives in the team's agent, so the agent that wrote the digest is the one that answers follow-up questions, with every past digest in its history.
+
+### Open questions
+
+- Rivet Agents has no email connector. Sending the digest by email would use a custom tool with a provider such as Resend or SES, and email replies would not reach the agent in the first version.

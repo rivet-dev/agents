@@ -1,0 +1,50 @@
+---
+title: "Internal Coding-Agent Platform"
+description: "Give your engineers a coding agent they can start from Slack, a web page, or a GitHub issue, which works in its own sandbox and opens a pull request."
+---
+
+<Diagram
+  id="internal-coding-agent-platform"
+  label="An engineer starts a task by mentioning the bot in Slack or labeling a GitHub issue, which reaches the connector webhook route of your server, or from the web UI through the /api/sessions route. The route calls receive on the codingSession agent for that task. The agent clones the repository, edits files, and runs the tests in its own sandbox through the sandbox adapter, and reports its status to the sessionIndex Actor. It posts progress to Slack and opens a pull request on GitHub when the change is ready. The web UI lists every session from the sessionIndex. The numbers show the order of the calls. There is one codingSession agent and one sandbox per task."
+  stackLabel="One per task"
+  nodes={[
+    { id: "chat", x: 20, y: 60, w: 150, title: "Slack or GitHub", subtitle: "mentions, issues" },
+    { id: "web", x: 20, y: 190, w: 150, title: "Web UI", subtitle: "start, dashboard" },
+    { id: "server", kind: "group", x: 330, y: 40, w: 180, h: 220, title: "Your server" },
+    { id: "webhook", kind: "slot", x: 345, y: 72, w: 150, h: 36, title: "connector webhook" },
+    { id: "api", kind: "slot", x: 345, y: 202, w: 150, h: 36, title: "`/api/sessions`" },
+    { id: "session", x: 650, y: 60, w: 180, product: "agents", stack: true, title: "`codingSession`", subtitle: "plan, branch, status" },
+    { id: "index", x: 650, y: 190, w: 180, product: "actors", title: "`sessionIndex`", subtitle: "all sessions" },
+    { id: "sandbox", x: 980, y: 60, w: 200, product: "agentos", stack: true, title: "Sandbox", subtitle: "repo clone, tests" },
+  ]}
+  edges={[
+    { from: "chat", to: "webhook", label: "start task", step: 1 },
+    { from: "webhook", to: "session", label: "`receive`", step: 2 },
+    { from: "session", to: "sandbox", label: "clone, edit, test", step: 3 },
+    { from: "session", to: "index", label: "status", labelAt: [768, 166], labelAnchor: "start", step: 4 },
+    { from: "session", to: "chat", kind: "reply", fromSide: "top", toSide: "top", via: [[740, 22], [95, 22]], label: "progress, pull request", step: 5 },
+    { from: "web", to: "api", label: "dashboard", step: 6 },
+    { from: "api", to: "index", label: "`listSessions`", step: 7 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- Three ways to start a task: a Slack mention, a label on a GitHub issue through the connectors, and a form in a web UI.
+- A `codingSession` agent per task that keeps the plan, the branch, the transcript, and the sandbox id.
+- A sandbox from `@rivet-dev/sandbox-adapter` with the repository cloned, where the agent edits code and runs the tests.
+- Progress messages in the Slack thread or issue, and a pull request opened when the tests pass.
+- A `sessionIndex` Actor and a dashboard page that lists running and finished sessions with links to each transcript.
+
+### Similar tools
+
+This is the same job as Ramp's Inspect, the GitHub Copilot coding agent, Cursor background agents, or OpenAI Codex cloud. On Rivet you run it on your own infrastructure: each task is a durable agent that can work for hours, survive restarts, and wait for review without holding a sandbox or a request open.
+
+### Open questions
+
+- How git authenticates to private repositories inside the sandbox. The token could be passed in the clone URL or an environment variable on E2B, Daytona, or Freestyle. On agentOS, keeping the token out of the VM with host functions is unverified.
+- Whether the coding agent is Rivet Agents with `CodingTools` or a coding agent CLI such as Claude Code run through Sandbox Agent. The diagram assumes the first.

@@ -1,0 +1,43 @@
+---
+title: "Cloud Agent over ACP"
+description: "Run a coding agent in the cloud and connect to it from Zed, JetBrains, or any editor that speaks ACP."
+---
+
+<Diagram
+  id="acp-cloud-agent"
+  label="An editor that speaks the Agent Client Protocol, such as Zed or JetBrains, sends session/prompt to the /acp route of your server. The route calls the agentSession Actor for that session, which owns a sandbox and forwards the prompt to Sandbox Agent over its HTTP API. Sandbox Agent runs a coding agent such as Claude Code or Codex in the sandbox. The Actor streams session/update messages back to the editor. The numbers show the order of the calls. There is one agentSession Actor and one sandbox per session."
+  stackLabel="One per session"
+  nodes={[
+    { id: "editor", x: 20, y: 90, w: 150, title: "Editor", subtitle: "Zed, JetBrains, ACP" },
+    { id: "server", kind: "group", x: 340, y: 68, w: 170, h: 84, title: "Your server" },
+    { id: "acp", kind: "slot", x: 355, y: 102, w: 140, h: 36, title: "`/acp`" },
+    { id: "session", x: 640, y: 90, product: "actors", stack: true, title: "`agentSession`", subtitle: "owns the sandbox" },
+    { id: "sandbox", x: 625, y: 230, w: 200, product: "sandbox-agent", title: "Sandbox Agent", subtitle: "Claude Code, Codex" },
+  ]}
+  edges={[
+    { from: "editor", to: "acp", label: "`session/prompt`", step: 1 },
+    { from: "acp", to: "session", label: "`prompt`", step: 2 },
+    { from: "session", to: "sandbox", label: "HTTP API", step: 3 },
+    { from: "session", to: "editor", kind: "reply", fromSide: "top", toSide: "top", via: [[725, 40], [95, 40]], label: "`session/update` stream", step: 4 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- An `/acp` route that accepts Agent Client Protocol messages from an editor over the network.
+- An `agentSession` Actor per session that creates a sandbox with `@rivet-dev/sandbox-adapter` and keeps the session's history.
+- Sandbox Agent in that sandbox, running Claude Code, Codex, OpenCode, Amp, Cursor, or Pi behind one HTTP API.
+- Editor setup in Zed and JetBrains that points the external agent at your server.
+
+### Similar tools
+
+This is the same job as Zed external agents over ACP, Claude Code over ACP, or Cursor background agents. Here the agent runs in the cloud instead of on the laptop, and the session lives in an Actor, so you can close the editor and reconnect to the same run later.
+
+### Open questions
+
+- Confirm whether Sandbox Agent exposes ACP over the network today, or whether the server has to translate between ACP and its HTTP API.
+- Confirm how the editor authenticates to your server, since ACP does not define remote auth.

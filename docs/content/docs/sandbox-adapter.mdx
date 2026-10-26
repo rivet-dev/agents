@@ -1,0 +1,37 @@
+---
+title: "Sandbox Adapter"
+description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, or Freestyle from any Rivet Actor, without the agent harness."
+---
+
+<Diagram
+  id="sandbox-adapter"
+  label="Any Rivet Actor calls create or connect on a SandboxProvider from the sandbox adapter, then calls exec and the file operations on the Sandbox it gets back. The adapter talks to the chosen provider: agentOS, E2B, Daytona, or Freestyle. The Actor stores the sandbox id so it can connect again after it sleeps. There is one sandbox per Actor."
+  stackLabel="One sandbox per Actor"
+  nodes={[
+    { id: "actor", x: 20, y: 140, w: 200, product: "actors", stack: true, title: "Any Rivet Actor", subtitle: "stores the sandbox id" },
+    { id: "adapter", x: 390, y: 140, w: 180, title: "`sandbox-adapter`", subtitle: "`SandboxProvider`, `Sandbox`" },
+    { id: "providers", kind: "boundary", x: 700, y: 15, w: 210, h: 310, title: "Providers" },
+    { id: "agentos", x: 720, y: 50, h: 50, product: "agentos", title: "agentOS" },
+    { id: "e2b", x: 720, y: 120, h: 50, title: "E2B" },
+    { id: "daytona", x: 720, y: 190, h: 50, title: "Daytona" },
+    { id: "freestyle", x: 720, y: 260, h: 50, title: "Freestyle" },
+  ]}
+  edges={[
+    { from: "actor", to: "adapter", fromOffset: -12, toOffset: -12, label: "`create`, `connect`", step: 1 },
+    { from: "actor", to: "adapter", fromOffset: 12, toOffset: 12, label: "`exec`, files", labelAt: [311, 200], step: 2 },
+    { from: "adapter", to: "providers", label: "provider API" },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What this page will cover
+
+- The four providers and the setup each one needs: agentOS with no account, and E2B, Daytona, and Freestyle with their SDKs and API keys.
+- The `Sandbox` operations: `exec`, `readFile`, `writeFile`, `mkdir`, `stat`, `readdir`, and `exists`.
+- The lifecycle: `create`, `connect`, `suspend`, and `destroy`, and storing the sandbox id in the Actor's state so it reconnects after sleep.
+- Streaming `exec` output with `onData`, and stopping a command with a timeout or an abort signal.
+- Writing a custom provider by implementing `SandboxProvider`.
+- How this relates to [Sandboxes](/agents/docs/sandboxes), which wires the same adapter into an agent's `CodingTools`.

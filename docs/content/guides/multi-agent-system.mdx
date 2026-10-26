@@ -1,0 +1,40 @@
+---
+title: "Multi-Agent Systems"
+description: "Split a large task across an orchestrator agent and specialist agents that work in parallel."
+---
+
+<Diagram
+  id="multi-agent-system"
+  label="Your app posts a task to the /jobs route of your server, which calls prompt on the orchestrator agent for that job. The orchestrator's ask_specialist tool fans the work out to several researcher subagents in parallel and waits for each answer as a tool result. When the findings are collected, its request_review tool sends them to the reviewer agent with requestReview and returns right away. The numbers show the order of the calls. There is one orchestrator per job and one researcher per subtask."
+  stackLabel="One per job or subtask"
+  nodes={[
+    { id: "app", x: 20, y: 50, w: 150, title: "Your app", subtitle: "starts a job" },
+    { id: "server", kind: "group", x: 280, y: 28, w: 170, h: 84, title: "HTTP server" },
+    { id: "jobs", kind: "slot", x: 295, y: 62, w: 140, h: 36, title: "`/jobs`" },
+    { id: "orchestrator", x: 560, y: 50, product: "agents", stack: true, title: "`orchestrator`", subtitle: "plan and results" },
+    { id: "researcher", x: 890, y: 50, product: "agents", stack: true, title: "`researcher`", subtitle: "one per subtask" },
+    { id: "reviewer", x: 560, y: 200, product: "agents", title: "`reviewer`", subtitle: "checks the result" },
+  ]}
+  edges={[
+    { from: "app", to: "jobs", label: "task", step: 1 },
+    { from: "jobs", to: "orchestrator", label: "`prompt`", step: 2 },
+    { from: "orchestrator", to: "researcher", fromOffset: -12, toOffset: -12, label: "`ask_specialist`", step: 3 },
+    { from: "researcher", to: "orchestrator", kind: "reply", fromOffset: 12, toOffset: 12, label: "answers", labelAt: [816, 112], step: 4 },
+    { from: "orchestrator", to: "reviewer", label: "`requestReview`", step: 5 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- An `orchestrator` agent per job that breaks the task into subtasks and keeps the plan and the collected results.
+- An `ask_specialist` tool that starts one `researcher` subagent per subtask, runs them in parallel, and waits for every answer.
+- A `request_review` tool that hands the combined result to a `reviewer` agent with an agent-to-agent message and does not wait.
+- Recovery after a crash, so a finished subtask is not asked again and an unfinished one is picked up where it stopped.
+
+### Similar tools
+
+This is the same job as handoffs in the OpenAI Agents SDK, LangGraph multi-agent graphs, CrewAI crews, or Mastra agent networks. On Rivet every agent is its own Actor with its own conversation and tools, so the orchestrator calls a specialist by key like any other Actor, and each one survives restarts on its own.

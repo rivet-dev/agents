@@ -1,0 +1,45 @@
+---
+title: "AI Agents in Regulated Industries"
+description: "Run agents and their sandboxes on an air-gapped network where the only way out is an approved model gateway."
+---
+
+<Diagram
+  id="regulated-industry-agents"
+  label="Inside an air-gapped network that runs self-hosted Rivet, staff use an internal app to ask the caseAgent for a case. The agent runs commands in its agentOS VM with exec and reads internal systems such as records and documents with tool calls. Its model calls go to an approved model gateway, which is the only route out of the network, and the gateway forwards them to an approved model endpoint such as Amazon Bedrock in GovCloud. Case data never leaves the network. The numbers show the order of the calls. There is one caseAgent and one agentOS VM per case."
+  stackLabel="One per case"
+  nodes={[
+    { id: "network", kind: "boundary", x: 20, y: 20, w: 850, h: 290, title: "Air-gapped network" },
+    { id: "app", x: 50, y: 70, w: 150, title: "Internal app", subtitle: "staff on VPN" },
+    { id: "agent", x: 340, y: 70, product: "agents", stack: true, title: "`caseAgent`", subtitle: "works one case" },
+    { id: "vm", x: 340, y: 220, product: "agentos", stack: true, title: "`workspace`", subtitle: "files and bash" },
+    { id: "data", x: 50, y: 220, w: 150, title: "Internal systems", subtitle: "records, documents" },
+    { id: "gateway", x: 670, y: 70, w: 170, title: "Model gateway", subtitle: "approved egress" },
+    { id: "model", x: 670, y: 350, w: 170, title: "Model endpoint", subtitle: "Bedrock GovCloud" },
+  ]}
+  edges={[
+    { from: "app", to: "agent", label: "ask", step: 1 },
+    { from: "agent", to: "vm", label: "`exec`", step: 2 },
+    { from: "agent", to: "data", fromSide: "bottom", toSide: "top", fromOffset: -50, via: [[375, 186], [125, 186]], label: "tool call", step: 3 },
+    { from: "agent", to: "gateway", label: "model call", step: 4 },
+    { from: "gateway", to: "model", label: "only route out", step: 5 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- A self-hosted Rivet deployment on a network with no internet access.
+- A `caseAgent` per case and an agentOS VM per case, both running inside that network.
+- Tools that read internal records and documents without copying them anywhere else.
+- A single model gateway that is the only allowed egress, with every other outbound route blocked.
+
+### Similar tools
+
+This is the same job as running Amazon Bedrock in GovCloud, Azure OpenAI over private endpoints, or an on-premises LLM stack. On Rivet the agent, its state, and its sandbox all run on your own nodes, so the only traffic that crosses the boundary is the model call you allow.
+
+### Open questions
+
+- Rivet has no air-gapped install guide yet. The guide depends on one, including how to mirror images and agentOS packages without internet access.

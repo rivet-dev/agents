@@ -1,0 +1,45 @@
+---
+title: "Voice Agent"
+description: "Answer phone or browser calls with an agent that remembers each caller across calls."
+---
+
+<Diagram
+  id="voice-agent"
+  label="The caller's audio goes to a realtime media service such as LiveKit, Twilio Media Streams, or the OpenAI Realtime API, which turns speech into text and text back into speech. The media service sends each transcribed turn to the /voice/turn route of your server, which calls respond on the agent for that caller. The agent makes tool calls to your API and returns the reply text, which the media service speaks to the caller. The numbers show the order of the calls. There is one agent per caller, so it keeps the conversation and memory across calls."
+  stackLabel="One per caller"
+  nodes={[
+    { id: "caller", x: 20, y: 30, w: 150, title: "Caller", subtitle: "phone or browser" },
+    { id: "media", x: 300, y: 30, w: 170, title: "Media service", subtitle: "speech to text and back" },
+    { id: "server", kind: "group", x: 300, y: 160, w: 170, h: 84, title: "Your server" },
+    { id: "turn", kind: "slot", x: 315, y: 194, w: 140, h: 36, title: "`/voice/turn`" },
+    { id: "agent", x: 600, y: 182, product: "agents", stack: true, title: "`callAgent`", subtitle: "calls and memory" },
+    { id: "api", x: 900, y: 182, w: 150, title: "Your API", subtitle: "bookings, CRM, data" },
+  ]}
+  edges={[
+    { from: "caller", to: "media", both: true, label: "audio", step: 1 },
+    { from: "media", to: "server", label: "transcribed turn", step: 2 },
+    { from: "turn", to: "agent", label: "`respond`", step: 3 },
+    { from: "agent", to: "api", label: "tool call", step: 4 },
+    { from: "agent", to: "media", kind: "reply", fromSide: "top", via: [[685, 60]], label: "reply text to speak", step: 5 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- A media service connection that streams the caller's audio and sends each finished turn as text.
+- A route that maps the caller, such as their phone number, to their own `callAgent`.
+- A `callAgent` per caller that keeps the conversation, tools, and memory between calls.
+- Tools the agent can call during the call, such as booking a slot in your API.
+
+### Similar tools
+
+This is the same job as Vapi, Retell, LiveKit Agents, Pipecat, or Cloudflare Realtime agents. Rivet does not handle audio. The media service does the speech, and the Rivet agent holds what the caller said on every call, so a returning caller picks up where they left off.
+
+### Open questions
+
+- Rivet has no native audio or media streaming, so the guide depends on an external media service. Confirm which one the guide uses: LiveKit, Twilio Media Streams, or the OpenAI Realtime API.
+- With a speech-to-speech model like the OpenAI Realtime API, the model runs inside the media session. Confirm whether the agent answers each turn or only serves tools and memory to that session.

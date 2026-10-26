@@ -1,0 +1,42 @@
+---
+title: "Database per Agent"
+description: "Give every agent its own SQLite database for memory, task state, and results, kept apart from every other agent."
+---
+
+<Diagram
+  id="database-per-agent"
+  label="Your app sends a task to the agent with prompt. The agent asks the LLM, which answers with tool calls. The agent's tools call actions on the agentData Actor that has the same key as the agent, and that Actor reads and writes memory, task state, and results in its own SQLite database with c.db.execute. The agent returns its answer to your app. The numbers show the order of the calls. There is one agent and one agentData Actor per agent key, so each agent has its own SQLite database that no other agent can read."
+  stackLabel="One per agent"
+  nodes={[
+    { id: "app", x: 20, y: 40, w: 150, title: "Your app", subtitle: "sends tasks" },
+    { id: "agent", x: 300, y: 40, product: "agents", stack: true, title: "`agent`", subtitle: "tools and model" },
+    { id: "llm", x: 300, y: 180, title: "LLM", subtitle: "picks a tool" },
+    { id: "db", x: 630, y: 40, product: "actors", stack: true, title: "`agentData`", subtitle: "SQLite in `c.db`" },
+  ]}
+  edges={[
+    { from: "app", to: "agent", fromOffset: -10, toOffset: -10, label: "`prompt`", step: 1 },
+    { from: "agent", to: "llm", both: true, label: "tool calls", labelAt: [410, 149], labelAnchor: "start", step: 2 },
+    { from: "agent", to: "db", label: "tool actions", step: 3 },
+    { from: "agent", to: "app", kind: "reply", fromOffset: 12, toOffset: 12, label: "answer", labelAt: [235, 100], step: 4 },
+  ]}
+  notes={[{ x: 721, y: 136, text: "no other agent can read it", anchor: "middle" }]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- An `agentData` Actor per agent, keyed like the agent, with memory, task, and result tables in its SQLite database.
+- Tools that save and recall memories through actions on that Actor.
+- Task and result tables that let a long job pick up where it stopped after a restart.
+- An action that lets your app read an agent's results without going through the model.
+
+### Similar tools
+
+This is the same job as Turso with a database per agent, Neon for agents, or Cloudflare Agents SQL storage. On Rivet the database lives inside an Actor that shares the agent's key, so it is created on first use and there is nothing to provision when a new agent starts.
+
+### Open questions
+
+- A `pi()` agent takes no `db` option, so its tools cannot use `c.db` in the agent's own Actor. This design keeps the data in a second Actor per agent. Putting it in the agent's Actor needs a `db` option on `pi()`.

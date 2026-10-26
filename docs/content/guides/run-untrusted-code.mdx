@@ -1,0 +1,42 @@
+---
+title: "Run Untrusted Code"
+description: "Run code from your users or customers in an isolated sandbox with time and resource limits, and get back its output and exit code."
+---
+
+<Diagram
+  id="run-untrusted-code"
+  label="Your app sends user or customer code to the codeRunner Actor for that tenant or run. The Actor calls exec with a timeout through the sandbox adapter, which runs the code in an isolated sandbox on agentOS, E2B, Daytona, or Freestyle, chosen in config. The Actor returns stdout, stderr, and the exit code to your app. The numbers show the order of the calls. There is one Actor and one sandbox per tenant or run."
+  stackLabel="One per tenant or run"
+  nodes={[
+    { id: "app", x: 20, y: 90, w: 150, title: "Your app", subtitle: "user or customer code" },
+    { id: "runner", x: 300, y: 90, product: "actors", stack: true, title: "`codeRunner`", subtitle: "limits, run history" },
+    { id: "adapter", x: 615, y: 90, title: "`sandbox-adapter`", subtitle: "provider from config" },
+    { id: "sandbox", x: 555, y: 230, w: 290, product: "agentos", title: "Sandbox", subtitle: "agentOS, E2B, Daytona, or Freestyle" },
+  ]}
+  edges={[
+    { from: "app", to: "runner", label: "`run` code", step: 1 },
+    { from: "runner", to: "adapter", label: "`exec`, timeout", step: 2 },
+    { from: "adapter", to: "sandbox", label: "runs isolated", step: 3 },
+    { from: "runner", to: "app", kind: "reply", fromSide: "top", toSide: "top", via: [[385, 40], [95, 40]], label: "stdout, stderr, exit code", step: 4 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- A `codeRunner` Rivet Actor per tenant or per run that holds the limits and a history of runs in its SQLite database.
+- A `run` action that writes the code into a sandbox from the sandbox adapter and executes it with `exec`.
+- Timeouts and output limits on every run, so a run that hangs or floods output is killed.
+- A result with stdout, stderr, and the exit code, returned to your app.
+- A provider setting in config, so moving from agentOS to E2B, Daytona, or Freestyle does not change the Actor.
+
+### Similar tools
+
+This is the same job as E2B, Vercel Sandbox, the Cloudflare Sandbox SDK, Modal Sandboxes, or Daytona. On Rivet, a per-tenant Actor sits in front of the sandbox, so limits, history, and the sandbox id live with the tenant, and the provider underneath is a config choice.
+
+### Open questions
+
+- How CPU, memory, and network limits are set per provider. The adapter's `exec` has `timeoutMs`, but other limits come from each provider's create options and differ between them.

@@ -1,0 +1,49 @@
+---
+title: "Internal Agent Platform"
+description: "Let teams in your company define their own agents and give every employee a private instance behind SSO, with shared tools and usage limits."
+---
+
+<Diagram
+  id="internal-agent-platform"
+  label="A team admin calls defineAgent on the agentRegistry Actor to save an agent's prompt, tools, and connectors. An employee sends a message to the /chat route of your server, which checks the session with your SSO provider and calls prompt on the teamAgent for that team, agent, and user. The agent loads its definition from the registry, checks its usage limit, and calls the shared tools and connectors it was given. The numbers show the order of the calls. There is one agentRegistry for the company and one teamAgent per team, agent, and user."
+  stackLabel="One per team, agent, and user"
+  nodes={[
+    { id: "admin", x: 20, y: 40, w: 150, title: "Team admin", subtitle: "defines agents" },
+    { id: "employee", x: 20, y: 150, w: 150, title: "Employee", subtitle: "web or Slack" },
+    { id: "server", kind: "group", x: 300, y: 128, w: 170, h: 84, title: "Your server" },
+    { id: "chat", kind: "slot", x: 315, y: 162, w: 140, h: 36, title: "`/chat`" },
+    { id: "sso", x: 300, y: 280, w: 170, title: "SSO provider", subtitle: "Okta, Entra ID" },
+    { id: "registry", x: 600, y: 40, w: 180, product: "actors", title: "`agentRegistry`", subtitle: "prompts, tools, limits" },
+    { id: "agent", x: 600, y: 150, w: 180, product: "agents", stack: true, title: "`teamAgent`", subtitle: "history, usage" },
+    { id: "tools", x: 920, y: 150, title: "Shared tools", subtitle: "APIs, connectors" },
+  ]}
+  edges={[
+    { from: "admin", to: "registry", label: "`defineAgent`", step: 1 },
+    { from: "employee", to: "chat", label: "message", step: 2 },
+    { from: "chat", to: "sso", label: "check session", fromSide: "bottom", toSide: "top", labelAt: [413, 254], labelAnchor: "start", step: 3 },
+    { from: "chat", to: "agent", label: "`prompt`", step: 4 },
+    { from: "agent", to: "registry", label: "load definition", labelAt: [718, 134], labelAnchor: "start", step: 5 },
+    { from: "agent", to: "tools", label: "tool calls", step: 6 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- An `agentRegistry` Actor that stores each team's agent definitions: the system prompt, the tools and connectors it may use, and a monthly usage limit.
+- A `teamAgent` per team, agent, and user, so each employee gets a private conversation history with the same agent definition.
+- A `/chat` route behind SSO that resolves the employee's team and routes the message to the right agent.
+- A shared tool catalog and the Slack, GitHub, and Linear connectors that admins can switch on per agent.
+- A usage counter in each agent that stops new runs when the team reaches its limit.
+
+### Similar tools
+
+This is the same job as OpenAI AgentKit, Microsoft Copilot Studio, Glean Agents, or Dust. On Rivet the platform is your own code: each agent instance is a durable agent with its own history and state, and you choose the models, the tools, and where the data is kept.
+
+### Open questions
+
+- Rivet has no SSO gate. The guide would check the SSO session in the server route and pass the user and team to the Actor, or wait for a built-in auth integration.
+- Defining agents at runtime with custom tool code needs Dynamic Apps, which is in preview. The first version would limit admins to prompts and tools from a fixed catalog.

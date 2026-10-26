@@ -1,0 +1,44 @@
+---
+title: "Browser Automation"
+description: "Build an agent that drives a real browser to finish tasks on websites."
+---
+
+<Diagram
+  id="browser-automation"
+  label="Your app calls prompt on the browser agent for a task. The agent's browser tools run Playwright and Chromium in its own E2B or Daytona sandbox through the sandbox adapter, and the browser in the sandbox loads the target website. The agent stores screenshots and the result, and sends them back to your app. Instead of a sandbox, the agent can optionally call a hosted browser like Browserbase. The numbers show the order of the calls. There is one browser agent and one sandbox per task."
+  stackLabel="One per task"
+  nodes={[
+    { id: "app", x: 20, y: 90, w: 150, title: "Your app", subtitle: "starts a task" },
+    { id: "agent", x: 300, y: 90, product: "agents", stack: true, title: "`browserAgent`", subtitle: "steps, screenshots" },
+    { id: "sandbox", x: 620, y: 90, title: "E2B or Daytona", subtitle: "Playwright, Chromium" },
+    { id: "site", x: 920, y: 90, w: 140, title: "Website", subtitle: "the target" },
+    { id: "browserbase", x: 620, y: 230, optional: true, title: "Browserbase", subtitle: "hosted browser" },
+  ]}
+  edges={[
+    { from: "app", to: "agent", label: "`prompt`", step: 1 },
+    { from: "agent", to: "sandbox", label: "browser tools", step: 2 },
+    { from: "sandbox", to: "site", label: "page loads", step: 3 },
+    { from: "agent", to: "app", kind: "reply", fromSide: "top", toSide: "top", via: [[385, 40], [95, 40]], label: "screenshots, result", step: 4 },
+    { from: "agent", to: "browserbase", kind: "optional", fromSide: "bottom", via: [[385, 260]] },
+    { from: "browserbase", to: "site", kind: "optional", toSide: "bottom", via: [[990, 260]] },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- A `browserAgent` per task that plans the steps and keeps each screenshot and the final result on the Actor.
+- A sandbox per agent from `@rivet-dev/sandbox-adapter` on E2B or Daytona, with Playwright and Chromium installed.
+- Browser tools for the agent, such as open a page, click, type, and take a screenshot.
+- An optional switch to a hosted browser like Browserbase instead of a sandbox.
+
+### Similar tools
+
+This is the same job as Browserbase Stagehand, Browser Use, Vercel Sandbox browser agents, or Cloudflare Browser Rendering. On Rivet the agent owns its browser session and its history, so a long task can sleep between steps and resume with the same sandbox.
+
+### Open questions
+
+- agentOS has no headless Chromium, so the browser cannot run inside agentOS. The guide uses an E2B or Daytona sandbox, or a hosted browser.

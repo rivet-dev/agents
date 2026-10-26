@@ -140,6 +140,10 @@
 						{
 							"title": "Schedules",
 							"href": "/agents/docs/schedules"
+						},
+						{
+							"title": "Sandbox Adapter",
+							"href": "/agents/docs/sandbox-adapter"
 						}
 					]
 				},
@@ -190,13 +194,176 @@
 			"pages": [
 				{
 					"title": "Personal Agent over SMS",
-					"href": "/guides/personal-agent",
-					"icon": "faCommentSms"
+					"href": "/guides/personal-agent"
 				},
 				{
 					"title": "Sign in with ChatGPT",
-					"href": "/guides/sign-in-with-chatgpt",
-					"icon": "faOpenai"
+					"href": "/guides/sign-in-with-chatgpt"
+				},
+				{
+					"title": "Slack Bot",
+					"href": "/guides/slack-bot"
+				},
+				{
+					"title": "Durable AI Agents",
+					"href": "/guides/durable-ai-agents"
+				},
+				{
+					"title": "Multi-Agent Systems",
+					"href": "/guides/multi-agent-system"
+				},
+				{
+					"title": "Voice Agent",
+					"href": "/guides/voice-agent"
+				},
+				{
+					"title": "Remote MCP Server",
+					"href": "/guides/mcp-server"
+				},
+				{
+					"title": "Long-Term Memory",
+					"href": "/guides/agent-memory"
+				},
+				{
+					"title": "Browser Automation",
+					"href": "/guides/browser-automation"
+				},
+				{
+					"title": "Cloud Agent over ACP",
+					"href": "/guides/acp-cloud-agent"
+				},
+				{
+					"title": "Cloud Agent over A2A",
+					"href": "/guides/a2a-cloud-agent"
+				},
+				{
+					"title": "Deploy an Agent to Production",
+					"href": "/guides/deploy-ai-agent"
+				},
+				{
+					"title": "A2A client",
+					"href": "/guides/a2a-client"
+				},
+				{
+					"title": "Incident response agent",
+					"href": "/guides/incident-response-agent"
+				},
+				{
+					"title": "Data analysis agent",
+					"href": "/guides/data-analysis-agent"
+				},
+				{
+					"title": "Scheduled reporting agents",
+					"href": "/guides/scheduled-reporting-agents"
+				}
+			]
+		},
+		{
+			"title": "Coding Agents",
+			"pages": [
+				{
+					"title": "Build a Coding Agent",
+					"href": "/guides/build-coding-agent"
+				},
+				{
+					"title": "Background Coding Agent",
+					"href": "/guides/background-coding-agent"
+				},
+				{
+					"title": "Coding Agents in the Cloud",
+					"href": "/guides/coding-agents-cloud"
+				},
+				{
+					"title": "Claude Code",
+					"href": "/guides/run-claude-code"
+				},
+				{
+					"title": "Codex",
+					"href": "/guides/run-codex"
+				},
+				{
+					"title": "OpenCode",
+					"href": "/guides/run-opencode"
+				},
+				{
+					"title": "Amp",
+					"href": "/guides/run-amp"
+				}
+			]
+		},
+		{
+			"title": "Sandboxes",
+			"pages": [
+				{
+					"title": "Run Untrusted Code",
+					"href": "/guides/run-untrusted-code"
+				}
+			]
+		},
+		{
+			"title": "Databases",
+			"pages": [
+				{
+					"title": "Database per Agent",
+					"href": "/guides/database-per-agent"
+				}
+			]
+		},
+		{
+			"title": "Security & Compliance",
+			"pages": [
+				{
+					"title": "HIPAA-ready agents",
+					"href": "/guides/hipaa-agents"
+				},
+				{
+					"title": "SOC 2 evidence for agents",
+					"href": "/guides/soc2-agent-evidence"
+				},
+				{
+					"title": "AI agents in regulated industries",
+					"href": "/guides/regulated-industry-agents"
+				},
+				{
+					"title": "Outbound proxy for agents",
+					"href": "/guides/outbound-proxy"
+				},
+				{
+					"title": "Prevent SSRF in agent tool calls",
+					"href": "/guides/prevent-ssrf-agents"
+				},
+				{
+					"title": "Credential brokering",
+					"href": "/guides/credential-brokering"
+				},
+				{
+					"title": "SSO-gated internal agents",
+					"href": "/guides/sso-internal-agents"
+				},
+				{
+					"title": "Least-privilege agents",
+					"href": "/guides/least-privilege-agents"
+				},
+				{
+					"title": "PII redaction before model calls",
+					"href": "/guides/pii-redaction"
+				}
+			]
+		},
+		{
+			"title": "Platforms",
+			"pages": [
+				{
+					"title": "MCP gateway",
+					"href": "/guides/mcp-gateway"
+				},
+				{
+					"title": "Internal agent platform",
+					"href": "/guides/internal-agent-platform"
+				},
+				{
+					"title": "Internal coding-agent platform",
+					"href": "/guides/internal-coding-agent-platform"
 				}
 			]
 		}

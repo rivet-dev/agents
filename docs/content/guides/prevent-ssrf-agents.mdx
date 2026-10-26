@@ -1,0 +1,42 @@
+---
+title: "Prevent SSRF in Agent Tool Calls"
+description: "Let an agent fetch any public URL without letting it reach your internal network or cloud metadata."
+---
+
+<Diagram
+  id="prevent-ssrf-agents"
+  label="Your app sends a question to the user's researcher agent. The agent's fetch tool runs in the user's agentOS VM, whose network permissions decide where a request may go. Requests to the public internet are allowed. Requests to private ranges such as 10.0.0.0/8 and to the cloud metadata address 169.254.169.254 are denied before they leave the VM. The numbers show the order of the calls. There is one researcher agent and one agentOS VM per user."
+  stackLabel="One per user"
+  nodes={[
+    { id: "app", x: 20, y: 60, w: 140, title: "Your app", subtitle: "user question" },
+    { id: "agent", x: 290, y: 60, product: "agents", stack: true, title: "`researcher`", subtitle: "picks the URL" },
+    { id: "vm", x: 600, y: 60, product: "agentos", stack: true, title: "`sandbox`", subtitle: "`network` rules" },
+    { id: "public", x: 910, y: 60, w: 160, title: "Public internet", subtitle: "allowed" },
+    { id: "private", x: 600, y: 210, title: "Private ranges", subtitle: "`10.0.0.0/8`, metadata" },
+  ]}
+  edges={[
+    { from: "app", to: "agent", label: "question", step: 1 },
+    { from: "agent", to: "vm", label: "`fetch` tool", step: 2 },
+    { from: "vm", to: "public", label: "allowed", step: 3 },
+    { from: "vm", to: "private", label: "denied", step: 4 },
+  ]}
+/>
+
+## TODO
+
+This page is not written yet. The outline below is what it will cover.
+
+### What we'll build
+
+- A `fetch` tool that runs inside the agent's agentOS VM instead of on your server.
+- `network` permissions on the VM that allow public hosts and deny private ranges, link-local addresses, and cloud metadata endpoints.
+- Tests that point the tool at `169.254.169.254`, `localhost`, and an internal hostname and show each one is refused.
+- A clear error the model sees when a request is denied, so it can explain the failure instead of retrying.
+
+### Similar tools
+
+This is the same job as following the OWASP SSRF guidance by hand, Cloudflare Sandbox SDK egress controls, or E2B network policies. On Rivet the check runs in the agentOS kernel after DNS resolution, so a hostname that resolves to a private address is denied too.
+
+### Open questions
+
+- `agentOSProvider` in `@rivet-dev/sandbox-adapter` has no option for the VM's `network` permissions. The guide would set them on the VM another way, such as `v1.config.set`, or wait for an option.
