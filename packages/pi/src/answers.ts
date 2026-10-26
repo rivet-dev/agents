@@ -28,7 +28,7 @@ export type PiOnAnswer = (
 ) => void | Promise<void>;
 
 /** The extension that runs `onAnswer`. Conversations that use the default selection get it. */
-const ANSWER_EXTENSION = "rivet-pi-on-answer";
+export const ANSWER_EXTENSION = "rivet-pi-on-answer";
 
 /**
  * The app's registry and settings plus an extension whose `onYield` hook calls

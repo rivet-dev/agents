@@ -18,7 +18,11 @@ import { sandboxEnv } from "@rivet-dev/sandbox-adapter/pi";
 import { type ActorContext, UserError } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
 import { actorSqlite } from "./actor-sqlite.js";
-import { type PiOnAnswer, withAnswerHook } from "./answers.js";
+import {
+	ANSWER_EXTENSION,
+	type PiOnAnswer,
+	withAnswerHook,
+} from "./answers.js";
 import { SourceCredentialStore } from "./credentials.js";
 import { databaseEnv } from "./database-env.js";
 import { toClientError } from "./errors.js";
@@ -315,7 +319,10 @@ async function openHarness(
 	const { registry, settings } = options.onAnswer
 		? withAnswerHook(options, c, options.onAnswer, (error) => {
 				c.log.error({ msg: "pi onAnswer failed", error: String(error) });
-				options.onReport?.(error);
+				options.onReport?.(error, {
+					type: "extension_error",
+					extension: ANSWER_EXTENSION,
+				});
 			})
 		: options;
 	const harness = await Harness.open(
@@ -335,11 +342,11 @@ async function openHarness(
 							})),
 			conversationCreated: startingAgent(options),
 			now: options.now,
-			onReport: (error) => {
+			onReport: (error, info) => {
 				// A commit that failed after storage admitted it leaves Pi Durable
 				// unusable. Background work reports it here, with no action to catch it.
 				queueMicrotask(() => void recoverHarness(c, runtime, options));
-				options.onReport?.(error);
+				options.onReport?.(error, info);
 			},
 		},
 		BACKGROUND_CONTEXT,

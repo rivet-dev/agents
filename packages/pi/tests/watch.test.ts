@@ -26,6 +26,7 @@ const Todos = defineDoc<{ items: string[] }>({
 	history: "latest",
 	fork: "current",
 	initial: () => ({ items: [] }),
+	checkpointWhen: () => false,
 });
 
 const addTodo = defineTool({
