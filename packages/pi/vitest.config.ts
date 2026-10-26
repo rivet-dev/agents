@@ -5,6 +5,8 @@ export default defineConfig({
 		// Each file boots its own engine through setupTest. Running files in
 		// parallel makes those engines contend for ports and CPU.
 		fileParallelism: false,
+		globalSetup: ["./tests/helpers/engine-root.ts"],
+		setupFiles: ["./tests/helpers/isolated-engine.ts"],
 		sequence: { concurrent: false },
 		testTimeout: 60_000,
 		hookTimeout: 60_000,
