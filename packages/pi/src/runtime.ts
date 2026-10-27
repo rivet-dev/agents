@@ -719,6 +719,11 @@ export async function resumeDueSleeps(c: PiContext): Promise<void> {
 	(await piRuntime(c).harness)?.resumeDue();
 }
 
+/** What a shutdown hook gets from `c.pi` once the actor has started to stop. */
+export function piStopping() {
+	return new UserError("Pi Durable is closed because the actor is stopping.");
+}
+
 /** Runs `body` with a `c.pi` that throws `error` when read. */
 export function withUnavailablePi<T>(
 	c: PiContext,

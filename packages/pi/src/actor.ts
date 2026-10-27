@@ -27,6 +27,7 @@ import {
 	type PiContext,
 	type PiOptions,
 	piRuntime,
+	piStopping,
 	withPiAccess,
 	withUnavailablePi,
 } from "./runtime.js";
@@ -240,6 +241,16 @@ export function pi<
 		},
 		onConnect: withPi(actorConfig.onConnect),
 		onDisconnect: async (c: PiContext, conn: { id: string }) => {
+			// Shutdown runs onDisconnect in the same window as onSleep and
+			// onDestroy, in no set order, and those close Pi Durable. So a
+			// disconnect during shutdown never uses Pi, and its watches end when
+			// the harness closes.
+			if (c.abortSignal.aborted || piRuntime(c).status !== "open") {
+				await withUnavailablePi(c, piStopping(), () =>
+					actorConfig.onDisconnect?.(c, conn),
+				);
+				return;
+			}
 			try {
 				await userOnDisconnect?.(c, conn);
 			} finally {

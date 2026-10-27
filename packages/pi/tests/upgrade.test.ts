@@ -509,18 +509,19 @@ describe("pi drain and upgrades", () => {
 		]);
 	});
 
-	test("the app's onDisconnect runs after a destroy closed Pi Durable, and only reading c.pi fails", async (c) => {
+	test("the app's onDisconnect runs when a destroy closes its connection, and c.pi is open or reports the stop", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["closed", randomUUID()];
 		const conn = client.drainer.getOrCreate(key).connect();
 		await conn.harness.root();
 
 		await client.drainer.getOrCreate(key).destroySelf();
-		// Destroy closes Pi Durable, then disconnects the connection; the hook records what c.pi gave in this process.
+		// RivetKit 2.x runs onDestroy first; 3.0 disconnects before shutdown starts. Either way the hook runs, and c.pi never fails with another error. The hook records what c.pi gave in this process.
 		await vi.waitFor(() =>
-			expect(disconnectOutcomes.get(JSON.stringify(key))).toBe(
-				"Pi Durable is closed because the actor was destroyed.",
-			),
+			expect([
+				"open",
+				"Pi Durable is closed because the actor is stopping.",
+			]).toContain(disconnectOutcomes.get(JSON.stringify(key))),
 		);
 		await conn.dispose();
 	});
