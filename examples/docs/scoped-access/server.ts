@@ -12,7 +12,7 @@ const shareReport = defineTool({
 		const handle = await admin.report.create([crypto.randomUUID()], { input: { title, body } });
 		const { token } = await handle.issueToken({ subject: "shared-report", expiresIn: 3600 });
 		const url = `https://app.example.com/reports/${await handle.resolve()}#${token}`;
-		return { content: [{ type: "text", text: `Shared at ${url}` }], details: { url } };
+		return { output: [{ type: "text", text: `Shared at ${url}` }], details: { url } };
 	},
 });
 

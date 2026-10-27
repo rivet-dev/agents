@@ -61,7 +61,7 @@ const deployTool = defineTool({
 	execute: async () => {
 		deployRuns += 1;
 		await release.promise;
-		return { content: [{ type: "text", text: "deployed" }] };
+		return { output: [{ type: "text", text: "deployed" }] };
 	},
 });
 
@@ -80,7 +80,7 @@ const shipTool = defineTool({
 	execute: async () => {
 		shipRuns += 1;
 		await shipRelease.promise;
-		return { content: [{ type: "text", text: "shipped" }] };
+		return { output: [{ type: "text", text: "shipped" }] };
 	},
 });
 
@@ -96,7 +96,7 @@ const blockingTool = defineTool({
 		await aborted(context.abortSignal);
 		blocking.stopped += 1;
 		context.abortSignal?.throwIfAborted();
-		return { content: [{ type: "text", text: "stopped" }] };
+		return { output: [{ type: "text", text: "stopped" }] };
 	},
 });
 

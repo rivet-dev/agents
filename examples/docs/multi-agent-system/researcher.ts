@@ -12,7 +12,7 @@ const fetchPage = defineTool({
 		const response = await fetch(url, { signal: context.abortSignal });
 		if (!response.ok) throw new Error(`${url} returned ${response.status}.`);
 		const text = (await response.text()).slice(0, 20_000);
-		return { content: [{ type: "text", text }] };
+		return { output: [{ type: "text", text }] };
 	},
 });
 

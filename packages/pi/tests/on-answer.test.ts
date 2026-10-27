@@ -29,7 +29,7 @@ const lookup = defineTool({
 	description: "Looks something up.",
 	parameters: Type.Object({}),
 	replay: "safe",
-	execute: async () => ({ content: [{ type: "text", text: "found it" }] }),
+	execute: async () => ({ output: [{ type: "text", text: "found it" }] }),
 });
 
 function buildRegistry(mock: MockModel) {

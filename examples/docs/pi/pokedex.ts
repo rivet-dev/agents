@@ -20,7 +20,7 @@ export const findPokemon = defineTool({
 			.map((encounter) => encounter.location_area.name);
 		const text =
 			areas.length > 0 ? `${pokemon} in ${version}: ${areas.join(", ")}.` : `No wild ${pokemon} in ${version}.`;
-		return { content: [{ type: "text", text }] };
+		return { output: [{ type: "text", text }] };
 	},
 });
 

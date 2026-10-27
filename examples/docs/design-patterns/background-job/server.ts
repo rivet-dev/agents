@@ -20,7 +20,7 @@ const openPullRequest = defineTool({
 		});
 		if (!response.ok) throw new Error(`GitHub returned ${response.status}.`);
 		const pull = (await response.json()) as { html_url: string };
-		return { content: [{ type: "text", text: pull.html_url }] };
+		return { output: [{ type: "text", text: pull.html_url }] };
 	},
 });
 

@@ -127,7 +127,7 @@ function buildRegistry(mock: MockModel, root: string) {
 				toolRuns[name] += 1;
 				if (toolRuns[name] === 1) await aborted(context.abortSignal);
 				context.abortSignal?.throwIfAborted();
-				return { content: [{ type: "text", text: `${name} done` }] };
+				return { output: [{ type: "text", text: `${name} done` }] };
 			},
 		});
 	const tools = createRegistry();
@@ -300,7 +300,7 @@ function buildRegistry(mock: MockModel, root: string) {
 					description: "Look up a value",
 					parameters: Type.Object({}),
 					replay: "safe",
-					execute: async () => ({ content: [{ type: "text", text: "42" }] }),
+					execute: async () => ({ output: [{ type: "text", text: "42" }] }),
 				}),
 			],
 		}),

@@ -37,7 +37,7 @@ const addTodo = defineTool({
 		await api.commit(async (tx) => {
 			(await tx.doc(Todos, api.conversationId)).items.push(item);
 		}, context);
-		return { content: [{ type: "text", text: "added" }] };
+		return { output: [{ type: "text", text: "added" }] };
 	},
 });
 

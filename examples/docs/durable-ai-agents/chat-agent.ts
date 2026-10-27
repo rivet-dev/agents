@@ -26,7 +26,7 @@ const updatePlan = defineTool({
 		await api.commit(async (tx) => {
 			(await tx.doc(Plan, api.conversationId)).steps = steps;
 		}, context);
-		return { content: [{ type: "text", text: "Plan saved." }] };
+		return { output: [{ type: "text", text: "Plan saved." }] };
 	},
 });
 

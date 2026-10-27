@@ -15,7 +15,7 @@ export const searchFlights = defineTool({
 	execute: async ({ from, to, date }) => {
 		const flights = await findFlights(from, to, date);
 		const text = flights.map((f) => `${f.id}: departs ${f.departs}, $${f.price}`).join("\n");
-		return { content: [{ type: "text", text }], details: flights };
+		return { output: [{ type: "text", text }], details: flights };
 	},
 });
 // docs:end search
@@ -32,7 +32,7 @@ export const bookFlight = defineTool({
 		const idempotencyKey = await api.memo("idempotency-key", crypto.randomUUID(), context);
 		const booking = await createBooking(flightId, passenger, idempotencyKey);
 		const text = `Booked ${passenger} on ${flightId}. Confirmation ${booking.confirmation}.`;
-		return { content: [{ type: "text", text }], details: booking };
+		return { output: [{ type: "text", text }], details: booking };
 	},
 });
 // docs:end book

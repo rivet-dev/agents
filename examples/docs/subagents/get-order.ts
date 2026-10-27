@@ -10,7 +10,7 @@ export const getOrder = defineTool({
 	execute: async ({ orderId }, _api, context) => {
 		const order = await fetchOrder(orderId, context.abortSignal);
 		const text = `Status: ${order.status}. Total: $${order.total}.`;
-		return { content: [{ type: "text", text }], details: order };
+		return { output: [{ type: "text", text }], details: order };
 	},
 });
 
