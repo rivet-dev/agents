@@ -79,6 +79,7 @@ const Todos = defineDoc<{ items: string[] }>({
 	history: "latest",
 	fork: "current",
 	initial: () => ({ items: [] }),
+	checkpointWhen: () => false,
 });
 
 const Poison = defineDoc<{ value: string }>({
@@ -88,6 +89,7 @@ const Poison = defineDoc<{ value: string }>({
 	history: "latest",
 	fork: "current",
 	initial: () => ({ value: "" }),
+	checkpointWhen: () => false,
 });
 
 const JobTask = defineTask<Record<string, never>, { phase: "run" }, null>({

@@ -27,6 +27,7 @@ import {
 	documentsByKind,
 	type PiOptions,
 	piRuntime,
+	resumeDueSleeps,
 	type Waiting,
 	withHarness,
 } from "./runtime.js";
@@ -493,8 +494,8 @@ export function createPiActions(options: PiOptions) {
 			}),
 
 		pi: {
-			/** Scheduled at the end of a long wait. Opening the harness resumes the waiting work. */
-			wake: (c: PiContext) => run(c, async () => {}),
+			/** Scheduled for Pi Durable's earliest sleeping task. Resumes the tasks that are due. */
+			wake: (c: PiContext) => run(c, () => resumeDueSleeps(c)),
 		},
 	};
 }

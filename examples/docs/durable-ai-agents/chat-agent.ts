@@ -12,6 +12,8 @@ export const Plan = defineDoc<{ steps: { text: string; done: boolean }[] }>({
 	history: "latest",
 	fork: "current",
 	initial: () => ({ steps: [] }),
+	// Store the whole document every 50 changes, so loading it replays at most 50.
+	checkpointWhen: (_value, _ops, { deltasSinceBase }) => deltasSinceBase >= 50,
 });
 
 const updatePlan = defineTool({
