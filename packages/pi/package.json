@@ -52,8 +52,9 @@
 	},
 	"peerDependencies": {
 		"@earendil-works/chord": "^1.0.0",
+		"@earendil-works/pi-ai": "^1.0.0",
 		"@earendil-works/pi-durable": "^1.0.0",
-		"rivetkit": ">=2.3.26 <2.4.0"
+		"rivetkit": ">=2.3.28 <2.4.0"
 	},
 	"devDependencies": {
 		"@earendil-works/chord": "1.3.0",
@@ -61,7 +62,7 @@
 		"@earendil-works/pi-durable": "1.3.0",
 		"@opentelemetry/sdk-trace-node": "2.11.0",
 		"@types/node": "^24.0.0",
-		"rivetkit": "2.3.26",
+		"rivetkit": "2.3.30",
 		"typescript": "^5.9.2",
 		"vitest": "^3.2.4"
 	},
