@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
+	DOCKER_SANDBOX_LABEL,
 	type DockerProviderOptions,
 	dockerPortAddress,
 	dockerProvider,
@@ -122,6 +123,39 @@ describe.skipIf(!dockerRunning)("docker provider", () => {
 			sandbox.readFile("/workspace/files/missing"),
 		).rejects.toThrow();
 		await expect(sandbox.stat("/workspace/files/missing")).rejects.toThrow();
+	});
+
+	test("a write that the container cannot take fails without crashing the process", async () => {
+		// Large enough that `docker exec` exits before it reads all of the input.
+		await expect(
+			sandbox.writeFile(
+				"/workspace/missing/dir/big.txt",
+				"x".repeat(8 * 1024 * 1024),
+			),
+		).rejects.toThrow();
+		expect(await sandbox.exists("/workspace/missing")).toBe(false);
+	});
+
+	test("a sandbox that fails to start leaves no container behind", async () => {
+		const containers = () =>
+			spawnSync("docker", [
+				"ps",
+				"--all",
+				"--quiet",
+				"--filter",
+				`label=${DOCKER_SANDBOX_LABEL}`,
+			])
+				.stdout.toString()
+				.trim()
+				.split("\n")
+				.filter(Boolean).length;
+		const before = containers();
+		const provider = dockerProvider({
+			image,
+			network: `missing-${randomUUID()}`,
+		});
+		await expect(provider.create(context)).rejects.toThrow();
+		expect(containers()).toBe(before);
 	});
 
 	test("host files and host env vars are invisible inside the container", async () => {
