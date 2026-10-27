@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/react",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "React components for Sandbox Agent frontend integrations",
   "license": "Apache-2.0",
   "repository": {

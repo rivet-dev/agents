@@ -1,6 +1,6 @@
 {
   "name": "@sandbox-agent/cli-win32-x64",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "sandbox-agent CLI binary for Windows x64",
   "license": "Apache-2.0",
   "repository": {
