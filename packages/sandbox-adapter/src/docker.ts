@@ -56,7 +56,15 @@ export function dockerProvider(
 		cwd,
 		create: async (c) => {
 			const id = randomUUID();
-			await docker.run(createArgs(id, c, cwd, network, options));
+			try {
+				await docker.run(createArgs(id, c, cwd, network, options));
+			} catch (error) {
+				// `docker run` creates the container before it starts it, so a failed start leaves it behind.
+				await docker
+					.run(["rm", "--force", `rivet-sandbox-${id}`])
+					.catch(() => {});
+				throw error;
+			}
 			return id;
 		},
 		connect: async (_c, id) => {
@@ -334,6 +342,8 @@ class DockerCli {
 					stderr: Buffer.concat(stderr),
 				}),
 			);
+			// `docker exec` can exit before it reads all the input; its exit code reports the failure.
+			child.stdin?.on("error", () => {});
 			if (shell?.input !== undefined) child.stdin?.end(shell.input);
 		});
 	}

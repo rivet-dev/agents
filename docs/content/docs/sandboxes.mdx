@@ -169,7 +169,7 @@ npm add @rivet-dev/sandbox-adapter
 | `keepImageEntrypoint` | Runs the image's own entrypoint, for images such as `cloudflare/sandbox` that start a server. By default the container runs an idle process. |
 | `docker` | Path of the Docker CLI. Defaults to `docker`. |
 
-Each sandbox is one container with the label `dev.rivet.sandbox-adapter.sandbox-id`. The container has no host mounts, no host environment, no privileged mode, and no host network. A kill or timeout ends the command and every process it started.
+Each sandbox is one container with the label `dev.rivet.sandbox-adapter.sandbox-id`. The container has no host mounts, no host environment, no privileged mode, and no host network. A kill or timeout ends the command and its child processes. A process that detaches from it, such as one started with `(command &)`, keeps running until the container stops.
 
 ## How the sandbox is managed
 
