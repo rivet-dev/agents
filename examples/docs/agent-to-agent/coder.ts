@@ -12,7 +12,7 @@ const requestReview = defineTool({
 	parameters: Type.Object({ repo: Type.String(), branch: Type.String(), summary: Type.String() }),
 	execute: async ({ repo, branch, summary }) => {
 		await client.reviewer.getOrCreate([repo]).requestReview(`Review the ${branch} branch of https://github.com/${repo}: ${summary}`);
-		return { content: [{ type: "text", text: `Sent ${branch} for review.` }] };
+		return { output: [{ type: "text", text: `Sent ${branch} for review.` }] };
 	},
 });
 

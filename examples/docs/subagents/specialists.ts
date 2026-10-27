@@ -35,10 +35,10 @@ export const askSpecialist = defineTool({
 
 		const result = await agent.prompt(question, { requestId: id });
 		if (result.status === "unanswered") {
-			return { content: [{ type: "text", text: `The specialist did not answer: ${result.reason}` }], isError: true };
+			return { output: [{ type: "text", text: `The specialist did not answer: ${result.reason}` }], isError: true };
 		}
 		const answer = result.text || "The specialist finished without an answer.";
-		return { content: [{ type: "text", text: answer }], details: { specialist } };
+		return { output: [{ type: "text", text: answer }], details: { specialist } };
 	},
 });
 

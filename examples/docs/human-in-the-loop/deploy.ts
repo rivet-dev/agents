@@ -14,13 +14,13 @@ export const deploy = defineTool({
 			await client.approval.getOrCreate([id]).request(version);
 			const text = `Waiting for a person to approve deploying ${version}. After approval, call deploy again with approvalId ${id}.`;
 			// Ends the run, so the agent waits for the person instead of trying again.
-			return { content: [{ type: "text", text }], details: { version, approvalId: id }, control: { terminate: true } };
+			return { output: [{ type: "text", text }], details: { version, approvalId: id }, control: { terminate: true } };
 		}
 		if (!(await client.approval.get([approvalId]).consume(version))) {
 			throw new Error(`Deploying ${version} is not approved.`);
 		}
 		await fetch(`https://deploy.example.com/releases/${version}`, { method: "POST", signal: context.abortSignal });
-		return { content: [{ type: "text", text: `Deployed ${version}.` }] };
+		return { output: [{ type: "text", text: `Deployed ${version}.` }] };
 	},
 });
 

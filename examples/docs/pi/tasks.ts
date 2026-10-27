@@ -51,7 +51,7 @@ const deployPreview = defineTool({
 		const id = await api.createTask(DeployPreview, args, { ownership: { kind: "task", taskId: api.taskId } }, context);
 		const { outcome } = (await api.waitForTask(id, context)).state;
 		const text = outcome.status === "completed" ? `Preview at ${outcome.result}.` : `Preview ${outcome.status}.`;
-		return { content: [{ type: "text", text }] };
+		return { output: [{ type: "text", text }] };
 	},
 });
 

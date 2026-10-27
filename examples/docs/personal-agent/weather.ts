@@ -11,6 +11,6 @@ export const getWeather = defineTool({
 		// A mock. Call a real weather API here.
 		const weather = { city, temperatureC: 18, conditions: "sunny" };
 		const text = `${city}: ${weather.temperatureC}°C and ${weather.conditions}.`;
-		return { content: [{ type: "text", text }], details: weather };
+		return { output: [{ type: "text", text }], details: weather };
 	},
 });

@@ -38,7 +38,7 @@ const askSpecialist = defineTool({
 		);
 
 		const text = subtasks.map((subtask, i) => `## ${subtask}\n\n${answers[i]}`).join("\n\n");
-		return { content: [{ type: "text", text }] };
+		return { output: [{ type: "text", text }] };
 	},
 });
 // docs:end fan-out

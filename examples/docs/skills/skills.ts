@@ -23,7 +23,7 @@ const loadSkill = defineTool({
 	execute: async ({ name }) => {
 		const skill = skills.get(name);
 		if (!skill) throw new Error(`No skill named ${name}. Skills: ${[...skills.keys()].join(", ")}.`);
-		return { content: [{ type: "text", text: skill.body }] };
+		return { output: [{ type: "text", text: skill.body }] };
 	},
 });
 
