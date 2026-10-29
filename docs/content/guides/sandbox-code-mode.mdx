@@ -1,0 +1,203 @@
+---
+title: "Code Mode in the Sandbox"
+description: "Let programs the agent writes in its sandbox call your backend tools, authenticated with a scoped JWT."
+---
+
+import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
+
+<ExampleLinkBar href="https://github.com/rivet-dev/agents/tree/main/examples/docs/sandbox-code-mode" />
+
+<Diagram
+  id="sandbox-code-mode"
+  label="The agent's bash tool runs a script in the sandbox with bash. The script runs the call-tool.sh script, which calls an action on the agent over HTTP with a scoped JWT. The action runs in your backend and calls your MCP servers and APIs with your keys. The numbers show the order of the calls."
+  nodes={[
+    { id: "backend", kind: "boundary", x: 10, y: 30, w: 240, h: 330, title: "Your backend" },
+    { id: "agent", kind: "group", x: 30, y: 66, w: 200, h: 170, title: "Agent" },
+    { id: "bash", kind: "slot", x: 45, y: 100, w: 170, h: 36, title: "`bash` tool" },
+    { id: "actions", kind: "slot", x: 45, y: 180, w: 170, h: 36, title: "actions" },
+    { id: "tools", x: 30, y: 280, w: 200, h: 56, title: "MCP servers and APIs", subtitle: "use your keys" },
+    { id: "sandbox", kind: "group", x: 360, y: 50, w: 230, h: 200, title: "Sandbox" },
+    { id: "script", kind: "slot", x: 375, y: 100, w: 200, h: 36, title: "Node.js, Python, Bash" },
+    { id: "callback", kind: "slot", x: 375, y: 180, w: 200, h: 36, title: "`call-tool.sh` script" },
+  ]}
+  edges={[
+    { from: "bash", to: "script", label: "runs a script", step: 1 },
+    { from: "script", to: "callback", label: "runs", step: 2 },
+    { from: "callback", to: "actions", label: "scoped JWT", step: 3 },
+    { from: "actions", to: "tools", label: "your keys", step: 4 },
+  ]}
+  width={600}
+  height={370}
+/>
+
+In code mode, the model writes a program that calls tools instead of calling them one at a time. This guide runs that program in the agent's sandbox. When the agent connects, it writes `call-tool.sh`, a shell script that calls the agent's actions with a [scoped JWT](/docs/jwt). The model uses each action as a tool, and your Rivet token stays on your worker.
+
+## Quickstart
+
+<Steps>
+
+<Step title="Install">
+
+```sh
+npm add @rivet-dev/pi @rivet-dev/sandbox-adapter @earendil-works/pi-durable rivetkit@next
+```
+
+</Step>
+
+<Step title="Set the keys">
+
+```sh
+ANTHROPIC_API_KEY=sk-ant-...
+RIVET_ENDPOINT=https://<namespace>:<rivet-token>@api.rivet.dev
+```
+
+The sandbox calls your Rivet endpoint, so it must be public. That's safe: `call-tool.sh` authenticates with a scoped JWT, not your Rivet token.
+
+</Step>
+
+<Step title="Write the script on connect">
+
+<CodeSnippet file="examples/docs/sandbox-code-mode/callback.ts" title="callback.ts" region="provider" />
+
+- The token reaches only this agent. Every other Actor returns `403`.
+- The script is rewritten after every wake. A token lasts at most 24 hours.
+
+</Step>
+
+<Step title="Tell the model">
+
+<CodeSnippet file="examples/docs/sandbox-code-mode/server.ts" title="server.ts" region="prompt" />
+
+</Step>
+
+<Step title="Add the tools">
+
+<Warning>
+The token can call **every action on this agent**, including Pi's own actions such as `prompt`. Anything in the sandbox can read it. Only add tools you're willing to let sandboxed code call.
+</Warning>
+
+<CodeSnippet file="examples/docs/sandbox-code-mode/server.ts" title="server.ts" region="agent" />
+
+The model writes the arguments, so check them. A `UserError` makes the script exit non-zero with the message.
+
+</Step>
+
+<Step title="Try it">
+
+With Docker running, start the server. It first builds the sandbox image from the example's [Dockerfile](https://github.com/rivet-dev/agents/blob/main/examples/docs/sandbox-code-mode/Dockerfile), which adds Python and numpy to `node:22`.
+
+```sh
+npx tsx server.ts
+```
+
+In another terminal, start the CLI. It prints the agent's answer as it streams, every command it runs, and each status it reports through `call-tool.sh`:
+
+<CodeSnippet file="examples/docs/sandbox-code-mode/cli.ts" title="cli.ts" />
+
+```sh
+npx tsx cli.ts
+```
+
+```text
+you> In a single Python script, pull every reading for every sensor with getReadings, use numpy to find spikes more than 5 standard deviations from a rolling mean, find which two sensors are most correlated, and save a note for each spike. Keep your answer short.
+
+> write {"path":"/workspace/spikes.py","content":"..."}
+> $ python3 /workspace/spikes.py
+[progress] Fetching readings for 5 sensors
+[progress] Saving 4 spike notes
+Boiler and pump are the most correlated pair (r = 0.95). I found 4 spikes:
+
+| Sensor | Minute | Value | z     |
+|--------|--------|-------|-------|
+| tank   | 1234   | 77.18 | +45.9 |
+| boiler | 4321   | 90.92 | +29.2 |
+| pump   | 7777   | 25.25 | -29.7 |
+| tank   | 9001   | 75.64 | +40.4 |
+
+notes: ["Spike: boiler at minute 4321 = 90.92 (z=+29.2)", ...]
+```
+
+The script made all 55 `getReadings` calls itself, so none of the 50,400 readings passed through the model. The model picks its own commands and messages, so yours will differ.
+
+</Step>
+
+</Steps>
+
+## Why run code mode in the sandbox
+
+Code mode gives an agent an "execute script" tool that lets it write JavaScript to call your tools. That script usually runs in a tiny embedded JavaScript runtime such as QuickJS, cut off from the system it's working on. It can't:
+
+- Save scripts that call your tools and reuse them later
+- Use npm or PyPI packages installed on the system
+- Use a rich standard library, such as Node's or Bun's `fs`, streams, and `child_process`
+- Work with files too large to load into memory
+- Call tools in the background after the turn ends, such as from a file watcher or a long job
+
+A script in the sandbox runs on that system, so it can do all of this, but it can't reach your tools:
+
+<div style="overflow-x:auto">
+<svg viewBox="0 0 600 720" role="img" aria-label="Code mode today: in your backend, the agent has a bash tool and a code mode tool. The code mode tool makes authed calls to your MCP servers and APIs. The bash tool runs scripts in the sandbox, which cannot reach your tools. Code mode with tools: the bash tool runs a script in the sandbox, the script executes tools through call-tool.sh, which calls the agent's actions, and the actions make authed calls to your MCP servers and APIs." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="sandbox-code-mode-ink" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
+    <marker id="sandbox-code-mode-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2f8f4e"/></marker>
+  </defs>
+  <g transform="translate(0 0)">
+    <text x="10" y="18" text-anchor="start" font-size="16" font-weight="700" fill="rgb(var(--site-ink, 27 25 22))">Code Mode (Today)</text>
+    <rect x="10" y="40" width="240" height="290" rx="10" fill="rgb(var(--site-paper-mid, 250 248 243))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6"/>
+    <text x="26" y="62" font-size="11" font-family="ui-monospace, monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">YOUR BACKEND</text>
+    <rect x="30" y="72" width="200" height="150" rx="9" fill="rgb(var(--site-paper-mid, 243 241 236))" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4"/><text x="130" y="94" text-anchor="middle" font-size="13" font-weight="600" fill="rgb(var(--site-ink, 27 25 22))">Agent</text>
+    <rect x="45" y="110" width="170" height="36" rx="6" fill="rgb(var(--site-surface, 255 255 255))" stroke="rgb(var(--site-ink-faint, 138 133 120))" stroke-width="1.2"/><text x="130.0" y="132" text-anchor="middle" font-size="12" fill="rgb(var(--site-ink, 27 25 22))"><tspan font-family="ui-monospace, monospace">bash</tspan> tool</text>
+    <rect x="45" y="176" width="170" height="36" rx="6" fill="rgb(var(--site-surface, 255 255 255))" stroke="rgb(var(--site-ink-faint, 138 133 120))" stroke-width="1.2"/><text x="130.0" y="198" text-anchor="middle" font-size="12" fill="rgb(var(--site-ink, 27 25 22))">Code mode tool (JS)</text>
+    <rect x="30" y="262" width="200" height="44" rx="7" fill="rgb(var(--site-surface, 255 255 255))" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4"/><text x="130" y="289" text-anchor="middle" font-size="14" font-weight="600" fill="rgb(var(--site-ink, 27 25 22))">MCP &amp; API</text>
+    <path d="M130 212 L130 260" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none" marker-end="url(#sandbox-code-mode-ink)"/><text x="140" y="244" text-anchor="start" font-size="12" fill="rgb(var(--site-ink-soft, 86 82 74))">authed calls</text>
+    <rect x="380" y="72" width="210" height="84" rx="9" fill="rgb(var(--site-paper-mid, 243 241 236))" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4"/><text x="485" y="94" text-anchor="middle" font-size="13" font-weight="600" fill="rgb(var(--site-ink, 27 25 22))">Sandbox</text>
+    <rect x="392" y="110" width="186" height="36" rx="6" fill="rgb(var(--site-surface, 255 255 255))" stroke="rgb(var(--site-ink-faint, 138 133 120))" stroke-width="1.2"/><text x="485.0" y="132" text-anchor="middle" font-size="12" fill="rgb(var(--site-ink, 27 25 22))">Node.js, Python, Bash</text>
+    <path d="M215 128 L390 128" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none" marker-end="url(#sandbox-code-mode-ink)"/><text x="315" y="120" text-anchor="middle" font-size="12" fill="rgb(var(--site-ink-soft, 86 82 74))">runs script</text>
+    <text x="485" y="186" text-anchor="middle" font-size="12" font-weight="700" fill="#d14343">CANNOT REACH YOUR TOOLS</text>
+    </g>
+  <path d="M10 355 L590 355" stroke="rgb(var(--site-ink-faint, 138 133 120))" stroke-width="1" stroke-dasharray="3 5"/>
+  <g transform="translate(0 380)">
+    <text x="10" y="18" text-anchor="start" font-size="16" font-weight="700" fill="rgb(var(--site-ink, 27 25 22))">Code Mode (With Tools)</text>
+    <rect x="10" y="40" width="240" height="290" rx="10" fill="rgb(var(--site-paper-mid, 250 248 243))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6"/>
+    <text x="26" y="62" font-size="11" font-family="ui-monospace, monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">YOUR BACKEND</text>
+    <rect x="30" y="72" width="200" height="150" rx="9" fill="rgb(var(--site-paper-mid, 243 241 236))" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4"/><text x="130" y="94" text-anchor="middle" font-size="13" font-weight="600" fill="rgb(var(--site-ink, 27 25 22))">Agent</text>
+    <rect x="45" y="110" width="170" height="36" rx="6" fill="rgb(var(--site-surface, 255 255 255))" stroke="rgb(var(--site-ink-faint, 138 133 120))" stroke-width="1.2"/><text x="130.0" y="132" text-anchor="middle" font-size="12" fill="rgb(var(--site-ink, 27 25 22))"><tspan font-family="ui-monospace, monospace">bash</tspan> tool</text>
+    <rect x="45" y="176" width="170" height="36" rx="6" fill="rgb(var(--site-surface, 255 255 255))" stroke="rgb(var(--site-ink-faint, 138 133 120))" stroke-width="1.2"/><text x="130.0" y="198" text-anchor="middle" font-size="12" fill="rgb(var(--site-ink, 27 25 22))">Actions</text>
+    <rect x="30" y="262" width="200" height="44" rx="7" fill="rgb(var(--site-surface, 255 255 255))" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4"/><text x="130" y="289" text-anchor="middle" font-size="14" font-weight="600" fill="rgb(var(--site-ink, 27 25 22))">MCP &amp; API</text>
+    <path d="M130 212 L130 260" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none" marker-end="url(#sandbox-code-mode-ink)"/><text x="140" y="244" text-anchor="start" font-size="12" fill="rgb(var(--site-ink-soft, 86 82 74))">authed calls</text>
+    <rect x="380" y="72" width="210" height="150" rx="9" fill="rgb(var(--site-paper-mid, 243 241 236))" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4"/><text x="485" y="94" text-anchor="middle" font-size="13" font-weight="600" fill="rgb(var(--site-ink, 27 25 22))">Sandbox</text>
+    <rect x="392" y="110" width="186" height="36" rx="6" fill="rgb(var(--site-surface, 255 255 255))" stroke="rgb(var(--site-ink-faint, 138 133 120))" stroke-width="1.2"/><text x="485.0" y="132" text-anchor="middle" font-size="12" fill="rgb(var(--site-ink, 27 25 22))">Node.js, Python, Bash</text>
+    <path d="M215 128 L390 128" stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none" marker-end="url(#sandbox-code-mode-ink)"/><text x="315" y="120" text-anchor="middle" font-size="12" fill="rgb(var(--site-ink-soft, 86 82 74))">runs script</text>
+    <rect x="392" y="176" width="186" height="36" rx="6" fill="rgb(var(--site-surface, 255 255 255))" stroke="rgb(var(--site-ink-faint, 138 133 120))" stroke-width="1.2"/><text x="485.0" y="198" text-anchor="middle" font-size="12" fill="rgb(var(--site-ink, 27 25 22))"><tspan font-family="ui-monospace, monospace">call-tool.sh</tspan></text>
+    <path d="M485 146 L485 174" stroke="#2f8f4e" stroke-width="1.4" fill="none" marker-end="url(#sandbox-code-mode-green)"/><text x="495" y="165" text-anchor="start" font-size="12" fill="#2f8f4e">executes tool</text>
+    <path d="M392 194 L218 194" stroke="#2f8f4e" stroke-width="1.4" fill="none" marker-end="url(#sandbox-code-mode-green)"/><text x="315" y="186" text-anchor="middle" font-size="12" fill="#2f8f4e">calls tools</text>
+    </g>
+</svg>
+</div>
+
+`call-tool.sh` closes the gap. The program runs in the sandbox next to your files and packages, and each tool call goes to an action in your backend, where the keys are.
+
+Use it when a script calls tools in a loop, or when sandbox work should reach your app. If the model calling tools one at a time is enough, use [Custom Tools](/agents/docs/custom-tools).
+
+## Why not put the agent in the sandbox
+
+Running the whole agent inside the sandbox would also put the tools next to the files, but the sandbox is the wrong place for the agent:
+
+- **A broken sandbox takes the agent with it.** An out-of-memory build or a corrupted filesystem kills the agent loop and its history. Here Pi runs in the agent Actor and keeps the conversation in its own database.
+- **Anything in the sandbox can leak.** Model keys and tool credentials would sit next to untrusted code. Here they stay on your worker, and the sandbox holds only a token for one agent.
+- **Sandboxes sleep.** Schedules, workflows, and reading history shouldn't wait for a sandbox to start.
+
+See [Run Your Harness Outside the Sandbox](/blog/2026-07-27-run-your-harness-outside-the-sandbox) for the full argument.
+
+## How the script works
+
+<CodeSnippet file="examples/docs/sandbox-code-mode/callback.ts" title="callback.ts" region="script" />
+
+- It posts the arguments to [Call Action](/docs/api/gateway/call-action) with the token in `x-rivet-token`.
+- `gatewayEndpoint` strips your Rivet token from the endpoint URL, so only the scoped token reaches the sandbox.
+
+## Related docs
+
+- [JWTs](/docs/jwt): grants and expiry.
+- [Sandboxes](/agents/docs/sandboxes): providers and when the agent connects.
+- [Scoped Access with JWTs](/agents/docs/scoped-access): share a token with a browser instead.

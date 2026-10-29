@@ -207,6 +207,10 @@
 				{
 					"title": "Multi-Agent Systems",
 					"href": "/guides/multi-agent-system"
+				},
+				{
+					"title": "Code Mode in the Sandbox",
+					"href": "/guides/sandbox-code-mode"
 				}
 			]
 		},

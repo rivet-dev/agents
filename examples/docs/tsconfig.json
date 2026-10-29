@@ -17,6 +17,7 @@
 		"pi/stream.ts",
 		"react-sdk/Chat.tsx",
 		"react-sdk/useAgentChat.ts",
+		"sandbox-code-mode/cli.ts",
 		"session-lifecycle/client.ts"
 	]
 }
