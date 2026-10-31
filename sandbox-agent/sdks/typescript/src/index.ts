@@ -23,6 +23,7 @@ export type {
 } from "./desktop-stream.ts";
 
 export type {
+  SandboxAgentAuthenticationOptions,
   SandboxAgentHealthWaitOptions,
   AgentQueryOptions,
   DesktopStreamSessionOptions,

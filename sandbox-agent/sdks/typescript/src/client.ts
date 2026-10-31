@@ -5,6 +5,8 @@ import {
   type AcpEnvelopeDirection,
   type AnyMessage,
   type AuthMethod,
+  type AuthenticateRequest,
+  type InitializeRequest,
   type CancelNotification,
   type NewSessionRequest,
   type NewSessionResponse,
@@ -130,7 +132,15 @@ export interface SandboxAgentHealthWaitOptions {
   timeoutMs?: number;
 }
 
+export interface SandboxAgentAuthenticationOptions {
+  /** Capabilities sent while initializing each adapter connection. */
+  clientCapabilities?: InitializeRequest["clientCapabilities"];
+  /** Select an advertised authentication method. Return undefined to skip authentication. Errors propagate to the caller. */
+  selectMethod?: (agent: string, methods: readonly AuthMethod[]) => AuthenticateRequest | undefined | Promise<AuthenticateRequest | undefined>;
+}
+
 interface SandboxAgentConnectCommonOptions {
+  authentication?: SandboxAgentAuthenticationOptions;
   headers?: HeadersInit;
   persist?: SessionPersistDriver;
   replayMaxEvents?: number;
@@ -153,6 +163,7 @@ export type SandboxAgentConnectOptions =
     });
 
 export interface SandboxAgentStartOptions {
+  authentication?: SandboxAgentAuthenticationOptions;
   sandbox: SandboxProvider;
   sandboxId?: string;
   skipHealthCheck?: boolean;
@@ -488,6 +499,7 @@ export class LiveAcpConnection {
     headers?: HeadersInit;
     agent: string;
     serverId: string;
+    authentication?: SandboxAgentAuthenticationOptions;
     onObservedEnvelope: (connection: LiveAcpConnection, envelope: AnyMessage, direction: AcpEnvelopeDirection, localSessionId: string | null) => void;
     onPermissionRequest: (
       connection: LiveAcpConnection,
@@ -535,13 +547,23 @@ export class LiveAcpConnection {
 
     const initResult = await acp.initialize({
       protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: options.authentication?.clientCapabilities,
       clientInfo: {
         name: "sandbox-agent-sdk",
         version: "v1",
       },
     });
-    if (initResult.authMethods && initResult.authMethods.length > 0) {
-      await autoAuthenticate(acp, initResult.authMethods);
+    try {
+      const methods = initResult.authMethods ?? [];
+      if (options.authentication?.selectMethod) {
+        const request = await options.authentication.selectMethod(options.agent, methods);
+        if (request) await acp.authenticate(request);
+      } else if (methods.length > 0) {
+        await autoAuthenticate(acp, methods);
+      }
+    } catch (error) {
+      await acp.disconnect().catch(() => {});
+      throw error;
     }
     return live;
   }
@@ -883,6 +905,7 @@ export class SandboxAgent {
   private readonly token?: string;
   private readonly fetcher: typeof fetch;
   private readonly defaultHeaders?: HeadersInit;
+  private readonly authentication?: SandboxAgentAuthenticationOptions;
   private readonly healthWait: NormalizedHealthWaitOptions;
   private readonly healthWaitAbortController = new AbortController();
   private sandboxProvider?: SandboxProvider;
@@ -921,6 +944,7 @@ export class SandboxAgent {
     }
     this.fetcher = resolvedFetch;
     this.defaultHeaders = options.headers;
+    this.authentication = options.authentication;
     this.healthWait = normalizeHealthWaitOptions(options.skipHealthCheck, options.waitForHealth, options.signal);
     this.persist = options.persist ?? new InMemorySessionPersistDriver();
 
@@ -963,6 +987,7 @@ export class SandboxAgent {
       const inspectorUrl = provider.getInspectorUrl ? await provider.getInspectorUrl(rawSandboxId, baseUrl) : undefined;
       const providerFetch = options.fetch ?? fetcher;
       const commonConnectOptions = {
+        authentication: options.authentication,
         headers: options.headers,
         persist: options.persist,
         replayMaxEvents: options.replayMaxEvents,
@@ -2033,6 +2058,7 @@ export class SandboxAgent {
         headers: this.defaultHeaders,
         agent,
         serverId,
+        authentication: this.authentication,
         onObservedEnvelope: (connection, envelope, direction, localSessionId) => {
           void this.enqueueObservedEnvelopePersistence(connection, envelope, direction, localSessionId).catch((error) => {
             console.error("Failed to persist observed sandbox-agent envelope", error);
