@@ -519,7 +519,8 @@ function reportBlockedTasks(c: PiContext, inspection: HarnessInspection): void {
  * Keeps the actor awake while Pi Durable can run work, and schedules a wake
  * for its earliest sleeping task, such as a retry backoff. Pi calls `onWake`
  * after open and whenever the value changes. With `onWake`, Pi keeps no timer
- * for sleeps, so the scheduled `pi.wake` action resumes them.
+ * for sleeps, so the scheduled `pi.wake` action resumes them. While other work
+ * is active the actor cannot sleep, so an in-process timer resumes them.
  *
  * Pi runs a sleep only once its time has passed, and reports a wake only when
  * the value changes. So a wake that fires early, even by a millisecond,
@@ -541,9 +542,8 @@ function wakeActor(
 	let release: (() => void) | undefined;
 	let scheduledAt: number | undefined;
 	let scheduling = false;
-	let fallback:
-		| { at: number; timer: ReturnType<typeof setTimeout> }
-		| undefined;
+	let timer: { at: number; handle: ReturnType<typeof setTimeout> } | undefined;
+	let scheduleFailedAt: number | undefined;
 	let stopped = false;
 
 	const stayAwake = () => {
@@ -556,14 +556,31 @@ function wakeActor(
 		release?.();
 		release = undefined;
 	};
+	const clearTimer = () => {
+		if (timer) clearTimeout(timer.handle);
+		timer = undefined;
+		scheduleFailedAt = undefined;
+	};
+	const armTimer = (at: number) => {
+		if (timer?.at === at) return;
+		clearTimer();
+		// setTimeout fires at once past 2^31 - 1 ms, so a far sleep re-arms from here.
+		const delay = Math.min(Math.max(0, at - now()), 2 ** 31 - 1);
+		timer = { at, handle: setTimeout(resumeDue, delay) };
+	};
 	const apply = () => {
 		if (stopped) return;
 		const { active, at } = latest;
-		if (active) return stayAwake();
+		if (timer?.at !== at) clearTimer();
+		if (active) {
+			stayAwake();
+			if (at !== undefined) armTimer(at);
+			return;
+		}
 		if (at === undefined || at === scheduledAt) return letGo();
 		// The actor may sleep only once its wake is written.
 		stayAwake();
-		if (scheduling || fallback?.at === at) return;
+		if (scheduling || scheduleFailedAt === at) return;
 		scheduling = true;
 		c.schedule
 			.at(at, WAKE_ACTION)
@@ -576,11 +593,8 @@ function wakeActor(
 						msg: "pi durable could not schedule its wake, so the actor stays awake until it",
 						error,
 					});
-					if (fallback) clearTimeout(fallback.timer);
-					fallback = {
-						at,
-						timer: setTimeout(resumeDue, Math.max(0, at - now())),
-					};
+					armTimer(at);
+					scheduleFailedAt = at;
 				},
 			)
 			.finally(() => {
@@ -591,15 +605,14 @@ function wakeActor(
 	const resumeDue = () => {
 		if (stopped || !harness) return;
 		harness.resume();
-		if (fallback) clearTimeout(fallback.timer);
-		fallback = undefined;
+		clearTimer();
 		scheduledAt = undefined;
 		latest = harness.wake();
 		apply();
 	};
 	const stop = () => {
 		stopped = true;
-		if (fallback) clearTimeout(fallback.timer);
+		clearTimer();
 		letGo();
 	};
 	// Keep-awake only blocks idle sleep. Once shutdown starts it would only delay it.
