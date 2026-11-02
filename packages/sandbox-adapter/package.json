@@ -68,8 +68,8 @@
 	},
 	"peerDependencies": {
 		"@daytonaio/sdk": "^0.216.0",
-		"@earendil-works/chord": "^1.4.0",
-		"@earendil-works/pi-durable": "^1.4.0",
+		"@earendil-works/chord": "~1.4.0",
+		"@earendil-works/pi-durable": "~1.4.0",
 		"e2b": "^2.51.0",
 		"freestyle": "^0.2.16"
 	},
