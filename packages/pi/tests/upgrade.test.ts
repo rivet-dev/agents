@@ -474,7 +474,7 @@ describe("pi drain and upgrades", () => {
 		});
 	});
 
-	test("storage written by a newer Pi Durable schema makes Pi's actions fail with an internal error, while the app's own actions and hooks still run", async (c) => {
+	test("storage written by a newer Pi Durable schema makes Pi's actions fail with pi_schema_too_new, while the app's own actions and hooks still run", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["rollback", randomUUID()];
 		const handle = client.migrating.getOrCreate(key);
@@ -483,10 +483,16 @@ describe("pi drain and upgrades", () => {
 		await handle.nap();
 		await sleeps.waitFor(key, 1);
 
-		// The caller cannot fix a rollback, so RivetKit hides Pi's message; the actor logs it.
 		await expect(handle.harness.inspect()).rejects.toMatchObject({
-			group: "rivetkit",
-			code: "internal_error",
+			group: "user",
+			code: "pi_schema_too_new",
+			message: expect.stringMatching(
+				/schema version 3.*supports up to version 2/,
+			),
+		});
+		await expect(handle.startJob()).rejects.toMatchObject({
+			group: "user",
+			code: "pi_schema_too_new",
 		});
 		await handle.nap();
 		await sleeps.waitFor(key, 2);

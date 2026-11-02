@@ -226,6 +226,6 @@ The `pi()` function accepts every [`actor()`](/actors/docs/actor-configuration) 
 | `settings` | Pi Durable settings, such as `retry` and `compaction`. |
 | `onAnswer` | Runs for every final answer. See [Deliver answers](#deliver-answers). |
 
-Other options, such as `thinkingLevel` and `env`, pass through to Pi Durable. By default, `actionTimeout` is ten minutes and `sleepGracePeriod` is 15 minutes. A `ConversationBusy` error reaches clients as a `UserError`, and other Pi Durable errors as internal errors.
+Other options, such as `thinkingLevel` and `env`, pass through to Pi Durable. By default, `actionTimeout` is ten minutes and `sleepGracePeriod` is 15 minutes. A `ConversationBusy` error reaches clients as a `UserError`, and so does `pi_schema_too_new` when the actor's data has a newer Pi Durable schema than the code. Other Pi Durable errors reach clients as internal errors.
 
 **Next:** [Design Patterns](/agents/docs/design-patterns), how to structure an app with many agents.
