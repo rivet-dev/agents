@@ -9,6 +9,7 @@ export type {
 } from "./actions.js";
 export {
 	type PiAccess,
+	type PiActionContext,
 	type PiActorConfigInput,
 	type PiEvents,
 	type PiUserActions,
@@ -21,7 +22,7 @@ export type {
 	PiProviderCredential,
 } from "./credentials.js";
 export type { PiModelOptions, PiProviderConfig } from "./models.js";
-export type { PiOptions } from "./runtime.js";
+export type { PiDatabaseProvider, PiOptions } from "./runtime.js";
 export type {
 	PiDocFrame,
 	PiEventsFrame,
