@@ -6,11 +6,15 @@ import {
 import { setup, UserError } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { describe, expect, test } from "vitest";
-import { pi } from "../src/index.js";
+import { type PiActionContext, pi } from "../src/index.js";
 
 const users = new Map([["good-token", { id: "user-1" }]]);
 
 // No casts: `params` and `c.conn.state` keep the types `createConnState` gives them.
+function userIdOf(c: PiActionContext<typeof agent>): string {
+	return c.conn.state.userId;
+}
+
 const agent = pi({
 	registry: createRegistry(),
 	createConnState: async (_c, params: { token: string }) => {
@@ -19,7 +23,7 @@ const agent = pi({
 		return { userId: user.id };
 	},
 	actions: {
-		whoami: (c): string => c.conn.state.userId,
+		whoami: (c) => userIdOf(c),
 	},
 });
 

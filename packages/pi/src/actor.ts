@@ -1,5 +1,7 @@
 import type { Harness } from "@earendil-works/pi-durable";
 import {
+	type ActionContext,
+	type ActorDefinition,
 	actor,
 	type EventSchemaConfig,
 	event,
@@ -64,6 +66,36 @@ const piEvents: PiEvents = {
 export interface PiAccess {
 	readonly pi: Harness;
 }
+
+/**
+ * The `c` of an actor's actions, for typing a helper function:
+ * `function helper(c: PiActionContext<typeof agent>)`. Keeps the actor's types,
+ * such as `c.conn.state`, and adds `c.pi`.
+ */
+export type PiActionContext<TActor> =
+	TActor extends ActorDefinition<
+		infer TState,
+		infer TConnParams,
+		infer TConnState,
+		infer TVars,
+		infer TInput,
+		infer TDatabase,
+		infer TEvents,
+		infer TQueues,
+		any
+	>
+		? ActionContext<
+				TState,
+				TConnParams,
+				TConnState,
+				TVars,
+				TInput,
+				TDatabase,
+				TEvents,
+				TQueues
+			> &
+				PiAccess
+		: never;
 
 /** The app's own actions, which get `c.pi`. Nested objects become dotted action names. */
 export type PiUserActions<
