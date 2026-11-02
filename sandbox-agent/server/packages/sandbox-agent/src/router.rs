@@ -2773,15 +2773,7 @@ async fn process_terminal_ws_session(
             log_in = log_rx.recv() => {
                 match log_in {
                     Ok(line) => {
-                        if line.stream != ProcessStream::Pty {
-                            continue;
-                        }
-                        let bytes = {
-                            use base64::engine::general_purpose::STANDARD as BASE64_ENGINE;
-                            use base64::Engine;
-                            BASE64_ENGINE.decode(&line.data).unwrap_or_default()
-                        };
-                        if socket.send(Message::Binary(bytes)).await.is_err() {
+                        if send_ws_pty_output(&mut socket, &line).await.is_err() {
                             break;
                         }
                     }
@@ -2792,6 +2784,18 @@ async fn process_terminal_ws_session(
             _ = exit_poll.tick() => {
                 if let Ok(snapshot) = runtime.snapshot(&id).await {
                     if snapshot.status == ProcessStatus::Exited {
+                        // select! picks a ready branch at random, so output can still be queued here.
+                        loop {
+                            match log_rx.try_recv() {
+                                Ok(line) => {
+                                    if send_ws_pty_output(&mut socket, &line).await.is_err() {
+                                        return;
+                                    }
+                                }
+                                Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => {}
+                                Err(_) => break,
+                            }
+                        }
                         let _ = send_ws_json(
                             &mut socket,
                             json!({
@@ -2807,6 +2811,19 @@ async fn process_terminal_ws_session(
             }
         }
     }
+}
+
+async fn send_ws_pty_output(
+    socket: &mut WebSocket,
+    line: &crate::process_runtime::ProcessLogLine,
+) -> Result<(), axum::Error> {
+    if line.stream != ProcessStream::Pty {
+        return Ok(());
+    }
+    use base64::engine::general_purpose::STANDARD as BASE64_ENGINE;
+    use base64::Engine;
+    let bytes = BASE64_ENGINE.decode(&line.data).unwrap_or_default();
+    socket.send(Message::Binary(bytes)).await
 }
 
 /// WebRTC signaling proxy session.

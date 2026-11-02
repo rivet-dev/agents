@@ -392,6 +392,27 @@ describe("Integration: TypeScript SDK flat session API", () => {
     }
   }, 60_000);
 
+  it("disposes on time when the server never answers the close and a custom fetch ignores its signal", async () => {
+    const defaultFetch = globalThis.fetch;
+    if (!defaultFetch) {
+      throw new Error("Global fetch is not available in this runtime.");
+    }
+
+    const customFetch: typeof fetch = async (input, init) => {
+      const outgoing = new Request(input, init);
+      const parsed = new URL(outgoing.url);
+      if (outgoing.method === "DELETE") {
+        return new Promise<Response>(() => {});
+      }
+      return forwardRequest(defaultFetch, baseUrl, outgoing, parsed);
+    };
+
+    const sdk = await SandboxAgent.connect({ token, fetch: customFetch });
+    await sdk.createSession({ agent: "mock" });
+
+    await withTimeout(sdk.dispose(), "dispose with an unanswered close", 5_000);
+  }, 60_000);
+
   it("requires baseUrl when fetch is not provided", async () => {
     await expect(SandboxAgent.connect({ token } as any)).rejects.toThrow("baseUrl is required unless fetch is provided.");
   });

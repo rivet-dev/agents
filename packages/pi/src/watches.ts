@@ -105,7 +105,7 @@ function watchKey(spec: WatchSpec): string {
  * Starts a watch for a connection, stored so it comes back after sleep, and
  * returns the value it starts from. Watching the same thing again restarts
  * it with a fresh value. `requireTarget` runs in the queue too, so a watch
- * and an unwatch sent right after it take effect in the order they arrive.
+ * and an unwatch take effect in the order they reach this queue.
  */
 export async function watch(
 	actor: PiContext,
