@@ -546,13 +546,13 @@ impl ProcessRuntime {
                 drop(runtime_guard);
 
                 let process_for_output = process.clone();
-                tokio::spawn(async move {
+                let pty_pump = tokio::spawn(async move {
                     pump_output(process_for_output, reader, ProcessStream::Pty).await;
                 });
 
                 let runtime = self.clone();
                 tokio::spawn(async move {
-                    watch_exit(runtime, process, child).await;
+                    watch_exit(runtime, process, child, vec![pty_pump]).await;
                 });
 
                 return Ok(());
@@ -579,18 +579,18 @@ impl ProcessRuntime {
         drop(runtime_guard);
 
         let process_for_stdout = process.clone();
-        tokio::spawn(async move {
+        let stdout_pump = tokio::spawn(async move {
             pump_output(process_for_stdout, stdout, ProcessStream::Stdout).await;
         });
 
         let process_for_stderr = process.clone();
-        tokio::spawn(async move {
+        let stderr_pump = tokio::spawn(async move {
             pump_output(process_for_stderr, stderr, ProcessStream::Stderr).await;
         });
 
         let runtime = self.clone();
         tokio::spawn(async move {
-            watch_exit(runtime, process, child).await;
+            watch_exit(runtime, process, child, vec![stdout_pump, stderr_pump]).await;
         });
 
         Ok(())
@@ -978,7 +978,12 @@ where
     }
 }
 
-async fn watch_exit(runtime: ProcessRuntime, process: Arc<ManagedProcess>, mut child: Child) {
+async fn watch_exit(
+    runtime: ProcessRuntime,
+    process: Arc<ManagedProcess>,
+    mut child: Child,
+    output_pumps: Vec<tokio::task::JoinHandle<()>>,
+) {
     let _ = runtime;
     let wait = child.wait().await;
     let (exit_code, exited_at_ms) = match wait {
@@ -986,9 +991,20 @@ async fn watch_exit(runtime: ProcessRuntime, process: Arc<ManagedProcess>, mut c
         Err(_) => (None, Some(now_ms())),
     };
 
+    // Log output before reporting the exit, so a reader never sees the exit first.
+    // A background process that kept the stream open must not hold up the exit.
+    let _ = tokio::time::timeout(OUTPUT_DRAIN_TIMEOUT, async {
+        for pump in output_pumps {
+            let _ = pump.await;
+        }
+    })
+    .await;
+
     let _ = process.stop_requested.swap(false, Ordering::SeqCst);
     process.mark_exited(exit_code, exited_at_ms).await;
 }
+
+const OUTPUT_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
 
 async fn capture_output<R>(mut reader: R, max_bytes: usize) -> std::io::Result<(Vec<u8>, bool)>
 where

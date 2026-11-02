@@ -165,7 +165,7 @@ describe("pi watches", () => {
 		expect(elsewhereFrames).toEqual([]);
 	});
 
-	test("overlapping watch calls on one connection leave one stream, and an unwatch sent with a watch stops it", async (c) => {
+	test("overlapping watch calls on one connection leave one stream, and an unwatch stops it", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["overlap", randomUUID()];
 		const conn = client.agent.getOrCreate(key).connect();
@@ -192,10 +192,9 @@ describe("pi watches", () => {
 			frames.map((_, index) => index + 1),
 		);
 
-		await Promise.all([
-			conn.conversation.watchEvents(root.id),
-			conn.conversation.unwatchEvents(root.id),
-		]);
+		// Awaited in turn, because RivetKit can start actions sent together in either order.
+		await conn.conversation.watchEvents(root.id);
+		await conn.conversation.unwatchEvents(root.id);
 		frames.length = 0;
 		await sentinel.conversation.watchEvents(root.id);
 		const second = await conn.conversation.submit(root.id, {

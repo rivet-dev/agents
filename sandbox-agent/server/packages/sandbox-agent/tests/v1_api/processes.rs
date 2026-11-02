@@ -589,7 +589,7 @@ async fn v1_access_token_query_only_allows_terminal_ws() {
 }
 
 #[tokio::test]
-async fn v1_process_terminal_ws_e2e_is_deterministic() {
+async fn v1_process_terminal_ws_delivers_all_output_before_exit() {
     let test_app = TestApp::new(AuthConfig::disabled());
     let live_server = LiveServer::spawn(test_app.app.clone()).await;
     let http = reqwest::Client::new();
@@ -598,7 +598,8 @@ async fn v1_process_terminal_ws_e2e_is_deterministic() {
         .post(live_server.http_url("/v1/processes"))
         .json(&json!({
             "command": "sh",
-            "args": ["-lc", "stty -echo; IFS= read -r line; printf 'got:%s\\n' \"$line\""],
+            // The answer is the last output before the exit, after enough output to span frames.
+            "args": ["-lc", "stty -echo; IFS= read -r line; seq 1 5000; printf 'got:%s\\n' \"$line\""],
             "tty": true,
             "interactive": true
         }))
@@ -628,17 +629,12 @@ async fn v1_process_terminal_ws_e2e_is_deterministic() {
     .await
     .expect("send input frame");
 
-    let mut saw_binary_output = false;
+    let mut pty_output = Vec::new();
     let mut saw_exit = false;
-    for _ in 0..10 {
+    loop {
         let frame = recv_ws_message(&mut ws).await;
         match frame {
-            Message::Binary(bytes) => {
-                let text = String::from_utf8_lossy(&bytes);
-                if text.contains("got:hello from ws") {
-                    saw_binary_output = true;
-                }
-            }
+            Message::Binary(bytes) => pty_output.extend_from_slice(&bytes),
             Message::Text(text) => {
                 let payload: Value = serde_json::from_str(&text).expect("ws json");
                 if payload["type"] == "exit" {
@@ -654,8 +650,8 @@ async fn v1_process_terminal_ws_e2e_is_deterministic() {
     }
 
     assert!(
-        saw_binary_output,
-        "expected pty binary output over websocket"
+        String::from_utf8_lossy(&pty_output).contains("got:hello from ws"),
+        "expected all pty output before the exit frame"
     );
     assert!(saw_exit, "expected exit control frame over websocket");
 

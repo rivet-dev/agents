@@ -336,19 +336,29 @@ class StreamableHttpAcpTransport {
       Accept: "application/json",
     });
 
-    try {
+    const deleteRequest = (async () => {
       const response = await this.fetcher(this.buildUrl(), {
         method: "DELETE",
         headers: deleteHeaders,
-        signal: timeoutSignal(2_000),
+        signal: timeoutSignal(CLOSE_TIMEOUT_MS),
       });
 
       if (!response.ok && response.status !== 404) {
         throw new AcpHttpError(response.status, await readProblem(response), response);
       }
-    } catch {
+    })().catch(() => {
       // Ignore close errors; close must be best effort.
-    }
+    });
+
+    // A custom fetch can lose the signal, so the signal alone cannot bound close.
+    let closeTimer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      deleteRequest,
+      new Promise<void>((resolve) => {
+        closeTimer = setTimeout(resolve, CLOSE_TIMEOUT_MS);
+      }),
+    ]);
+    clearTimeout(closeTimer);
 
     try {
       this.readableController?.close();
@@ -696,6 +706,8 @@ function isAbortError(error: unknown): boolean {
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+const CLOSE_TIMEOUT_MS = 2_000;
 
 function timeoutSignal(timeoutMs: number): AbortSignal | undefined {
   if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {

@@ -50,7 +50,8 @@ done
 mkdir -p "$prefix/node_modules/.bin"
 for bin in claude-code-acp codex-acp amp-acp pi-acp cursor-agent-acp; do
   echo '#!/usr/bin/env sh' > "$prefix/node_modules/.bin/$bin"
-  echo 'exit 0' >> "$prefix/node_modules/.bin/$bin"
+  # Stays alive, because a write to an exited agent's stdin fails with a 502.
+  echo 'exec cat > /dev/null' >> "$prefix/node_modules/.bin/$bin"
   chmod +x "$prefix/node_modules/.bin/$bin"
 done
 exit 0
