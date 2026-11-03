@@ -1,6 +1,6 @@
 "use client";
 
-import type { FitAddon as GhosttyFitAddon, Terminal as GhosttyTerminal } from "ghostty-web";
+import type { GhosttyTerminalController } from "@openclaw/libterminal/browser";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { SandboxAgent, TerminalErrorStatus, TerminalExitStatus, TerminalReadyStatus } from "sandbox-agent";
@@ -111,8 +111,8 @@ export const ProcessTerminal = ({
 
   useEffect(() => {
     let cancelled = false;
-    let terminal: GhosttyTerminal | null = null;
-    let fitAddon: GhosttyFitAddon | null = null;
+    const abortController = new AbortController();
+    let controller: GhosttyTerminalController | null = null;
     let session: ReturnType<ProcessTerminalClient["connectProcessTerminal"]> | null = null;
     let resizeRaf = 0;
     let removeDataListener: { dispose(): void } | null = null;
@@ -123,45 +123,51 @@ export const ProcessTerminal = ({
     setExitCode(null);
 
     const syncSize = () => {
-      if (!terminal || !session) {
+      if (!controller || !session) {
         return;
       }
 
       session.resize({
-        cols: terminal.cols,
-        rows: terminal.rows,
+        cols: controller.terminal.cols,
+        rows: controller.terminal.rows,
       });
     };
 
     const connect = async () => {
       try {
-        const ghostty = await import("ghostty-web");
-        await ghostty.init();
+        const { createGhosttyTerminal } = await import("@openclaw/libterminal/browser");
 
         if (cancelled || !hostRef.current) {
           return;
         }
 
-        terminal = new ghostty.Terminal({
-          allowTransparency: true,
-          cursorBlink: true,
-          cursorStyle: "block",
-          fontFamily: "ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace",
-          fontSize: 13,
-          smoothScrollDuration: 90,
-          theme: terminalTheme,
+        controller = await createGhosttyTerminal({
+          parent: hostRef.current,
+          readOnly: false,
+          signal: abortController.signal,
+          // Keep the initial dimensions until the canvas styles are applied below.
+          size: { columns: 80, rows: 24 },
+          terminalOptions: {
+            allowTransparency: true,
+            cursorBlink: true,
+            cursorStyle: "block",
+            fontFamily: "ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace",
+            fontSize: 13,
+            smoothScrollDuration: 90,
+            theme: terminalTheme,
+          },
         });
-        fitAddon = new ghostty.FitAddon();
+        if (cancelled) {
+          return;
+        }
 
-        terminal.open(hostRef.current);
+        const terminal = controller.terminal;
         const terminalRoot = hostRef.current.firstElementChild;
         if (terminalRoot instanceof HTMLElement) {
           terminalRoot.style.width = "100%";
           terminalRoot.style.height = "100%";
         }
-        terminal.loadAddon(fitAddon);
-        fitAddon.fit();
-        fitAddon.observeResize();
+        controller.fit();
         terminal.focus();
 
         removeDataListener = terminal.onData((data) => {
@@ -189,10 +195,10 @@ export const ProcessTerminal = ({
         });
 
         nextSession.onData((bytes: Uint8Array) => {
-          if (cancelled || !terminal) {
+          if (cancelled || !controller) {
             return;
           }
-          terminal.write(bytes);
+          controller.write(bytes);
         });
 
         nextSession.onExit((frame: TerminalExitStatus) => {
@@ -246,7 +252,7 @@ export const ProcessTerminal = ({
       removeDataListener?.dispose();
       removeResizeListener?.dispose();
       session?.close();
-      terminal?.dispose();
+      abortController.abort();
     };
   }, [client, onError, onExit, processId]);
 

@@ -28,6 +28,7 @@
     "sandbox-agent": "^0.2.2"
   },
   "dependencies": {
+    "@openclaw/libterminal": "0.4.0",
     "@tanstack/react-virtual": "^3.13.22",
     "ghostty-web": "^0.4.0"
   },
