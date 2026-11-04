@@ -12,6 +12,9 @@ export default defineConfig({
 		hookTimeout: 60_000,
 		pool: "forks",
 		env: {
+			// RivetKit 3.0.1 starts Services on a fixed port, which a test file that
+			// exits abruptly leaves held. The next file then fails to start.
+			RIVET_RUN_SERVICES: "0",
 			RIVET_LOG_LEVEL: "DEBUG",
 			RIVET_LOG_TARGET: "1",
 			RIVET_LOG_TIMESTAMP: "1",
