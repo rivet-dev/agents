@@ -203,7 +203,6 @@ See [Architecture](/agents/docs/architecture).
 - **A cut-off model request is sent again from the start.**
 - **No image reads, and no binary writes** in a sandbox.
 - **Waits cap at ten minutes.** For longer jobs, use `conversation.submit` and stream.
-- **Only `prompt` is traced** in [Observability](/agents/docs/observability).
 - **No `db` option.** Keep your data in `state`, documents, or another Actor.
 - **No built-in approval flow.** See [Human in the Loop](/agents/docs/human-in-the-loop).
 - **Roll forward only.** An older Pi Durable can't open data a newer one wrote.
