@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { createRegistry, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { pi } from "@rivet-dev/pi";
 import { setup } from "rivetkit";
@@ -7,7 +7,7 @@ import { admin, report } from "./report";
 const shareReport = defineTool({
 	name: "share_report",
 	description: "Publish a report and return a link anyone can open for the next hour.",
-	parameters: Type.Object({ title: Type.String(), body: Type.String() }),
+	parameters: obj({ title: str(), body: str() }),
 	execute: async ({ title, body }) => {
 		const handle = await admin.report.create([crypto.randomUUID()], { input: { title, body } });
 		const { token } = await handle.issueToken({ subject: "shared-report", expiresIn: 3600 });

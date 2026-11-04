@@ -1,6 +1,6 @@
 ---
 title: "Client SDK"
-description: "Call an agent from your backend, scripts, or any JavaScript runtime, and stream its events."
+description: "Call an agent from your backend, scripts, or any JavaScript runtime, and stream its work."
 ---
 
 The client is the `rivetkit/client` package. It calls actions on the agent and gets the agent's events over a connection. A browser connects with a short-lived token from your backend.
@@ -49,14 +49,14 @@ The client is the `rivetkit/client` package. It calls actions on the agent and g
 
 ## Events
 
-Events go only to a connection that asks for them. Call `conversation.watchEvents(id)` on the connection. It returns a `snapshot` of the conversation, including any answer in progress, and then the connection receives `pi.events` with `{ conversationId, seq, events }` as the agent works.
+Events go only to a connection that asks for them. Call `conversation.watch(id)` on the connection. It returns the conversation's view as `{ value }`, including any answer in progress, and then the connection receives `pi.view` frames as the agent works.
 
-- Events from before the call are not sent again. Read them from the snapshot.
-- A short answer can arrive whole in `message_end`, with no `text_delta` before it, so print the rest of the text there.
-- The `seq` number goes up by one for each batch. If a number is missing, call `watchEvents` again to get a new snapshot.
-- To stop listening, call the function that `on` returns, or `conversation.unwatchEvents(id)`.
+- Each frame after the first value has Chord operations in `ops`. Apply them with `applyImmutable` from `@earendil-works/chord`, which you install with `npm add @earendil-works/chord`.
+- The view holds the newest entries of the transcript. Read older ones with `conversation.entries`.
+- The `seq` number goes up by one for each frame. If a number is missing, call `conversation.watch` again to get a new view.
+- To stop listening, call the function that `on` returns, or `conversation.unwatch(id)`.
 
-See [Session Lifecycle](/agents/docs/session-lifecycle#events) for the event types.
+See [Session Lifecycle](/agents/docs/session-lifecycle#watch-a-conversation) for what the view holds.
 
 ## Results and errors
 
@@ -65,7 +65,7 @@ See [Session Lifecycle](/agents/docs/session-lifecycle#events) for the event typ
 - Pass a `requestId` to make retries safe. A second `prompt` with the same `requestId` returns the first one's result and doesn't run the agent again.
 - While a run is in progress, a new prompt waits as a follow-up. Pass `whenBusy: "steer"` to send it into the current run, or `"reject"` to make `prompt` reject with the `ConversationBusy` code.
 - The `prompt` action rejects with an `ActorError` when the action itself fails. For example, the run passes the ten-minute action timeout (`action_timed_out`). A timeout only stops the wait. The run keeps going until it finishes or `conversation.abort(id)` stops it.
-- To start a run without waiting for it, call `conversation.submit(id, { type: "input", content })`. Follow its progress with events.
+- To start a run without waiting for it, call `conversation.submit(id, { type: "input", content })`. Follow its progress with `conversation.watch`.
 
 ## Browsers
 

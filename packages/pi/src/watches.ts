@@ -1,16 +1,13 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import type { Op } from "@earendil-works/chord/delta";
-import {
-	type AgentEvent,
-	type ConversationDocToken,
-	type ConversationId,
-	type ConversationView,
-	type Harness,
-	type JsonObject,
-	type SnapshotEvent,
-	type TaskGraph,
-	type WatchHandle,
-	watchEvents,
+import { isReplace, type Op } from "@earendil-works/chord/delta";
+import type {
+	ConversationDocToken,
+	ConversationId,
+	ConversationView,
+	Harness,
+	JsonObject,
+	TaskGraph,
+	WatchHandle,
 } from "@earendil-works/pi-durable";
 import type { PiContext } from "./runtime.js";
 import {
@@ -21,13 +18,11 @@ import {
 	type WatchSpec,
 } from "./storage.js";
 
-/** One batch of agent events, one commit per batch. */
-export type PiEventsFrame = {
-	conversationId: ConversationId;
-	seq: number;
-	events: readonly AgentEvent[];
-};
-/** `seq` 0 carries the whole view; later frames carry Chord operations. */
+/**
+ * `seq` 0 carries the view; later frames carry Chord operations. `value.entries`
+ * holds the newest entries, not the whole transcript. Page older ones with
+ * `conversation.entries`.
+ */
 export type PiViewFrame = {
 	conversationId: ConversationId;
 	seq: number;
@@ -58,7 +53,6 @@ export type PiDocFrame = {
  * client that sees a gap calls the watch action again.
  */
 export type PiWatchEvents = {
-	"pi.events": PiEventsFrame;
 	"pi.view": PiViewFrame;
 	"pi.taskGraph": PiTaskGraphFrame;
 	"pi.doc": PiDocFrame;
@@ -91,7 +85,6 @@ type Documents = ReadonlyMap<string, ConversationDocToken<any>>;
 
 function watchKey(spec: WatchSpec): string {
 	switch (spec.kind) {
-		case "events":
 		case "view":
 			return `${spec.kind}:${spec.conversationId}`;
 		case "taskGraph":
@@ -180,7 +173,7 @@ export async function reattachWatches(
 	await serially(watches, async () => {
 		const open = new Set(actor.conns.keys());
 		for (const stored of await loadWatches(actor.db)) {
-			if (!open.has(stored.connId)) {
+			if (!open.has(stored.connId) || stored.spec.kind === "events") {
 				await deleteWatch(actor.db, stored.connId, stored.key);
 				continue;
 			}
@@ -265,22 +258,6 @@ async function start(
 ): Promise<ActiveWatch & { initial: unknown }> {
 	const context = BACKGROUND_CONTEXT;
 	switch (spec.kind) {
-		case "events": {
-			const conversationId = spec.conversationId;
-			const stream = await watchEvents(harness, conversationId, context);
-			if (resend)
-				send("pi.events", {
-					conversationId,
-					events: [stream.snapshot satisfies SnapshotEvent],
-				});
-			stream.start(async (events) =>
-				send("pi.events", { conversationId, events }),
-			);
-			return {
-				initial: { snapshot: stream.snapshot },
-				stop: async () => void (await stream.stop()),
-			};
-		}
 		case "view": {
 			const conversationId = spec.conversationId;
 			const conversation = await harness.conversation(conversationId, context);
@@ -288,9 +265,10 @@ async function start(
 				throw new Error(`conversation ${conversationId} does not exist`);
 			const view = await conversation.watch(context);
 			if (resend) send("pi.view", { conversationId, value: view.value });
-			view.start(async (_value, ops) =>
-				send("pi.view", { conversationId, ops }),
-			);
+			view.start(async (call) => {
+				if (call.kind === "value")
+					send("pi.view", { conversationId, ops: call.ops });
+			});
 			return {
 				initial: { value: view.value },
 				stop: async () => void (await view.stop()),
@@ -299,7 +277,9 @@ async function start(
 		case "taskGraph": {
 			const graph = await harness.watchTaskGraph(context);
 			if (resend) send("pi.taskGraph", { value: graph.value });
-			graph.start(async (_value, ops) => send("pi.taskGraph", { ops }));
+			graph.start(async (call) => {
+				if (call.kind === "value") send("pi.taskGraph", { ops: call.ops });
+			});
 			return {
 				initial: { value: graph.value },
 				stop: async () => void (await graph.stop()),
@@ -311,9 +291,9 @@ async function start(
 }
 
 /**
- * Pi's `watchDoc` never creates a document, and its watch ends when the
- * document is retired. While the document does not exist, the watch attaches
- * when a commit creates it, and its value is the next frame.
+ * Pi's `watchDoc` never creates a document. While the document does not exist,
+ * the watch attaches when a commit creates it, and its value is the next frame.
+ * Once attached, the watch follows the document through retirements.
  */
 async function startDoc(
 	log: PiContext["log"],
@@ -329,24 +309,26 @@ async function startDoc(
 			`document ${spec.docKind} is not listed in pi({ documents })`,
 		);
 	const { docKind: kind, conversationId } = spec;
-	let docWatch: WatchHandle<Readonly<JsonObject> | null> | undefined;
-	let unsubscribe: (() => void) | undefined;
+	let docWatch: WatchHandle<Readonly<JsonObject>> | undefined;
+	let observation: { detach(): void } | undefined;
 	let stopped = false;
 
 	const follow = (
-		handle: WatchHandle<Readonly<JsonObject> | null>,
+		handle: WatchHandle<Readonly<JsonObject>>,
 		sendFirst: boolean,
 	) => {
 		docWatch = handle;
 		if (sendFirst)
 			send("pi.doc", { kind, conversationId, value: handle.value });
-		handle.start(async (value) => {
-			send("pi.doc", { kind, conversationId, value });
-			if (value !== null || stopped) return;
-			// A retired document's watch ends, so wait for a commit that creates it again.
-			docWatch = undefined;
-			void handle.stop();
-			awaitCreation();
+		handle.start(async (call) => {
+			if (call.kind !== "value") return;
+			// A retirement keeps the last value and adds no ops. A later document at this address arrives as a root replacement.
+			const retired = call.retired && !call.ops.some(isReplace);
+			send("pi.doc", {
+				kind,
+				conversationId,
+				value: retired ? null : call.value,
+			});
 		});
 	};
 
@@ -367,8 +349,8 @@ async function startDoc(
 					attaching = false;
 					return;
 				}
-				unsubscribe?.();
-				unsubscribe = undefined;
+				observation?.detach();
+				observation = undefined;
 				follow(handle, true);
 			} catch (error) {
 				// The next write to the document tries again.
@@ -381,18 +363,21 @@ async function startDoc(
 				});
 			}
 		};
-		unsubscribe = harness.subscribeCommits((publication) => {
-			const created = publication.changes.some(
-				(change) =>
-					change.type === "document" &&
-					change.record.kind === kind &&
-					change.conversationId === conversationId &&
-					change.value !== null,
-			);
-			if (!created || attaching) return;
-			attaching = true;
-			// Commit listeners must not call Pi Durable, so the watch attaches after the listener returns.
-			queueMicrotask(() => void attachCreated());
+		observation = harness.observeCommits({
+			advance: (publication) => {
+				const created = publication.changes.some(
+					(change) =>
+						change.type === "document" &&
+						change.kind === "change" &&
+						change.record.kind === kind &&
+						change.conversationId === conversationId,
+				);
+				if (!created || attaching) return;
+				attaching = true;
+				// Commit observers must not call Pi Durable, so the watch attaches after this returns.
+				queueMicrotask(() => void attachCreated());
+			},
+			end: () => {},
 		});
 	};
 
@@ -411,7 +396,7 @@ async function startDoc(
 		initial: { value: existing?.value },
 		stop: async () => {
 			stopped = true;
-			unsubscribe?.();
+			observation?.detach();
 			await docWatch?.stop();
 		},
 	};

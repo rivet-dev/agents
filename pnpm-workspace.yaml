@@ -2,6 +2,7 @@
 # because its Dockerfiles build from that directory as the context root.
 packages:
   - packages/*
+  - packages/pi/tests/published-0.5.5
   - examples/*
   - scripts/release
   - scripts/pipboy

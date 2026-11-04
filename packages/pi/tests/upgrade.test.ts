@@ -3,8 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { fauxAssistantMessage, Type } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import {
+	type ConversationId,
 	createRegistry,
 	defineExtension,
 	defineTask,
@@ -12,11 +13,12 @@ import {
 	ROOT_CONVERSATION_ID,
 } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
+import { obj } from "@earendil-works/pi-schema";
 import type { SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { pi } from "../src/index.js";
+import { type PiViewFrame, pi } from "../src/index.js";
 import { localSandboxProvider } from "./helpers/local-sandbox.js";
 import {
 	createMockModel,
@@ -56,7 +58,7 @@ const release = Promise.withResolvers<void>();
 const deployTool = defineTool({
 	name: "deploy_tool",
 	description: "An unsafe tool that waits",
-	parameters: Type.Object({}),
+	parameters: obj({}),
 	replay: "unsafe",
 	execute: async () => {
 		deployRuns += 1;
@@ -75,7 +77,7 @@ const shipRelease = Promise.withResolvers<void>();
 const shipTool = defineTool({
 	name: "ship_tool",
 	description: "A tool that waits",
-	parameters: Type.Object({}),
+	parameters: obj({}),
 	replay: "unsafe",
 	execute: async () => {
 		shipRuns += 1;
@@ -89,7 +91,7 @@ const blocking = { started: 0, stopped: 0 };
 const blockingTool = defineTool({
 	name: "blocking_tool",
 	description: "A tool that runs until it is stopped",
-	parameters: Type.Object({}),
+	parameters: obj({}),
 	replay: "safe",
 	execute: async (_args, _api, context) => {
 		blocking.started += 1;
@@ -229,6 +231,15 @@ function buildRegistry(mock: MockModel, root: string) {
 		}) => {
 			await c.db.execute("UPDATE pi_durable_schema SET version = version + 1");
 		},
+		// What a newer Pi Durable stores, as pi.live version 3 is to Pi 1.4. Pi stores a document's kind as JSON.
+		bumpLiveDocument: async (c: {
+			db: { execute: (sql: string) => Promise<unknown> };
+		}) => {
+			await c.db.execute(
+				`UPDATE pi_document_revisions SET version = version + 1
+				 WHERE document_id IN (SELECT id FROM pi_documents WHERE kind = '"pi.live"')`,
+			);
+		},
 		// What the earlier session-based pi() stored: its own session table and
 		// `pi_sandbox`, and none of this pi()'s tables.
 		storeAsSessionActor: async (c: {
@@ -278,7 +289,33 @@ function buildRegistry(mock: MockModel, root: string) {
 			},
 		},
 	});
-	return setup({ use: { drainer, migrating, slowSleeper } });
+	const hibernating = pi({
+		...models,
+		...lifecycle,
+		registry: tools,
+		options: { canHibernateWebSocket: true },
+		actions: {
+			nap: (c) => {
+				c.sleep();
+			},
+			// What 0.5.5 stored for a connection that called conversation.watchEvents.
+			saveEventsWatch: async (c, conversationId: ConversationId) => {
+				await c.db.execute(
+					"INSERT INTO pi_durable_watch (conn_id, watch_key, spec_json) VALUES (?, ?, ?)",
+					c.conn.id,
+					`events:${conversationId}`,
+					JSON.stringify({ kind: "events", conversationId }),
+				);
+			},
+			savedWatches: async (c) =>
+				(
+					await c.db.execute<{ watch_key: string }>(
+						"SELECT watch_key FROM pi_durable_watch",
+					)
+				).map((row) => row.watch_key.split(":")[0]),
+		},
+	});
+	return setup({ use: { drainer, migrating, slowSleeper, hibernating } });
 }
 
 /** Records when each actor's sandbox connects and when it is suspended. */
@@ -496,6 +533,58 @@ describe("pi drain and upgrades", () => {
 		});
 		await handle.nap();
 		await sleeps.waitFor(key, 2);
+	});
+
+	test("a document stored by a newer Pi Durable makes Pi's actions fail with pi_schema_too_new, while the app's own actions still run", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["rollback-document", randomUUID()];
+		const handle = client.migrating.getOrCreate(key);
+		const root = await handle.harness.root();
+		await handle.prompt("follow up");
+		await handle.bumpLiveDocument();
+		await handle.nap();
+		await sleeps.waitFor(key, 1);
+
+		const tooNew = {
+			group: "user",
+			code: "pi_schema_too_new",
+			message: expect.stringMatching(/pi\.live document has version \d+/),
+		};
+		const conn = handle.connect();
+		await expect(conn.conversation.watch(root.id)).rejects.toMatchObject(
+			tooNew,
+		);
+		await conn.dispose();
+		await expect(
+			handle.conversation.submit(root.id, { type: "input", content: "hello" }),
+		).rejects.toMatchObject(tooNew);
+		await handle.nap();
+		await sleeps.waitFor(key, 2);
+	});
+
+	test("a connection with an events watch saved before 0.5.6 wakes cleanly, loses that watch, and can watch the view", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["old-events-watch", randomUUID()];
+		const conn = client.hibernating.getOrCreate(key).connect();
+		const frames: PiViewFrame[] = [];
+		// SAFETY: RivetKit types event payloads as unknown on the client, and pi() sends only PiViewFrame on pi.view.
+		conn.on("pi.view", (frame) => void frames.push(frame as PiViewFrame));
+		const root = await conn.harness.root();
+		await conn.saveEventsWatch(root.id);
+		await conn.nap();
+		await sleeps.waitFor(key, 1);
+
+		const { value } = await conn.conversation.watch(root.id);
+		expect(value.conversation.id).toBe(root.id);
+		expect(await conn.savedWatches()).toEqual(["view"]);
+		const answer = await conn.prompt("follow up");
+		expect(answer).toMatchObject({ status: "done", text: "followed up" });
+		await vi.waitFor(() =>
+			expect(JSON.stringify(frames.map((frame) => frame.ops))).toContain(
+				"followed up",
+			),
+		);
+		await conn.dispose();
 	});
 
 	test("an actor stored by the earlier session-based pi() starts, and its stored session stays", async (c) => {

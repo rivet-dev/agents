@@ -43,6 +43,11 @@ function prefixTables(sql: string): string {
 export function actorSqlite(db: RawAccess): SqliteDatabase {
 	return {
 		...actorSqliteExecutor(db),
+		// `changes()` reads the connection's last write, so no other work can run between the two statements.
+		runCounted: (sql, ...params) =>
+			db.transaction((tx) => runCounted(tx, sql, params), {
+				name: "pi-durable-counted",
+			}),
 		transaction: (callback) =>
 			db.transaction((tx) => callback(actorSqliteExecutor(tx)), {
 				name: "pi-durable",
@@ -58,6 +63,7 @@ export function actorSqlite(db: RawAccess): SqliteDatabase {
  */
 function actorSqliteExecutor(db: Pick<RawAccess, "execute">): SqliteExecutor {
 	return {
+		runCounted: (sql, ...params) => runCounted(db, sql, params),
 		exec: async (sql) => {
 			await db.execute(prefixTables(sql));
 		},
@@ -69,4 +75,16 @@ function actorSqliteExecutor(db: Pick<RawAccess, "execute">): SqliteExecutor {
 		all: async <T extends object>(sql: string, ...params: SqliteValue[]) =>
 			(await db.execute(prefixTables(sql), ...params)) as T[],
 	};
+}
+
+async function runCounted(
+	tx: Pick<RawAccess, "execute">,
+	sql: string,
+	params: SqliteValue[],
+): Promise<number> {
+	await tx.execute(prefixTables(sql), ...params);
+	const [row] = await tx.execute<{ changes: number }>(
+		"SELECT changes() AS changes",
+	);
+	return Number(row?.changes ?? 0);
 }

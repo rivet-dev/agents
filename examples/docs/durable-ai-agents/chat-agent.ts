@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { arr, bool, obj, str } from "@earendil-works/pi-schema";
 import { createRegistry, defineDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { pi } from "@rivet-dev/pi";
 import { bookFlight, searchFlights } from "./tools";
@@ -19,8 +19,8 @@ export const Plan = defineDoc<{ steps: { text: string; done: boolean }[] }>({
 const updatePlan = defineTool({
 	name: "update_plan",
 	description: "Save your plan for a request that takes more than one step. Call it again whenever a step is done.",
-	parameters: Type.Object({
-		steps: Type.Array(Type.Object({ text: Type.String(), done: Type.Boolean() })),
+	parameters: obj({
+		steps: arr(obj({ text: str(), done: bool() })),
 	}),
 	// Saving the same plan twice is harmless.
 	replay: "safe",

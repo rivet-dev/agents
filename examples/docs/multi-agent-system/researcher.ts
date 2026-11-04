@@ -1,11 +1,11 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { createRegistry, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { pi } from "@rivet-dev/pi";
 
 const fetchPage = defineTool({
 	name: "fetch_page",
 	description: "Fetch a web page and return the start of its text.",
-	parameters: Type.Object({ url: Type.String() }),
+	parameters: obj({ url: str() }),
 	// A fetch changes nothing, so running it again after a crash is harmless.
 	replay: "safe",
 	execute: async ({ url }, _api, context) => {

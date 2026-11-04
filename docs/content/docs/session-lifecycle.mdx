@@ -1,13 +1,13 @@
 ---
 title: "Session Lifecycle"
-description: "What a conversation is, the events one prompt produces, and how to steer or cancel a run."
+description: "What a conversation is, how to watch one prompt run, and how to steer or cancel a run."
 ---
 
 A conversation is one thread of messages inside an agent. Each agent has a root conversation, which `prompt` uses by default, and can hold more conversations. A conversation:
 
 - Keeps the full history of messages and tool calls.
 - Handles one run at a time, calling the model and tools until the model is done. Prompts that arrive during a run wait in a queue.
-- Streams events to every client that watches it.
+- Streams its changes to every client that watches it.
 - Summarizes older messages when the context fills up.
 - Survives sleep, crashes, and upgrades. See [Architecture](/agents/docs/architecture).
 
@@ -31,33 +31,39 @@ A conversation is one thread of messages inside an agent. Each agent has a root 
   <text x="560" y="45" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">Sandbox</text>
   <text x="560" y="62" text-anchor="middle" font-size="12" fill="#56524a">runs tools</text>
   <text x="194.5" y="29" text-anchor="middle" font-size="12" fill="#56524a">prompt</text>
-  <text x="195.5" y="76" text-anchor="middle" font-size="12" fill="#56524a">events</text>
+  <text x="195.5" y="76" text-anchor="middle" font-size="12" fill="#56524a">view</text>
   <text x="449.5" y="29" text-anchor="middle" font-size="12" fill="#56524a">tool call</text>
   <text x="450.5" y="76" text-anchor="middle" font-size="12" fill="#56524a">result</text>
   <text x="325" y="116" text-anchor="middle" font-size="12" fill="#56524a">repeats until the model stops calling tools</text>
 </svg>
 </div>
 
-This client connects to the [Quickstart](/agents/docs/quickstart) agent, watches the root conversation, sends one prompt, and prints the events it receives:
+This client connects to the [Quickstart](/agents/docs/quickstart) agent, watches the root conversation, sends one prompt, and prints what the agent does:
 
 <CodeSnippet file="examples/docs/session-lifecycle/client.ts" title="client.ts" />
 
-## Events
+## Watch a conversation
 
-The `conversation.watchEvents(id)` action returns a snapshot of the conversation, including a partial answer. Then the agent sends `pi.events` to that connection only. Each frame has `conversationId`, `seq`, and an `events` array. A frame with `seq` 0 replaces everything the client had, and a gap in `seq` means call `watchEvents` again.
+The `conversation.watch(id)` action returns `{ value }`, the conversation's view, including a partial answer. Then the agent sends `pi.view` frames to that connection only. Each frame has `conversationId`, `seq`, and either `value` or `ops`.
 
-| Event type | When it fires |
+- A frame with `seq` 0 has a `value`, which replaces everything the client had.
+- Other frames have Chord operations in `ops`. Apply them to the view with `applyImmutable` from `@earendil-works/chord/delta`.
+- A gap in `seq` means call `conversation.watch` again.
+- To stop listening, call `conversation.unwatch(id)`.
+
+| In the view | What it shows |
 | --- | --- |
-| `run_start`, `run_end` | A run starts or ends. |
-| `turn_start`, `turn_end` | A model response starts, or it and its tool calls are done. |
-| `message_start`, `message_end` | A message starts or is complete: your prompt, a model reply, or a tool result. |
-| `message_update` | The model streams output. Each item in `changes` has a `type`, such as `text_delta`, `thinking_delta`, or `toolcall_delta`. |
-| `tool_execution_start`, `tool_execution_end` | A tool starts or finishes. |
-| `auto_retry_start`, `auto_retry_end` | A failed model call is retried. |
-| `compaction_start`, `compaction_end` | Older messages are summarized to free up context. |
-| `usage_changed` | The conversation's token and cost totals change. |
+| `entries` | The newest entries of the transcript, starting with the newest 50. |
+| `before` | The id of the entry just before `entries`. It is absent when `entries` reaches the start of the transcript. |
+| `docs["pi.live"].run` | Present while a run is in progress. |
+| `docs["pi.live"].generation` | The partial answer in `message`, and the retry backoff in `retry`. |
+| `docs["pi.live"].tools` | The tools of the current round, each with a `name`, a `status`, and its running `output`. |
+| `docs["pi.live"].compactions` | Older messages are being summarized to free up context. |
+| `docs["pi.live"].runFailure` | Why the newest run ended without an answer. |
+| `docs["pi.inbox"]` | Messages waiting for the current run. |
+| `docs["pi.usage"]` | The conversation's token and cost totals. |
 
-A short answer can arrive whole in `message_end`, with no `text_delta` before it, so print the rest of the text there. Events are not replayed. To read earlier messages, call `conversation.context(id)`, which returns `{ messages }`. To stop listening, call `conversation.unwatchEvents(id)`.
+To read older entries, pass `before` to `conversation.entries(id, { maxEntryId: before }, limit)`. To read the messages the model sees, call `conversation.context(id)`, which returns `{ messages }`.
 
 ## Steer, follow up, or cancel
 

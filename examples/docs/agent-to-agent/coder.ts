@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { createRegistry, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { pi } from "@rivet-dev/pi";
@@ -9,7 +9,7 @@ import type { registry } from "./server";
 const requestReview = defineTool({
 	name: "request_review",
 	description: "Send a finished branch to the repository's reviewer. Don't wait for the review.",
-	parameters: Type.Object({ repo: Type.String(), branch: Type.String(), summary: Type.String() }),
+	parameters: obj({ repo: str(), branch: str(), summary: str() }),
 	execute: async ({ repo, branch, summary }) => {
 		await client.reviewer.getOrCreate([repo]).requestReview(`Review the ${branch} branch of https://github.com/${repo}: ${summary}`);
 		return { output: [{ type: "text", text: `Sent ${branch} for review.` }] };

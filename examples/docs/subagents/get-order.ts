@@ -1,10 +1,10 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { defineTool } from "@earendil-works/pi-durable";
 
 export const getOrder = defineTool({
 	name: "get_order",
 	description: "Look up an order's status by its id.",
-	parameters: Type.Object({ orderId: Type.String() }),
+	parameters: obj({ orderId: str() }),
 	// A lookup changes nothing, so running it twice is harmless.
 	replay: "safe",
 	execute: async ({ orderId }, _api, context) => {

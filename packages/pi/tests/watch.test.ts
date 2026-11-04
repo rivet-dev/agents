@@ -1,17 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { fauxAssistantMessage, Type } from "@earendil-works/pi-ai";
+import { applyImmutable } from "@earendil-works/chord/delta";
+import { contentText, fauxAssistantMessage } from "@earendil-works/pi-ai";
 import {
 	type ConversationId,
+	type ConversationView,
 	createRegistry,
 	defineDoc,
 	defineExtension,
 	defineTool,
+	type LiveState,
 } from "@earendil-works/pi-durable";
+import { obj, str } from "@earendil-works/pi-schema";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { beforeAll, describe, expect, test, vi } from "vitest";
-import { type PiDocFrame, type PiEventsFrame, pi } from "../src/index.js";
+import { type PiDocFrame, type PiViewFrame, pi } from "../src/index.js";
 import {
 	createMockModel,
 	type MockModel,
@@ -32,7 +36,7 @@ const Todos = defineDoc<{ items: string[] }>({
 const addTodo = defineTool({
 	name: "add_todo",
 	description: "Add a todo",
-	parameters: Type.Object({ item: Type.String() }),
+	parameters: obj({ item: str() }),
 	replay: "safe",
 	execute: async ({ item }, api, context) => {
 		await api.commit(async (tx) => {
@@ -105,31 +109,49 @@ function received<T>(): { frames: T[]; push: (frame: unknown) => void } {
 	return { frames, push: (frame) => void frames.push(frame as T) };
 }
 
-const hasEvent = (received: PiEventsFrame[], type: string) =>
-	received.some((frame) => frame.events.some((event) => event.type === type));
+/** What a client holds: the view `watch` returned with the frames applied. */
+function replay(
+	start: ConversationView,
+	frames: PiViewFrame[],
+): ConversationView {
+	return frames.reduce(
+		(view, frame) => frame.value ?? applyImmutable(view, frame.ops ?? []),
+		start,
+	);
+}
+
+const liveOf = (view: ConversationView) => view.docs["pi.live"] as LiveState;
+
+/** The answers in a view's entries, as text. */
+const answers = (view: ConversationView) =>
+	view.entries.flatMap((entry) =>
+		(entry.model ?? []).flatMap((message) =>
+			message.role === "assistant" ? [contentText(message.content, "")] : [],
+		),
+	);
 
 describe("pi watches", () => {
-	test("connections watching one conversation see the same frames, a late joiner sees the partial answer, and other conversations see none", async (c) => {
+	test("connections watching one conversation see the same answer, a late joiner sees the partial answer, and other conversations send nothing", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["multiplayer", randomUUID()];
 		const first = client.agent.getOrCreate(key).connect();
 		const second = client.agent.getOrCreate(key).connect();
 		const elsewhere = client.agent.getOrCreate(key).connect();
-		const { frames: firstFrames, push: onFirst } = received<PiEventsFrame>();
-		const { frames: secondFrames, push: onSecond } = received<PiEventsFrame>();
+		const { frames: firstFrames, push: onFirst } = received<PiViewFrame>();
+		const { frames: secondFrames, push: onSecond } = received<PiViewFrame>();
 		const { frames: elsewhereFrames, push: onElsewhere } =
-			received<PiEventsFrame>();
-		first.on("pi.events", onFirst);
-		second.on("pi.events", onSecond);
-		elsewhere.on("pi.events", onElsewhere);
+			received<PiViewFrame>();
+		first.on("pi.view", onFirst);
+		second.on("pi.view", onSecond);
+		elsewhere.on("pi.view", onElsewhere);
 
 		const root = await first.harness.root();
 		const other = await first.harness.createConversation({
 			ownership: { kind: "ownerless" },
 		});
-		await first.conversation.watchEvents(root.id);
-		await second.conversation.watchEvents(root.id);
-		await elsewhere.conversation.watchEvents(other.id);
+		const firstStart = await first.conversation.watch(root.id);
+		const secondStart = await second.conversation.watch(root.id);
+		await elsewhere.conversation.watch(other.id);
 
 		const submission = await first.conversation.submit(root.id, {
 			type: "input",
@@ -137,11 +159,15 @@ describe("pi watches", () => {
 		});
 		// Frames arrive over the connection while the model streams.
 		await vi.waitFor(() =>
-			expect(hasEvent(firstFrames, "message_update")).toBe(true),
+			expect(
+				JSON.stringify(
+					liveOf(replay(firstStart.value, firstFrames)).generation?.message,
+				),
+			).toContain("word"),
 		);
 		const late = client.agent.getOrCreate(key).connect();
-		const { snapshot } = await late.conversation.watchEvents(root.id);
-		expect(snapshot.generation?.message?.content).toEqual([
+		const { value: lateView } = await late.conversation.watch(root.id);
+		expect(liveOf(lateView).generation?.message?.content).toEqual([
 			expect.objectContaining({
 				type: "text",
 				text: expect.stringContaining("word"),
@@ -151,18 +177,45 @@ describe("pi watches", () => {
 		expect(await first.submission.wait(submission.id)).toMatchObject({
 			status: "done",
 		});
-		// The last batch can arrive after the wait action returns.
+		const story = "word ".repeat(60).trim();
+		// The last frame can arrive after the wait action returns.
 		await vi.waitFor(() => {
-			expect(hasEvent(firstFrames, "run_end")).toBe(true);
-			expect(hasEvent(secondFrames, "run_end")).toBe(true);
+			expect(answers(replay(firstStart.value, firstFrames))).toEqual([story]);
+			expect(answers(replay(secondStart.value, secondFrames))).toEqual([story]);
 		});
 		expect(firstFrames.map((frame) => frame.seq)).toEqual(
 			firstFrames.map((_, index) => index + 1),
 		);
-		expect(secondFrames.map((frame) => frame.events)).toEqual(
-			firstFrames.map((frame) => frame.events),
-		);
 		expect(elsewhereFrames).toEqual([]);
+	});
+
+	test("a client pages the transcript older than the view's newest entries through conversation.entries", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.agent.getOrCreate(["long", randomUUID()]);
+		const root = await handle.harness.root();
+		// A prompt stores two entries: the input and the answer.
+		for (let index = 0; index < 30; index += 1) {
+			await handle.prompt("say hello");
+		}
+
+		const conn = handle.connect();
+		const { value } = await conn.conversation.watch(root.id);
+		await conn.dispose();
+		expect(value.entries).toHaveLength(50);
+		expect(value.before).toBeDefined();
+		const older = await handle.conversation.entries(
+			root.id,
+			{ maxEntryId: value.before, order: "ascending" },
+			100,
+		);
+		const whole = await handle.conversation.entries(
+			root.id,
+			{ order: "ascending" },
+			100,
+		);
+		expect([...older.items, ...value.entries].map((entry) => entry.id)).toEqual(
+			whole.items.map((entry) => entry.id),
+		);
 	});
 
 	test("overlapping watch calls on one connection leave one stream, and an unwatch stops it", async (c) => {
@@ -170,41 +223,46 @@ describe("pi watches", () => {
 		const key = ["overlap", randomUUID()];
 		const conn = client.agent.getOrCreate(key).connect();
 		const sentinel = client.agent.getOrCreate(key).connect();
-		const { frames, push } = received<PiEventsFrame>();
+		const { frames, push } = received<PiViewFrame>();
 		const { frames: sentinelFrames, push: onSentinel } =
-			received<PiEventsFrame>();
-		conn.on("pi.events", push);
-		sentinel.on("pi.events", onSentinel);
+			received<PiViewFrame>();
+		conn.on("pi.view", push);
+		sentinel.on("pi.view", onSentinel);
 		const root = await conn.harness.root();
 
-		await Promise.all([
-			conn.conversation.watchEvents(root.id),
-			conn.conversation.watchEvents(root.id),
+		const [{ value: start }] = await Promise.all([
+			conn.conversation.watch(root.id),
+			conn.conversation.watch(root.id),
 		]);
 		const first = await conn.conversation.submit(root.id, {
 			type: "input",
 			content: "say hello",
 		});
 		await conn.submission.wait(first.id);
-		// The last batch can arrive after the wait action returns.
-		await vi.waitFor(() => expect(hasEvent(frames, "run_end")).toBe(true));
+		// The last frame can arrive after the wait action returns.
+		await vi.waitFor(() =>
+			expect(answers(replay(start, frames))).toEqual(["Hi there!"]),
+		);
 		expect(frames.map((frame) => frame.seq)).toEqual(
 			frames.map((_, index) => index + 1),
 		);
 
 		// Awaited in turn, because RivetKit can start actions sent together in either order.
-		await conn.conversation.watchEvents(root.id);
-		await conn.conversation.unwatchEvents(root.id);
+		await conn.conversation.watch(root.id);
+		await conn.conversation.unwatch(root.id);
 		frames.length = 0;
-		await sentinel.conversation.watchEvents(root.id);
+		const { value: sentinelStart } = await sentinel.conversation.watch(root.id);
 		const second = await conn.conversation.submit(root.id, {
 			type: "input",
 			content: "say hello",
 		});
 		await conn.submission.wait(second.id);
-		// Frames go out per commit, so once the sentinel has the run's end, a live stream on conn would have sent it too.
+		// Frames go out per commit, so once the sentinel has the answer, a live stream on conn would have sent it too.
 		await vi.waitFor(() =>
-			expect(hasEvent(sentinelFrames, "run_end")).toBe(true),
+			expect(answers(replay(sentinelStart, sentinelFrames))).toEqual([
+				"Hi there!",
+				"Hi there!",
+			]),
 		);
 		expect(frames).toEqual([]);
 	});
@@ -265,17 +323,17 @@ describe("pi watches", () => {
 		);
 	});
 
-	test("a connection that watches each time it opens gets the next run's events after sleep closes it", async (c) => {
+	test("a connection that watches each time it opens gets the next run after sleep closes it", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["rewatch", randomUUID()];
 		const conn = client.agent.getOrCreate(key).connect();
-		const { frames: eventFrames, push } = received<PiEventsFrame>();
-		conn.on("pi.events", push);
+		const { frames, push } = received<PiViewFrame>();
+		conn.on("pi.view", push);
 		const root = await conn.harness.root();
 		// Sleep closes the connection, so the client watches again each time it opens.
-		const watches: Promise<unknown>[] = [];
+		const watches: Promise<{ value: ConversationView }>[] = [];
 		conn.onOpen(() => {
-			watches.push(conn.conversation.watchEvents(root.id));
+			watches.push(conn.conversation.watch(root.id));
 		});
 		// The connection is already open, so onOpen runs in a microtask.
 		await vi.waitFor(() => expect(watches).toHaveLength(1));
@@ -284,19 +342,21 @@ describe("pi watches", () => {
 		await conn.nap();
 		// The client reconnects on its own after sleep closes the connection, and that wakes the actor.
 		await vi.waitFor(() => expect(watches).toHaveLength(2));
-		await watches[1];
+		const { value: start } = (await watches[1]) as { value: ConversationView };
 		expect(sleeps.get(JSON.stringify(key))).toBe(1);
-		const afterWake = eventFrames.length;
+		const afterWake = frames.length;
 		expect(await conn.prompt("say hello")).toMatchObject({
 			status: "done",
 			text: "Hi there!",
 		});
 
-		// The new watch numbers its batches from 1, after the snapshot that watchEvents returned.
+		// The new watch numbers its frames from 1, after the view that watch returned.
 		await vi.waitFor(() =>
-			expect(hasEvent(eventFrames.slice(afterWake), "run_end")).toBe(true),
+			expect(answers(replay(start, frames.slice(afterWake)))).toEqual([
+				"Hi there!",
+			]),
 		);
-		const batches = eventFrames.slice(afterWake).map((frame) => frame.seq);
-		expect(batches).toEqual(batches.map((_, index) => index + 1));
+		const numbers = frames.slice(afterWake).map((frame) => frame.seq);
+		expect(numbers).toEqual(numbers.map((_, index) => index + 1));
 	});
 });

@@ -30,10 +30,10 @@ A custom tool is a function the model can call. It runs in the agent Actor on yo
 </svg>
 </div>
 
-Tool parameters are <a href="https://github.com/sinclairzx81/typebox" target="_blank" rel="noopener noreferrer">TypeBox</a> schemas. Pi validates every call against them, so build them with the `Type` that pi-ai exports:
+Tool parameters are JSON Schema. Pi validates every call against them. Build them with pi-schema:
 
 ```sh
-npm add @earendil-works/pi-ai
+npm add @earendil-works/pi-schema
 ```
 
 <CodeGroup>
