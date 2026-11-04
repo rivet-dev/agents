@@ -33,6 +33,7 @@ import {
 	type PiModelOptions,
 } from "./models.js";
 import { loadPiSandbox, savePiSandbox } from "./storage.js";
+import { createPiTelemetry, withCallerSpan } from "./tracing.js";
 import {
 	type ConnectionWatches,
 	createConnectionWatches,
@@ -216,7 +217,8 @@ export async function withHarness<T>(
 	const harness = await ensureHarness(c, options);
 	const release = countCall(runtime);
 	try {
-		return await run(harness, BACKGROUND_CONTEXT, (wait) => {
+		const context = withCallerSpan(c.actorId, BACKGROUND_CONTEXT);
+		return await run(harness, context, (wait) => {
 			release();
 			return wait();
 		});
@@ -311,7 +313,14 @@ async function openHarness(
 	options: PiOptions,
 	open: { resume: boolean } = { resume: true },
 ): Promise<OpenHarness> {
-	const storage = await SqliteStorage.open(actorSqlite(c.db));
+	const storage = await SqliteStorage.open(
+		actorSqlite(c.db, (body) =>
+			// An older RivetKit has no such call, so it traces Pi's storage.
+			c.run?.runOutsideWorkflowSpan
+				? c.run.runOutsideWorkflowSpan(body)
+				: body(),
+		),
+	);
 	const now = options.now ?? Date.now;
 	const { registry, settings } = options.onAnswer
 		? withAnswerHook(options, c, options.onAnswer, (error) => {
@@ -342,6 +351,7 @@ async function openHarness(
 			conversationCreated: startingAgent(options),
 			now: options.now,
 			onWake: wake.onWake,
+			telemetry: createPiTelemetry(c.actorId),
 			onReport: (report) => {
 				// A failed storage call closes the Session. Background work reports it
 				// here, with no action to catch it.

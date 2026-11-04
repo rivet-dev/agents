@@ -34,24 +34,38 @@ function prefixTables(sql: string): string {
 	return sql.replace(PI_TABLE_NAMES, "pi_$1");
 }
 
+/** Runs `body` so RivetKit records no spans for its database calls. */
+export type OutsideTrace = <T>(body: () => T) => T;
+
 /**
  * Pi Durable's `SqliteDatabase` over the actor's SQLite database.
  *
  * The actor owns the database, so `close` does nothing. Pi Durable calls it from
  * `storage.close()`, and the actor closes the database itself when it stops.
+ *
+ * Pi's storage stays out of the trace: one prompt makes hundreds of queries,
+ * which bury the app's own `c.db` spans.
  */
-export function actorSqlite(db: RawAccess): SqliteDatabase {
+export function actorSqlite(
+	db: RawAccess,
+	outsideTrace: OutsideTrace = (body) => body(),
+): SqliteDatabase {
 	return {
-		...actorSqliteExecutor(db),
+		...actorSqliteExecutor(db, outsideTrace),
 		// `changes()` reads the connection's last write, so no other work can run between the two statements.
 		runCounted: (sql, ...params) =>
-			db.transaction((tx) => runCounted(tx, sql, params), {
-				name: "pi-durable-counted",
-			}),
+			outsideTrace(() =>
+				db.transaction((tx) => runCounted(tx, sql, params), {
+					name: "pi-durable-counted",
+				}),
+			),
 		transaction: (callback) =>
-			db.transaction((tx) => callback(actorSqliteExecutor(tx)), {
-				name: "pi-durable",
-			}),
+			outsideTrace(() =>
+				db.transaction(
+					(tx) => callback(actorSqliteExecutor(tx, outsideTrace)),
+					{ name: "pi-durable" },
+				),
+			),
 		close: async () => {},
 	};
 }
@@ -61,19 +75,25 @@ export function actorSqlite(db: RawAccess): SqliteDatabase {
  * query it sends. SQLite returns plain rows, so `get` and `all` take Pi's word
  * for their shape.
  */
-function actorSqliteExecutor(db: Pick<RawAccess, "execute">): SqliteExecutor {
+function actorSqliteExecutor(
+	db: Pick<RawAccess, "execute">,
+	outsideTrace: OutsideTrace,
+): SqliteExecutor {
+	const execute = (sql: string, ...params: SqliteValue[]) =>
+		outsideTrace(() => db.execute(prefixTables(sql), ...params));
 	return {
-		runCounted: (sql, ...params) => runCounted(db, sql, params),
+		runCounted: (sql, ...params) =>
+			outsideTrace(() => runCounted(db, sql, params)),
 		exec: async (sql) => {
-			await db.execute(prefixTables(sql));
+			await execute(sql);
 		},
 		run: async (sql, ...params) => {
-			await db.execute(prefixTables(sql), ...params);
+			await execute(sql, ...params);
 		},
 		get: async <T extends object>(sql: string, ...params: SqliteValue[]) =>
-			((await db.execute(prefixTables(sql), ...params)) as T[]).at(0),
+			((await execute(sql, ...params)) as T[]).at(0),
 		all: async <T extends object>(sql: string, ...params: SqliteValue[]) =>
-			(await db.execute(prefixTables(sql), ...params)) as T[],
+			(await execute(sql, ...params)) as T[],
 	};
 }
 

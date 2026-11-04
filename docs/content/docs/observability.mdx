@@ -3,38 +3,63 @@ title: "Observability"
 description: "Trace every agent run with OpenTelemetry."
 ---
 
-Each `prompt` is traced as an `invoke_agent pi` span, from the moment its input is saved until its run settles. The span is a child of the `prompt` action span and has <a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" target="_blank" rel="noopener noreferrer">OpenTelemetry GenAI attributes</a>. To export it, [set up OpenTelemetry for your Actors](/docs/tracing).
+Pi Durable traces each run with [OpenTelemetry](/docs/tracing). You don't set any `pi()` option. Without an OpenTelemetry SDK, tracing does nothing.
 
-<div style="overflow-x:auto">
-<svg viewBox="0 0 600 200" role="img" aria-label="Each prompt action span contains an invoke_agent pi span with GenAI attributes. Both are exported to your OpenTelemetry backend." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
-  <defs>
-    <marker id="observability-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgb(var(--site-ink, 27 25 22))"/></marker>
-  </defs>
-  <g fill="rgb(var(--site-paper-mid, 227 227 229))" stroke="rgb(var(--site-pine, 46 64 52))" stroke-width="1.4" stroke-dasharray="7 6">
-    <rect x="20" y="40" width="300" height="140" rx="10"/>
-  </g>
-  <rect x="44" y="84" width="252" height="60" rx="7" fill="#c7e4fb" stroke="#3d9df3" stroke-width="2"/>
-  <rect x="420" y="84" width="160" height="60" rx="7" fill="#ffffff" stroke="#1b1916" stroke-width="1.4"/>
-  <g stroke="rgb(var(--site-ink, 27 25 22))" stroke-width="1.4" fill="none">
-    <path d="M321 114 L418 114" marker-end="url(#observability-arrow)"/>
-  </g>
-  <text x="20" y="28" font-size="11" font-family="ui-monospace,monospace" font-weight="600" letter-spacing="0.14em" fill="rgb(var(--site-pine, 46 64 52))">PROMPT ACTION SPAN</text>
-  <text x="170" y="111" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916" font-family="ui-monospace,monospace">invoke_agent pi</text>
-  <text x="170" y="128" text-anchor="middle" font-size="12" fill="#56524a">GenAI attributes</text>
-  <text x="500" y="111" text-anchor="middle" font-size="14" font-weight="600" fill="#1b1916">OpenTelemetry</text>
-  <text x="500" y="128" text-anchor="middle" font-size="12" fill="#56524a">your backend</text>
-  <text x="370" y="107" text-anchor="middle" font-size="12" fill="#56524a">export</text>
-</svg>
-</div>
+## Export traces
 
-| Attribute | Value |
-| --- | --- |
-| `gen_ai.operation.name` | `invoke_agent` |
-| `gen_ai.agent.name` | `pi` |
-| `gen_ai.conversation.id` | The Pi conversation id. |
-| `gen_ai.request.model` | The conversation's model, as `provider/modelId`. |
-| `rivet.actor.id` | The Actor's id. |
+Exporting Pi's spans takes two steps:
 
-A run that ends without an answer, such as after a model error, sets the span status to error with `error.type` set to `unanswered`. A `prompt` that throws sets `error.type` to `run_error`. Prompt text, tool arguments, and tool results are never recorded.
+1. Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, as in [the RivetKit quickstart](/docs/tracing#quickstart). This exports RivetKit's own spans, such as `agent/prompt`.
+2. Start `NodeSDK` from `@opentelemetry/sdk-node` before your registry, as in [Add application spans](/docs/tracing#add-application-spans). This exports Pi's spans.
 
-Only `prompt` creates this span. A run started with `conversation.submit` has no `invoke_agent pi` span, so use `prompt` for runs you want to trace.
+The environment variable alone exports only RivetKit's spans. Pi's spans use `@opentelemetry/api` in your process, so they need the SDK.
+
+## What a run looks like
+
+A `prompt` with one tool call produces two linked traces:
+
+```
+agent/prompt                                 the caller's trace
+└── invoke_agent pi
+
+pi.durable.submit                            the run's trace, linked to agent/prompt
+├── pi.durable.phase  pi.generation prepare
+├── pi.durable.phase  pi.generation request
+│   └── pi.durable.phase  pi.tool call
+│       └── app.lookup                       your span
+└── pi.durable.phase  pi.generation tools
+    ├── pi.durable.phase  pi.generation prepare
+    └── pi.durable.phase  pi.generation request
+```
+
+- **Each run is its own trace**, linked to its caller. RivetKit treats scheduled actions and workflow runs the same way. A `conversation.submit` run has the same trace as a `prompt` run, without `invoke_agent pi`.
+- **A run keeps its trace ID** across retries, actor sleeps, and restarts, because Pi stores the trace context with its tasks.
+- **Your spans nest under the phase that runs them.** Start a span in a tool with `@opentelemetry/api` and it appears under the tool's phase.
+- **Your `c.db` calls export `rivet.sqlite.*` spans while an action is open.** That covers your own actions, and tools in a `prompt` run, where the spans appear under the tool's phase. A tool in a `conversation.submit` run exports none, because that action has already returned.
+- **Pi's own storage exports no spans**, so its queries do not bury yours.
+
+## Spans
+
+Every span Pi records has `rivet.actor.id`, the Actor's id.
+
+| Span | Meaning | Attributes |
+| --- | --- | --- |
+| `invoke_agent pi` | A `prompt`, from saving its input until its run settles. A child of the `prompt` action span. | `gen_ai.operation.name`, `gen_ai.agent.name`, `gen_ai.conversation.id`, `gen_ai.request.model` |
+| `pi.durable.submit` | Pi admits a submission. | `submission.type`, `submission.id`, `conversation.id`, `result` |
+| `pi.durable.phase` | One step of a task, such as a model request or a tool call. | `task.id`, `task.name`, `phase`, `kind`, `attempt`, `resumed`, `outcome`, `tool.name`, `tool.call_id` |
+
+## Failures
+
+A failed span has an error status and `error.type`:
+
+| `error.type` | Span | Meaning |
+| --- | --- | --- |
+| `unanswered` | `invoke_agent pi` | The run ended without an answer, such as after a model error. |
+| `run_error` | `invoke_agent pi` | The `prompt` threw. |
+| `task_faulted`, `task_failed`, `task_orphaned` | `pi.durable.phase` | A task stopped in this phase, such as a tool that threw. |
+
+Tracing can't break a run. A collector that is down or a tracer that throws loses spans, and the run still answers.
+
+## What is never recorded
+
+Traces never record prompt text, tool arguments, tool results, or error messages. Error text can repeat what the caller sent, so a failed span names only the type of the failure. Read the details from [the conversation](/agents/docs/client-sdk).
