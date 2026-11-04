@@ -1,37 +1,148 @@
 ---
 title: "Sandbox Adapter"
-description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, or Freestyle from any Rivet Actor, without the agent harness."
+description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, or Docker from any Rivet Actor, without the agent harness."
 ---
 
 <Diagram
   id="sandbox-adapter"
-  label="Any Rivet Actor calls create or connect on a SandboxProvider from the sandbox adapter, then calls exec and the file operations on the Sandbox it gets back. The adapter talks to the chosen provider: agentOS, E2B, Daytona, or Freestyle. The Actor stores the sandbox id so it can connect again after it sleeps. There is one sandbox per Actor."
+  label="Any Rivet Actor calls create or connect on a SandboxProvider from the sandbox adapter, then calls exec and the file operations on the Sandbox it gets back. The adapter talks to the chosen provider: agentOS, E2B, Daytona, Freestyle, or Docker. The Actor stores the sandbox id so it can connect again after it sleeps. There is one sandbox per Actor."
   stackLabel="One sandbox per Actor"
   nodes={[
-    { id: "actor", x: 20, y: 140, w: 200, product: "actors", stack: true, title: "Any Rivet Actor", subtitle: "stores the sandbox id" },
-    { id: "adapter", x: 390, y: 140, w: 180, title: "`sandbox-adapter`", subtitle: "`SandboxProvider`, `Sandbox`" },
-    { id: "providers", kind: "boundary", x: 700, y: 15, w: 210, h: 310, title: "Providers" },
+    { id: "actor", x: 20, y: 175, w: 200, product: "actors", stack: true, title: "Any Rivet Actor", subtitle: "stores the sandbox id" },
+    { id: "adapter", x: 390, y: 175, w: 180, title: "`sandbox-adapter`", subtitle: "`SandboxProvider`, `Sandbox`" },
+    { id: "providers", kind: "boundary", x: 700, y: 15, w: 210, h: 380, title: "Providers" },
     { id: "agentos", x: 720, y: 50, h: 50, product: "agentos", title: "agentOS" },
     { id: "e2b", x: 720, y: 120, h: 50, title: "E2B" },
     { id: "daytona", x: 720, y: 190, h: 50, title: "Daytona" },
     { id: "freestyle", x: 720, y: 260, h: 50, title: "Freestyle" },
+    { id: "docker", x: 720, y: 330, h: 50, title: "Docker" },
   ]}
   edges={[
     { from: "actor", to: "adapter", fromOffset: -12, toOffset: -12, label: "`create`, `connect`", step: 1 },
-    { from: "actor", to: "adapter", fromOffset: 12, toOffset: 12, label: "`exec`, files", labelAt: [311, 200], step: 2 },
+    { from: "actor", to: "adapter", fromOffset: 12, toOffset: 12, label: "`exec`, files", labelAt: [311, 235], step: 2 },
     { from: "adapter", to: "providers", label: "provider API" },
   ]}
 />
 
-## TODO
+`@rivet-dev/sandbox-adapter` gives a Rivet Actor one API to create a sandbox, run commands, use files, and clean up. Use it directly when your Actor runs its own process, such as a build or a coding CLI.
 
-This page is not written yet. The outline below is what it will cover.
+To give a Pi agent a sandbox, pass a provider to `pi()` instead. Pi then makes all the calls on this page for you. See [Sandboxes](/agents/docs/sandboxes), which also lists each provider's options.
 
-### What this page will cover
+## Use a sandbox from an Actor
 
-- The four providers and the setup each one needs: agentOS with no account, and E2B, Daytona, and Freestyle with their SDKs and API keys.
-- The `Sandbox` operations: `exec`, `readFile`, `writeFile`, `mkdir`, `stat`, `readdir`, and `exists`.
-- The lifecycle: `create`, `connect`, `suspend`, and `destroy`, and storing the sandbox id in the Actor's state so it reconnects after sleep.
-- Streaming `exec` output with `onData`, and stopping a command with a timeout or an abort signal.
-- Writing a custom provider by implementing `SandboxProvider`.
-- How this relates to [Sandboxes](/agents/docs/sandboxes), which wires the same adapter into an agent's `CodingTools`.
+This example uses Docker because it needs no account. Your worker must have the `docker` CLI.
+
+```sh
+npm add @rivet-dev/sandbox-adapter
+```
+
+<CodeSnippet file="examples/docs/sandbox-adapter/actor.ts" title="server.ts" />
+
+The first `run`, `saveFile`, or `readFile` creates the Actor's sandbox. Later calls connect to the same sandbox.
+
+## Choose a provider
+
+Every provider returns the same `SandboxProvider`, so you change one import and one call. See [Providers](/agents/docs/sandboxes#providers) for the options of each one.
+
+| Provider | Function | Import from | Also install | Credentials |
+| --- | --- | --- | --- | --- |
+| agentOS | `agentOSProvider()` | `@rivet-dev/sandbox-adapter/agentos` | Nothing | None |
+| E2B | `e2bProvider()` | `@rivet-dev/sandbox-adapter/e2b` | `e2b` | `E2B_API_KEY` |
+| Daytona | `daytonaProvider()` | `@rivet-dev/sandbox-adapter/daytona` | `@daytonaio/sdk` | `DAYTONA_API_KEY` |
+| Freestyle | `freestyleProvider({ create })` | `@rivet-dev/sandbox-adapter/freestyle` | `freestyle` | `FREESTYLE_API_KEY` |
+| Docker | `dockerProvider()` | `@rivet-dev/sandbox-adapter/docker` | Nothing | None |
+
+## Manage the lifecycle
+
+The adapter stores nothing. Your Actor stores the sandbox id and decides when to make each call.
+
+| Call | When to call it | Result |
+| --- | --- | --- |
+| `create(c)` | No id is stored, or `connect` returned `undefined`. | A new sandbox id. Store it right away. |
+| `connect(c, id)` | Before you use the sandbox after a wake. | A `Sandbox`, or `undefined` when the provider reports that the sandbox no longer exists. |
+| `suspend?.(c, id)` | In `onSleep`. | The sandbox stops using resources while the Actor sleeps. agentOS has no `suspend`. |
+| `destroy?.(c, id)` | In `onDestroy`. | The sandbox is deleted. agentOS has no `destroy`, so its VM stays. |
+
+`openSandbox`, `onSleep`, and `onDestroy` in the example above make these calls.
+
+- **Store the id, not the `Sandbox`.** A `Sandbox` object exists only in memory, so connect again after a wake.
+- **Keep the id when `connect` throws.** It throws on any failure other than a missing sandbox, so a provider outage does not replace the sandbox.
+- **A new sandbox starts empty.** When `connect` returns `undefined`, the old files are gone.
+
+## Run commands
+
+`exec` runs one command in the sandbox and waits for it to end. A non-zero exit code is a normal result, not an error.
+
+| Option | Description |
+| --- | --- |
+| `cwd` | Required. Absolute working directory. Use `sandbox.cwd` for the sandbox's own. |
+| `env` | Variables for this command. Your worker's environment is never passed in. |
+| `timeoutMs` | Kills the command after this many milliseconds. Leave it out, or pass `0`, for no timeout. |
+| `signal` | Aborting kills the command, and `exec` rejects with `Error("aborted")`. |
+| `onData` | Receives stdout and stderr chunks as bytes, in one stream, as they arrive. |
+
+| Result | Description |
+| --- | --- |
+| `exitCode` | The exit code. `null` when the command timed out or a signal killed it. |
+| `timedOut` | `true` when `timeoutMs` ended the command. |
+| `stdout` | All standard output. |
+| `stderr` | All standard error. |
+
+Some providers report output differently:
+
+- **Daytona** returns stdout and stderr together in `stdout`, leaves `stderr` empty, and calls `onData` once when the command ends.
+- **E2B and Daytona** return empty `stdout` and `stderr` after a timeout. On E2B, `onData` has already received the output.
+
+## Use files
+
+All paths are absolute paths inside the sandbox.
+
+| Operation | Result |
+| --- | --- |
+| `readFile(path)` | The contents as a `Uint8Array`. |
+| `writeFile(path, content)` | Writes a string. Binary content is not supported. Create the parent directory first. |
+| `mkdir(path)` | Creates the directory. |
+| `stat(path)` | `{ isDirectory }`. |
+| `readdir(path)` | The entry names. |
+| `exists(path)` | `true` or `false`. |
+
+## Docker image requirements
+
+The Docker provider has no agent inside the container. It runs every operation through a shell and a few command-line tools from the image. `ubuntu:24.04`, `debian:bookworm-slim`, `alpine:3.22`, and `busybox:1.37` have all of them.
+
+| The image needs | Used for | Without it |
+| --- | --- | --- |
+| `/bin/sh` | Everything. Any POSIX shell with built-in `echo`, `printf`, `[`, `cd`, and `kill`, such as `dash` or BusyBox `ash`. | `connect` fails. |
+| `tail` | The idle process that keeps the container running. Not needed with `keepImageEntrypoint`. | `create` succeeds, then `connect` fails because the container is not running. |
+| `mkdir` | `connect`, `mkdir`, and `exec`. | `connect` fails. |
+| `cat` | `readFile`, `writeFile`, and stopping a command. | File reads and writes fail. After a timeout or abort, the command keeps running and `exec` does not return until the command ends. |
+| `rm` | Cleaning up after `exec`. | Every `exec` gets `rm: not found` in `stderr` and leaves a file in `/tmp/.rivet-exec`. |
+| `touch` | Stopping a command that is still starting. | A kill that arrives before the command starts does not stop it. |
+| `stat` (GNU, BusyBox, or BSD) | Pi's `read` and `edit` tools. The `Sandbox` API does not use it. | Those two tools return an error. |
+| A writable `/tmp` | Recording the process that `exec` starts, so a kill can find it. | Every `exec` gets a `mkdir` error in `stderr`. After a timeout or abort, the command keeps running and `exec` does not return until the command ends. |
+
+Check an image with this command. It prints `missing` or `not writable` for each problem:
+
+```sh
+docker run --rm --entrypoint /bin/sh my-image -c 'for t in tail cat mkdir rm touch stat; do command -v "$t" >/dev/null || echo "missing: $t"; done; [ -w /tmp ] || echo "not writable: /tmp"'
+```
+
+Two more rules apply to your own images:
+
+- **Non-root users need a writable `cwd`.** Docker creates the default `/workspace` as `root`, so a non-root `USER` can't write there. Set `cwd` to a directory that the user owns, such as `/home/app`.
+- **Commands bring their own tools.** A command you run, or that an agent runs with `bash`, can only use what the image has, such as `git` or `node`.
+
+With `keepImageEntrypoint`, the image's entrypoint must keep running. The container stops when it exits.
+
+## Write your own provider
+
+Implement `SandboxProvider` over your sandbox service. See [Write your own provider](/agents/docs/sandboxes#write-your-own-provider) for what each member does.
+
+<CodeSnippet file="examples/docs/sandbox-adapter/custom-provider.ts" title="provider.ts" />
+
+- **`cwd`** is optional. Set it when the working directory is known before a connect. Pi then connects only when a tool first uses the sandbox. Without it, Pi must connect to learn the directory.
+- **`runRemoteProcess`** is optional. Use it when your service keeps a process's output by sequence number and has no way to wait for exit. It polls every 100 milliseconds, streams output to `onData`, and applies `timeoutMs` and `signal`.
+
+Pass the result to your Actor in place of `dockerProvider()`, or to `pi()` as `sandbox`.
+
+**Next:** [Sandboxes](/agents/docs/sandboxes), which gives a Pi agent's tools a sandbox through this adapter.

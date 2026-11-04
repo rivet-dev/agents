@@ -161,7 +161,7 @@ npm add @rivet-dev/sandbox-adapter
 
 | Option | Description |
 | --- | --- |
-| `image` | Image to run. It must include `/bin/sh`. Defaults to `ubuntu:24.04`. |
+| `image` | Image to run. See [Docker image requirements](/agents/docs/sandbox-adapter#docker-image-requirements). Defaults to `ubuntu:24.04`. |
 | `cwd` | Working directory inside the container. Created when the Actor connects. Defaults to `/workspace`. |
 | `env` | Environment variables of the container. |
 | `network` | Docker network to join. Set `"none"` for no network access. Defaults to `bridge`. The `host` network is rejected. |
