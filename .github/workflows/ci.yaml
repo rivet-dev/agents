@@ -95,3 +95,24 @@ jobs:
       - run: npm pack --dry-run
         working-directory: packages/pi
       - run: pnpm test:packed
+
+  # The packages job tests the locked RivetKit. This job tests the newest
+  # rivetkit@^3, so a RivetKit release that breaks Pi fails here.
+  pi-rivetkit-newest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # pnpm add keeps a locked version that satisfies a range, so name the exact one.
+      - run: |
+          version=$(npm view 'rivetkit@^3' version --json | jq -r '[.] | flatten | sort_by(split(".") | map(tonumber)) | last')
+          pnpm --filter @rivet-dev/pi add --save-dev "rivetkit@$version"
+      - run: pnpm --filter @rivet-dev/pi list rivetkit
+      - run: pnpm --filter '@rivet-dev/pi...' build
+      - run: pnpm --filter @rivet-dev/pi test
