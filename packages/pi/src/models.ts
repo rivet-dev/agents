@@ -5,6 +5,7 @@ import {
 import { UserError } from "rivetkit";
 import type { PiCredentialSource } from "./credentials.js";
 import type { PiContext } from "./runtime.js";
+import { traceModelRequests } from "./tracing.js";
 
 /** Pi's credential store interface. `read`, `list`, `modify`, and `delete`, keyed by provider id. */
 export type PiCredentialStore = NonNullable<
@@ -62,7 +63,7 @@ export async function createActorModelRuntime(
 		await runtime.setRuntimeApiKey(providerId, apiKey);
 	}
 	await runtime.refresh({ allowNetwork: false });
-	return runtime;
+	return traceModelRequests(runtime);
 }
 
 /** A credential store that holds nothing and refuses writes. */

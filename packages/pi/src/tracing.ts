@@ -1,6 +1,13 @@
 import type { Context } from "@earendil-works/chord";
 import { withTelemetry } from "@earendil-works/chord/context";
 import type {
+	Api,
+	AssistantMessage,
+	AssistantMessageEventStream,
+	Model,
+} from "@earendil-works/pi-ai";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type {
 	SpanAttributes,
 	SpanLink,
 	SpanOptions,
@@ -51,6 +58,37 @@ function runActive<T>(active: OtelContext, body: () => T): T {
 	}
 }
 
+/** The spans Pi's model layer emits. Users see each as `chat <model>`. */
+const MODEL_SPANS: ReadonlySet<string> = new Set([
+	"pi.ai.request",
+	"pi.ai.poll",
+]);
+
+/**
+ * Pi's model span attributes under the names users build dashboards on, from
+ * OpenTelemetry's GenAI conventions. Input tokens include cached ones, as those
+ * conventions ask. A deferred or pending response has no usage to report yet.
+ */
+function modelAttributes(attributes: SpanAttributes = {}): SpanAttributes {
+	const hasUsage =
+		attributes.stop !== "deferred" && attributes.stop !== "pending";
+	const input = attributes["usage.input"];
+	return {
+		"gen_ai.provider.name": attributes.provider,
+		"gen_ai.request.model": attributes.model,
+		...(hasUsage && {
+			"gen_ai.usage.input_tokens":
+				typeof input === "number"
+					? input +
+						Number(attributes["usage.cache_read"] ?? 0) +
+						Number(attributes["usage.cache_write"] ?? 0)
+					: undefined,
+			"gen_ai.usage.output_tokens": attributes["usage.output"],
+			"gen_ai.usage.cost_usd": attributes["cost.total"],
+		}),
+	};
+}
+
 function attributesOf(attributes: SpanAttributes | undefined): Attributes {
 	const defined: Attributes = {};
 	for (const [name, value] of Object.entries(attributes ?? {})) {
@@ -91,15 +129,23 @@ class OtelTelemetry implements TelemetryContext {
 		callback: (span: TelemetrySpan) => T | Promise<T>,
 	): Promise<T> {
 		const { adapter, parent } = this;
+		const isModelSpan = MODEL_SPANS.has(options.name);
 		const native = this.settled
 			? undefined
 			: guarded(() =>
 					adapter.tracer().startSpan(
-						options.name,
+						isModelSpan ? `chat ${options.attributes?.model}` : options.name,
 						{
 							attributes: {
 								...adapter.attributes,
-								...attributesOf(options.attributes),
+								...attributesOf(
+									isModelSpan
+										? {
+												"gen_ai.operation.name": "chat",
+												...modelAttributes(options.attributes),
+											}
+										: options.attributes,
+								),
 							},
 							links: options.links?.flatMap(linksOf),
 						},
@@ -107,7 +153,7 @@ class OtelTelemetry implements TelemetryContext {
 						parent,
 					),
 				);
-		const span = new OtelSpan(adapter, native);
+		const span = new OtelSpan(adapter, native, isModelSpan);
 		try {
 			const result = await runActive(
 				native ? trace.setSpan(parent, native) : parent,
@@ -135,6 +181,7 @@ class OtelSpan extends OtelTelemetry implements TelemetrySpan {
 	constructor(
 		adapter: OtelAdapter,
 		readonly native: Span | undefined,
+		readonly isModelSpan = false,
 	) {
 		super(adapter, native ? trace.setSpan(ROOT_CONTEXT, native) : ROOT_CONTEXT);
 	}
@@ -159,7 +206,10 @@ class OtelSpan extends OtelTelemetry implements TelemetrySpan {
 	}
 
 	setAttributes(attributes: SpanAttributes): void {
-		this.#record((native) => native.setAttributes(attributesOf(attributes)));
+		const recorded = this.isModelSpan
+			? modelAttributes(attributes)
+			: attributes;
+		this.#record((native) => native.setAttributes(attributesOf(recorded)));
 	}
 
 	setStatus(status: SpanStatus): void {
@@ -322,4 +372,87 @@ export async function traceRun<T extends { status: string; reason?: string }>(
 	} finally {
 		guarded(() => span?.end());
 	}
+}
+
+const MODEL_CALL_FAILED: SpanStatus = {
+	status: "error",
+	error: { name: "provider_error", message: "" },
+};
+
+/** Records what a finished model call reports, never its content or its error text. */
+function recordModelResult(span: TelemetrySpan, message: AssistantMessage) {
+	const { input, output, cacheRead, cacheWrite, cost } = message.usage;
+	span.setAttributes({
+		stop: message.stopReason,
+		"usage.input": input,
+		"usage.output": output,
+		"usage.cache_read": cacheRead,
+		"usage.cache_write": cacheWrite,
+		"cost.total": cost.total,
+	});
+	if (message.stopReason === "error") span.setStatus(MODEL_CALL_FAILED);
+}
+
+/** Runs one model call in a span of Pi's model vocabulary, ending when its stream does. */
+function traceModelCall(
+	spanName: "pi.ai.request" | "pi.ai.poll",
+	model: Model<Api>,
+	telemetry: TelemetrySpan | undefined,
+	call: () => AssistantMessageEventStream,
+): AssistantMessageEventStream {
+	if (!telemetry) return call();
+	let stream: AssistantMessageEventStream | undefined;
+	let thrown: unknown;
+	void telemetry.startSpan(
+		{
+			name: spanName,
+			attributes: { provider: model.provider, model: model.id },
+		},
+		async (span) => {
+			try {
+				stream = call();
+				recordModelResult(span, await stream.result());
+			} catch (error) {
+				thrown = error;
+				span.setStatus(MODEL_CALL_FAILED);
+			}
+		},
+	);
+	if (!stream) throw thrown;
+	return stream;
+}
+
+/**
+ * The default model runtime with a span per model call. `ModelRuntime` skips
+ * the `observeModelRequest` that pi-ai's own `Models` runs, and pi-ai does not
+ * export it, so this emits the same spans. An app's own `models` stays as it is,
+ * so a call never has two spans. tests/tracing-models.test.ts fails when Pi
+ * fixes `ModelRuntime`. Remove this wrapper then: users see the same spans.
+ *
+ * A Proxy and not patched methods: `completeSimple` calls `streamSimple`
+ * inside `ModelRuntime`, so patching both would give that call two spans.
+ */
+export function traceModelRequests(runtime: ModelRuntime): ModelRuntime {
+	const traced: Partial<Record<string | symbol, unknown>> = {
+		streamSimple: ((model, context, options) =>
+			traceModelCall("pi.ai.request", model, options?.telemetry, () =>
+				runtime.streamSimple(model, context, options),
+			)) satisfies ModelRuntime["streamSimple"],
+		completeSimple: ((model, context, options) =>
+			traceModelCall("pi.ai.request", model, options?.telemetry, () =>
+				runtime.streamSimple(model, context, options),
+			).result()) satisfies ModelRuntime["completeSimple"],
+		fetchDeferred: ((model, handle, options) =>
+			traceModelCall("pi.ai.poll", model, options?.telemetry, () =>
+				runtime.streamDeferred(model, handle, options),
+			).result()) satisfies ModelRuntime["fetchDeferred"],
+	};
+	return new Proxy(runtime, {
+		get: (target, name) => {
+			const method = traced[name];
+			if (method) return method;
+			const value: unknown = Reflect.get(target, name, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
 }
