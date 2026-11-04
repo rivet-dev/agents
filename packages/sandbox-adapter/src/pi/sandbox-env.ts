@@ -222,6 +222,7 @@ async function read<T>(
 	}
 }
 
+/** File types as `stat` names them, in lowercase because BSD capitalizes them. */
 const STAT_KINDS: Record<string, FileKind> = {
 	"regular file": "file",
 	"regular empty file": "file",
@@ -229,15 +230,23 @@ const STAT_KINDS: Record<string, FileKind> = {
 	"symbolic link": "symlink",
 };
 
+/**
+ * GNU and BusyBox `stat` take `-c`. BSD `stat` takes `-f`. GNU `stat -f` reads
+ * the file system instead, so the command checks for `-c` on a path that always
+ * exists. Falling back after a failure would hide the path's real error.
+ */
+function statCommand(path: string): string {
+	const target = shellQuote(path);
+	return `if stat -c %s / >/dev/null 2>&1; then stat -c '%F|%s|%Y' -- ${target}; else stat -f '%HT|%z|%m' -- ${target}; fi`;
+}
+
 async function fileInfo(
 	sandbox: Sandbox,
 	path: string,
 ): Promise<Result<FileInfo, FileError>> {
 	let result: Awaited<ReturnType<Sandbox["exec"]>>;
 	try {
-		result = await sandbox.exec(`stat -c '%F|%s|%Y' -- ${shellQuote(path)}`, {
-			cwd: sandbox.cwd,
-		});
+		result = await sandbox.exec(statCommand(path), { cwd: sandbox.cwd });
 	} catch (error) {
 		const cause = toError(error);
 		return err(new FileError("unknown", cause.message, path, cause));
@@ -252,7 +261,10 @@ async function fileInfo(
 			),
 		);
 	}
-	const [type = "", size = "", modified = ""] = result.stdout.trim().split("|");
+	const [rawType = "", size = "", modified = ""] = result.stdout
+		.trim()
+		.split("|");
+	const type = rawType.toLowerCase();
 	const kind = STAT_KINDS[type];
 	if (!kind) {
 		return err(
