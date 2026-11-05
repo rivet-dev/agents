@@ -77,6 +77,15 @@ await sdk.deleteMcpConfig({
 | `enabled` | enable/disable server |
 | `timeoutMs` | timeout override |
 
+## Parallel Search MCP example
+
+The [Parallel Search MCP example](https://github.com/rivet-dev/agents/tree/main/sandbox-agent/examples/mcp-parallel)
+stores an optional remote HTTP configuration through the SDK, reloads it, and
+runs `web_search` and `web_fetch` using those connection settings. The
+[anonymous endpoint](https://docs.parallel.ai/integrations/mcp/search-mcp) is free
+for light use without a Parallel API key, with lower rate limits than authenticated
+access. The example needs no model credentials and does not start an agent session.
+
 ## Custom MCP servers
 
 To bundle and upload your own MCP server into the sandbox, see [Custom Tools](/sandbox-agent/docs/custom-tools).
