@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { arr, obj, str } from "@earendil-works/pi-schema";
 import {
 	createRegistry,
 	defineExtension,
@@ -14,9 +14,9 @@ import type { registry } from "./server";
 const askSpecialist = defineTool({
 	name: "ask_specialist",
 	description: "Give each subtask to its own researcher. They work in parallel, and you get every answer back.",
-	parameters: Type.Object({
-		subtasks: Type.Array(
-			Type.String({ description: "One self-contained question. The researcher can't see this conversation." }),
+	parameters: obj({
+		subtasks: arr(
+			str({ description: "One self-contained question. The researcher can't see this conversation." }),
 			{ minItems: 1, maxItems: 8 },
 		),
 	}),

@@ -1,14 +1,14 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { defineTool } from "@earendil-works/pi-durable";
 
 // docs:start search
 export const searchFlights = defineTool({
 	name: "search_flights",
 	description: "Find flights between two airports on a date.",
-	parameters: Type.Object({
-		from: Type.String({ description: "Airport code, such as SFO." }),
-		to: Type.String({ description: "Airport code, such as HND." }),
-		date: Type.String({ description: "The date, as YYYY-MM-DD." }),
+	parameters: obj({
+		from: str({ description: "Airport code, such as SFO." }),
+		to: str({ description: "Airport code, such as HND." }),
+		date: str({ description: "The date, as YYYY-MM-DD." }),
 	}),
 	// A search changes nothing, so running it again after a crash is harmless.
 	replay: "safe",
@@ -24,7 +24,7 @@ export const searchFlights = defineTool({
 export const bookFlight = defineTool({
 	name: "book_flight",
 	description: "Book a seat on a flight. Only call this after the user confirms the flight.",
-	parameters: Type.Object({ flightId: Type.String(), passenger: Type.String() }),
+	parameters: obj({ flightId: str(), passenger: str() }),
 	// After a crash this runs again with the same idempotency key, so the API books only once.
 	replay: "safe",
 	execute: async ({ flightId, passenger }, api, context) => {

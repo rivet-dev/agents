@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, oneOf, str } from "@earendil-works/pi-schema";
 import { createRegistry, defineExtension, defineTool, ROOT_CONVERSATION_ID } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { pi } from "@rivet-dev/pi";
@@ -21,9 +21,9 @@ export const askSpecialist = defineTool({
 	name: "ask_specialist",
 	description:
 		"Hand one focused question to a specialist and get its answer. Use orders for order status, refunds, and shipping. Use engineering for bugs that need someone to read or run the code.",
-	parameters: Type.Object({
-		specialist: Type.Union([Type.Literal("orders"), Type.Literal("engineering")]),
-		question: Type.String({ description: "Everything the specialist needs. It can't see this conversation." }),
+	parameters: obj({
+		specialist: oneOf(["orders", "engineering"]),
+		question: str({ description: "Everything the specialist needs. It can't see this conversation." }),
 	}),
 	// A rerun reaches the same specialist Actor, through the memo below.
 	replay: "safe",

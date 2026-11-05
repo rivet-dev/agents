@@ -36,7 +36,6 @@ import {
 import { migratePiTables } from "./storage.js";
 import {
 	type PiDocFrame,
-	type PiEventsFrame,
 	type PiTaskGraphFrame,
 	type PiViewFrame,
 	unwatchConnection,
@@ -44,14 +43,12 @@ import {
 
 /** Watch frames, sent only to the connection that asked. See `PiWatchEvents`. */
 export type PiEvents = {
-	"pi.events": Type<PiEventsFrame>;
 	"pi.view": Type<PiViewFrame>;
 	"pi.taskGraph": Type<PiTaskGraphFrame>;
 	"pi.doc": Type<PiDocFrame>;
 };
 
 const piEvents: PiEvents = {
-	"pi.events": event<PiEventsFrame>(),
 	"pi.view": event<PiViewFrame>(),
 	"pi.taskGraph": event<PiTaskGraphFrame>(),
 	"pi.doc": event<PiDocFrame>(),

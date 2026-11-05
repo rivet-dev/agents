@@ -25,7 +25,6 @@ export type { PiModelOptions, PiProviderConfig } from "./models.js";
 export type { PiDatabaseProvider, PiOptions } from "./runtime.js";
 export type {
 	PiDocFrame,
-	PiEventsFrame,
 	PiTaskGraphFrame,
 	PiViewFrame,
 	PiWatchEvents,

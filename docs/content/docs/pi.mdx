@@ -83,7 +83,7 @@ Each agent is a Rivet Actor. A run is a series of steps, such as model calls, to
 - **Idle agents sleep.** A sleeping agent uses no memory. The next action on its key wakes it with its conversations and files.
 - **Crashes and upgrades resume.** Work that was cut off carries on from its last saved step. See [Resuming a run](/agents/docs/architecture#resuming-a-run).
 - **Resent prompts run once.** A client can safely resend a prompt with the same `requestId`.
-- **Clients that join late catch up.** They get a snapshot of the run, then live events.
+- **Clients that join late catch up.** They get the current view of the conversation, then live changes.
 
 To get started, see the [Quickstart](/agents/docs/quickstart).
 
@@ -99,15 +99,15 @@ An agent needs no sandbox. Without one, Pi's `read`, `write`, and `edit` tools w
 
 ## Use pi-ai
 
-The pi-ai package is Pi's model library, and Pi Durable is built on it. Install it next to Pi Durable:
+The pi-ai package is Pi's model library, and Pi Durable is built on it. The pi-schema package builds tool parameters. Install them next to Pi Durable:
 
 ```sh
-npm add @earendil-works/pi-ai
+npm add @earendil-works/pi-ai @earendil-works/pi-schema
 ```
 
-| To | Use from pi-ai |
+| To | Use |
 | --- | --- |
-| Define a tool's parameters | `Type`, which builds the schema Pi checks every call against |
+| Define a tool's parameters | `obj`, `str`, and the other builders from pi-schema, which build the JSON Schema Pi checks every call against |
 | Read the messages of a conversation | `AssistantMessage`, `UserMessage`, and `ToolResultMessage` |
 | Pick a thinking level for `thinkingLevel` | `ModelThinkingLevel`, from `"off"` to `"max"` |
 
@@ -165,7 +165,7 @@ See [Personal Agent over SMS](/guides/personal-agent) for a complete example.
 
 <CodeSnippet file="examples/docs/pi/stream.ts" title="stream.ts" />
 
-The `watchEvents` action returns a snapshot, then sends `pi.events` to that connection only. A short answer can arrive whole in `message_end`, with no `text_delta` before it, so print the rest of the text there. A batch with `seq` 0 replaces the client's state, and a gap in `seq` means call `watchEvents` again.
+The `conversation.watch` action returns the conversation's view, then sends `pi.view` frames to that connection only. A frame carries Chord operations, and `applyImmutable` from `@earendil-works/chord/delta` applies them to the view. A frame with `seq` 0 replaces the client's view, and a gap in `seq` means call `conversation.watch` again. See [Watch a conversation](/agents/docs/session-lifecycle#watch-a-conversation).
 
 ## Your own actions and `c.pi`
 

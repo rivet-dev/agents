@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { fauxAssistantMessage, Type } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import {
 	createRegistry,
 	defineExtension,
 	defineTool,
+	type Report,
 	section,
 } from "@earendil-works/pi-durable";
+import { obj } from "@earendil-works/pi-schema";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { beforeAll, describe, expect, test, vi } from "vitest";
@@ -20,6 +22,8 @@ import {
 /** Answers by actor key, recorded in this process where the actors run. */
 const answers = new Map<string, PiAnswer[]>();
 const failFor = new Set<string>();
+/** What `onReport` received, in this process where the actors run. */
+const reports: Report[] = [];
 
 let mockModel: MockModel;
 let registry: ReturnType<typeof buildRegistry>;
@@ -27,7 +31,7 @@ let registry: ReturnType<typeof buildRegistry>;
 const lookup = defineTool({
 	name: "lookup",
 	description: "Looks something up.",
-	parameters: Type.Object({}),
+	parameters: obj({}),
 	replay: "safe",
 	execute: async () => ({ output: [{ type: "text", text: "found it" }] }),
 });
@@ -45,7 +49,12 @@ function buildRegistry(mock: MockModel) {
 	};
 	const tools = createRegistry();
 	tools.install(defineExtension({ name: "tools", tools: [lookup] }));
-	const agent = pi({ ...models, registry: tools, onAnswer });
+	const agent = pi({
+		...models,
+		registry: tools,
+		onAnswer,
+		onReport: (report) => void reports.push(report),
+	});
 	// An app default selection that leaves the answer extension out by name.
 	const selected = createRegistry();
 	const app = defineExtension({
@@ -100,12 +109,18 @@ describe("onAnswer", () => {
 		);
 	});
 
-	test("a failed delivery leaves the run answered", async (c) => {
+	test("a failed delivery leaves the run answered and reaches onReport", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = randomUUID();
 		failFor.add(key);
 		const result = await client.agent.getOrCreate([key]).prompt("hello");
 		expect(result).toMatchObject({ status: "done", text: "hi there" });
+		expect(reports).toContainEqual(
+			expect.objectContaining({
+				kind: "extension_error",
+				error: expect.objectContaining({ message: "delivery failed" }),
+			}),
+		);
 	});
 });
 

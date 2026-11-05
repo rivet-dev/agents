@@ -32,11 +32,11 @@ The chat UI uses the `@rivetkit/react` package. The agent logic lives in one hoo
 <CodeSnippet file="examples/docs/react-sdk/useAgentChat.ts" title="useAgentChat.ts" />
 </CodeGroup>
 
-- The `useActor` hook connects to the agent by name and key. Once the connection opens, the hook calls `conversation.watchEvents` on the root conversation. The returned snapshot has the history and any answer in progress, and from then on the connection receives `pi.events`.
-- The `message_update` event streams the reply as text deltas, and `message_end` adds each finished message, including your own prompt. See [Session Lifecycle](/agents/docs/session-lifecycle#events) for every event.
-- Each batch has a `seq` number. If one is missing, the hook watches again and starts from a new snapshot.
+- The `useActor` hook connects to the agent by name and key. Once the connection opens, the hook calls `conversation.watch` on the root conversation. The returned view has the newest messages and any answer in progress, and from then on the connection receives `pi.view` frames.
+- Each frame has Chord operations. The hook applies them with `applyImmutable` from `@earendil-works/chord`, and reads the messages, the partial answer, and the running tool from the view. See [Session Lifecycle](/agents/docs/session-lifecycle#watch-a-conversation) for what the view holds.
+- Each frame has a `seq` number. If one is missing, the hook watches again and starts from a new view.
 - The `send` function calls `conversation.submit`, which starts a run without waiting for it. A message sent during a run waits as a follow-up.
-- The `run_start` and `run_end` events mark when the agent works. The `Chat` component switches its button from Send to Stop while it does, and Stop calls `conversation.abort`.
+- The view's `pi.live` document has a `run` while the agent works. The `Chat` component switches its button from Send to Stop while it does, and Stop calls `conversation.abort`.
 
 ## Next steps
 

@@ -316,9 +316,10 @@ async function openHarness(
 	const { registry, settings } = options.onAnswer
 		? withAnswerHook(options, c, options.onAnswer, (error) => {
 				c.log.error({ msg: "pi onAnswer failed", error: String(error) });
-				options.onReport?.(error, {
-					type: "extension_error",
+				options.onReport?.({
+					kind: "extension_error",
 					extension: ANSWER_EXTENSION,
+					error,
 				});
 			})
 		: options;
@@ -341,13 +342,13 @@ async function openHarness(
 			conversationCreated: startingAgent(options),
 			now: options.now,
 			onWake: wake.onWake,
-			onReport: (error, info) => {
+			onReport: (report) => {
 				// A failed storage call closes the Session. Background work reports it
 				// here, with no action to catch it.
-				if (info.type === "session_failed") {
+				if (report.kind === "storage_failed") {
 					queueMicrotask(() => void recoverHarness(c, runtime, options));
 				}
-				options.onReport?.(error, info);
+				options.onReport?.(report);
 			},
 		},
 		BACKGROUND_CONTEXT,
@@ -653,7 +654,10 @@ async function drain(
 ): Promise<void> {
 	let changed = () => {};
 	let timedOut = false;
-	const unsubscribe = open.harness.subscribeCommits(() => changed());
+	const commits = open.harness.observeCommits({
+		advance: () => changed(),
+		end: () => {},
+	});
 	// Pi can settle its wake value after the last commit, so its change counts too.
 	const unsubscribeWake = open.onWakeChange(() => changed());
 	runtime.callEnded = () => changed();
@@ -678,7 +682,7 @@ async function drain(
 		});
 	} finally {
 		clearTimeout(timer);
-		unsubscribe();
+		commits.detach();
 		unsubscribeWake();
 		runtime.callEnded = undefined;
 	}

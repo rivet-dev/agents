@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 
@@ -17,7 +17,7 @@ for (const folder of await readdir(root, { withFileTypes: true })) {
 const loadSkill = defineTool({
 	name: "skill",
 	description: "Load a skill's instructions by name.",
-	parameters: Type.Object({ name: Type.String() }),
+	parameters: obj({ name: str() }),
 	// Reading a skill changes nothing, so running it twice is harmless.
 	replay: "safe",
 	execute: async ({ name }) => {

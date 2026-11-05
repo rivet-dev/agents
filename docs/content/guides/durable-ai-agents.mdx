@@ -9,7 +9,7 @@ import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
 
 <Diagram
   id="durable-ai-agents"
-  label="The chat client connects to the chatAgent for its conversation and calls watchEvents. Each message the user types goes straight to the agent with submit, which returns right away. The agent calls the LLM provider and makes tool calls to your API, and saves each step to its SQLite database. The client receives the agent's pi.events stream as it works. The agent sleeps when idle and resumes from SQLite on the next call. The numbers show the order of the calls. There is one agent per conversation."
+  label="The chat client connects to the chatAgent for its conversation and calls conversation.watch. Each message the user types goes straight to the agent with submit, which returns right away. The agent calls the LLM provider and makes tool calls to your API, and saves each step to its SQLite database. The client receives the agent's pi.view frames as it works. The agent sleeps when idle and resumes from SQLite on the next call. The numbers show the order of the calls. There is one agent per conversation."
   stackLabel="One per conversation"
   nodes={[
     { id: "client", x: 20, y: 90, w: 150, title: "Chat client", subtitle: "terminal or browser" },
@@ -18,16 +18,16 @@ import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
     { id: "api", x: 380, y: 250, title: "Your API", subtitle: "flights and bookings" },
   ]}
   edges={[
-    { from: "client", to: "agent", fromOffset: -12, toOffset: -12, label: "`watchEvents`", step: 1 },
+    { from: "client", to: "agent", fromOffset: -12, toOffset: -12, label: "`conversation.watch`", step: 1 },
     { from: "client", to: "agent", fromOffset: 12, toOffset: 12, label: "`submit`", labelAt: [275, 154], step: 2 },
     { from: "agent", to: "llm", label: "model calls", step: 3 },
     { from: "agent", to: "api", label: "tool calls", step: 4 },
-    { from: "agent", to: "client", kind: "reply", fromSide: "top", toSide: "top", via: [[465, 40], [95, 40]], label: "`pi.events` stream", step: 5 },
+    { from: "agent", to: "client", kind: "reply", fromSide: "top", toSide: "top", via: [[465, 40], [95, 40]], label: "`pi.view` frames", step: 5 },
   ]}
   notes={[{ x: 590, y: 274, text: "Saves each step to SQLite." }, { x: 590, y: 292, text: "Sleeps when idle and wakes from SQLite." }]}
 />
 
-A durable agent saves every step of its work as it goes, so a crash, deploy, or restart in the middle of an answer loses nothing. Here a travel assistant keeps its conversation, its plan, and its tool calls in its own SQLite database, and a chat client picks the answer back up after a reload.
+A durable agent saves every step of its work as it goes, so a crash, deploy, or restart in the middle of an answer loses at most about the last second of streamed text. Here a travel assistant keeps its conversation, its plan, and its tool calls in its own SQLite database, and a chat client picks the answer back up after a reload.
 
 What we'll build:
 
@@ -40,7 +40,7 @@ What we'll build:
 <Step title="Install">
 
 ```sh
-npm add @rivet-dev/pi @earendil-works/pi-durable @earendil-works/pi-ai rivetkit
+npm add @rivet-dev/pi @earendil-works/pi-durable @earendil-works/pi-ai @earendil-works/pi-schema @earendil-works/chord rivetkit
 ```
 
 </Step>
@@ -98,14 +98,14 @@ There are no HTTP routes. Clients call the agent's actions directly through Rive
 
 <Step title="Stream the answer">
 
-The client connects to the agent for its conversation, prints each event, and sends each message with `submit`:
+The client connects to the agent for its conversation, prints what changes in its view, and sends each message with `submit`:
 
 <CodeSnippet file="examples/docs/durable-ai-agents/client.ts" title="client.ts" highlight="stream,send" />
 
-- Events go only to a connection that called `conversation.watchEvents`. Each `pi.events` frame carries a batch of events, such as `text_delta` changes while the model writes and `tool_execution_start` when a tool starts. See [Session Lifecycle](/agents/docs/session-lifecycle#events).
-- A short answer can arrive whole in `message_end`, with no `text_delta` before it, so the client prints the rest of the text there.
-- When the agent restarts while the client is connected, it sends a `snapshot` event on the same stream. The client prints the answer in progress from it and keeps streaming.
-- `submit` saves the message and returns without waiting for the answer. The answer arrives as events, so a slow answer never holds a call open.
+- Frames go only to a connection that called `conversation.watch`. Each `pi.view` frame carries Chord operations, and `applyImmutable` applies them to the view. See [Session Lifecycle](/agents/docs/session-lifecycle#watch-a-conversation).
+- The `pi.live` document in the view holds the answer the model is writing and the tools that are running. Once the answer is finished, it is the newest entry, so the client prints whatever text it has not printed yet.
+- When the agent restarts while the client is connected, it sends a frame with a new `value` on the same connection. The client prints the answer in progress from it and keeps streaming.
+- `submit` saves the message and returns without waiting for the answer. The answer arrives in the view, so a slow answer never holds a call open.
 - Each message gets its own `requestId`. If the call is retried with the same id, such as after a network error, it reaches the same submission and the agent doesn't answer twice.
 - A message sent while the agent is still answering waits as a follow-up and runs next.
 
@@ -117,12 +117,12 @@ This client reads your Rivet credentials from the environment, so it can reach a
 
 <Step title="Pick up after a reload">
 
-When the client starts, `watchEvents` returns a snapshot of the conversation before any events arrive:
+When the client starts, `conversation.watch` returns the view of the conversation before any frames arrive:
 
 <CodeSnippet file="examples/docs/durable-ai-agents/client.ts" title="client.ts" region="resume" />
 
-- `snapshot.entries` holds every message so far, so a reload shows the whole conversation without a separate history call.
-- `snapshot.generation.message` is the answer the model is writing right now. The client prints it, sets `printed` to it, and the next `text_delta` continues where it stopped.
+- `view.entries` holds the newest messages, so a reload shows them without a separate history call. Read older ones with `conversation.entries`.
+- The `pi.live` document's `generation.message` is the answer the model is writing right now. The client prints it, and the next frames continue where it stopped.
 - The run never depended on the client. Closing the tab, or the worker restarting, doesn't stop the answer.
 
 </Step>
@@ -145,8 +145,8 @@ npx tsx client.ts trip-1
 Type "Find me a flight from SFO to HND on December 10, then book the cheaper one for Ada Lovelace." The agent saves a plan, searches, and asks you to confirm. Reply `Yes, book it`. Then test a crash:
 
 1. While the agent is writing an answer, kill the worker with `pkill -9 -f server.ts`.
-2. Start it again with `npx tsx server.ts`. The agent wakes from SQLite and carries on with the same run. The model call that was cut off is sent again, and `[resumed]` appears in the client.
-3. Stop the client and run `npx tsx client.ts trip-1` again. It prints the whole conversation, including the booking, which was made once.
+2. Start it again with `npx tsx server.ts`. The agent wakes from SQLite and carries on with the same run. The model call that was cut off is sent again after the retry backoff, and `[resumed]` appears in the client.
+3. Stop the client and run `npx tsx client.ts trip-1` again. It prints the conversation, including the booking, which was made once.
 
 See [Resuming a run](/agents/docs/architecture#resuming-a-run) for what happens to each kind of step.
 
@@ -168,4 +168,4 @@ See [Resuming a run](/agents/docs/architecture#resuming-a-run) for what happens 
 - [Pi](/agents/docs/pi): documents, tasks, and every action the agent has.
 - [Custom Tools](/agents/docs/custom-tools): how tools run and what `replay` does.
 - [Session Lifecycle](/agents/docs/session-lifecycle): every event in the stream.
-- [Client SDK](/agents/docs/client-sdk): connections, snapshots, and browser tokens.
+- [Client SDK](/agents/docs/client-sdk): connections, views, and browser tokens.
