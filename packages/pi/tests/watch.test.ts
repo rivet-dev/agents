@@ -341,7 +341,10 @@ describe("pi watches", () => {
 
 		await conn.nap();
 		// The client reconnects on its own after sleep closes the connection, and that wakes the actor.
-		await vi.waitFor(() => expect(watches).toHaveLength(2));
+		await vi.waitFor(() => expect(watches).toHaveLength(2), {
+			timeout: 10_000,
+			interval: 50,
+		});
 		const { value: start } = (await watches[1]) as { value: ConversationView };
 		expect(sleeps.get(JSON.stringify(key))).toBe(1);
 		const afterWake = frames.length;

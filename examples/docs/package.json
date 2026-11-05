@@ -19,7 +19,7 @@
 		"@rivet-dev/pi": "workspace:*",
 		"@rivet-dev/sandbox-adapter": "workspace:*",
 		"@rivet-dev/workflows": "^1.0.0",
-		"@rivetkit/react": "3.0.1",
+		"@rivetkit/react": "^3.0.0",
 		"@slack/web-api": "^8.2.0",
 		"discord-interactions": "^4.4.0",
 		"e2b": "^2.51.0",
