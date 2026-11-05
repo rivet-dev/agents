@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 
 /** Pre-built Docker image with all agents installed. */
-export const FULL_IMAGE = "rivetdev/sandbox-agent:0.5.5-full";
+export const FULL_IMAGE = "rivetdev/sandbox-agent:0.5.6-full";
 
 export interface DockerSandboxOptions {
   /** Container port used by sandbox-agent inside Docker. */
