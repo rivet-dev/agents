@@ -1,13 +1,13 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, oneOf, opt, str } from "@earendil-works/pi-schema";
 import { defineTool } from "@earendil-works/pi-durable";
 
-// pi-ai's Type builds the schema Pi checks every call against.
+// pi-schema builds the JSON Schema Pi checks every call against.
 export const findPokemon = defineTool({
 	name: "find_pokemon",
 	description: "List the areas where a wild Pokémon appears in Pokémon HeartGold or SoulSilver.",
-	parameters: Type.Object({
-		pokemon: Type.String({ description: "Pokémon name in lowercase, such as sudowoodo." }),
-		version: Type.Optional(Type.Union([Type.Literal("heartgold"), Type.Literal("soulsilver")])),
+	parameters: obj({
+		pokemon: str({ description: "Pokémon name in lowercase, such as sudowoodo." }),
+		version: opt(oneOf(["heartgold", "soulsilver"])),
 	}),
 	replay: "safe",
 	execute: async ({ pokemon, version = "soulsilver" }, _api, context) => {

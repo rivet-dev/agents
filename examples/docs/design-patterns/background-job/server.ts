@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { createRegistry, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { pi } from "@rivet-dev/pi";
@@ -8,7 +8,7 @@ import { setup } from "rivetkit";
 const openPullRequest = defineTool({
 	name: "open_pull_request",
 	description: "Open a pull request from a pushed branch.",
-	parameters: Type.Object({ repo: Type.String(), branch: Type.String(), title: Type.String() }),
+	parameters: obj({ repo: str(), branch: str(), title: str() }),
 	// No replay: if a crash cuts this call off, the model learns it never completed
 	// and can check for an existing pull request before opening another.
 	execute: async ({ repo, branch, title }, _api, context) => {

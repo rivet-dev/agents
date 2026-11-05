@@ -12,7 +12,6 @@ import type {
 	EntryQuery,
 	Harness,
 	JsonObject,
-	SnapshotEvent,
 	Submission,
 	SubmissionDraft,
 	SubmissionId,
@@ -252,12 +251,10 @@ export function createPiActions(options: PiOptions) {
 				run(c, (harness, context) => harness.usage(context)),
 			taskGraph: (c: PiContext) =>
 				run(c, async (harness, context) => {
-					const graph = await harness.taskGraph(context);
-					try {
-						return graph.value;
-					} finally {
-						graph.dispose();
-					}
+					const graph = await harness.watchTaskGraph(context);
+					const { value } = graph;
+					await graph.stop();
+					return value;
 				}),
 			snapshot: (c: PiContext, kind: string, conversationId: ConversationId) =>
 				run(c, async (harness, context) =>
@@ -406,14 +403,6 @@ export function createPiActions(options: PiOptions) {
 				}),
 			unwatch: (c: PiContext, conversationId: ConversationId) =>
 				unwatchFor(c, { kind: "view", conversationId }),
-			/** A snapshot, partial answer included; then `pi.events` batches to this connection. Nothing is replayed. */
-			watchEvents: (c: PiContext, conversationId: ConversationId) =>
-				watchFor<{ snapshot: SnapshotEvent }>(c, {
-					kind: "events",
-					conversationId,
-				}),
-			unwatchEvents: (c: PiContext, conversationId: ConversationId) =>
-				unwatchFor(c, { kind: "events", conversationId }),
 		},
 
 		submission: {

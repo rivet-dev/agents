@@ -42,7 +42,7 @@ Pi has no built-in approval flow, so the check goes in the tool. A tool can refu
 - The first `deploy` call creates an `approval` Actor with a random id for that version. The tool returns `control: { terminate: true }`, which ends the run instead of letting the model try again. The agent can sleep while it waits.
 - The approval id is in the tool result, so the model passes it back on the next call. A made-up id fails, because no `approval` Actor has it.
 - The `consume` action returns whether that version was approved and resets it, so one approval allows one deploy.
-- The `ApprovalDialog` component watches the root conversation and shows the request from the `tool_execution_end` event. Approve calls `approve`, then prompts the agent, which calls `deploy` again.
+- The `ApprovalDialog` component watches the root conversation and shows the request from the `deploy` tool result in its view. Approve calls `approve`, then prompts the agent, which calls `deploy` again.
 - The `deploy` tool leaves `replay` unset, so a deploy cut off by a crash isn't sent twice. See [Custom Tools](/agents/docs/custom-tools#after-a-crash).
 - Protect the `approval` Actor with [authentication](/docs/authentication) so only approvers can call `approve`.
 

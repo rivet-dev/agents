@@ -3,13 +3,11 @@ import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import {
-	fauxAssistantMessage,
-	fauxToolCall,
-	Type,
-} from "@earendil-works/pi-ai";
+import { applyImmutable } from "@earendil-works/chord/delta";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import {
 	type ConversationId,
+	type ConversationView,
 	createRegistry,
 	defineDoc,
 	defineExtension,
@@ -18,11 +16,12 @@ import {
 	ROOT_CONVERSATION_ID,
 } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
+import { obj } from "@earendil-works/pi-schema";
 import type { SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { type PiEventsFrame, pi } from "../src/index.js";
+import { type PiViewFrame, pi } from "../src/index.js";
 import { localSandboxProvider } from "./helpers/local-sandbox.js";
 import {
 	createMockModel,
@@ -123,7 +122,7 @@ function buildRegistry(mock: MockModel, root: string) {
 		defineTool({
 			name: `${name}_tool`,
 			description: `A ${replay} tool that waits`,
-			parameters: Type.Object({}),
+			parameters: obj({}),
 			replay,
 			execute: async (_args, _api, context) => {
 				toolRuns[name] += 1;
@@ -300,7 +299,7 @@ function buildRegistry(mock: MockModel, root: string) {
 				defineTool({
 					name: "lookup",
 					description: "Look up a value",
-					parameters: Type.Object({}),
+					parameters: obj({}),
 					replay: "safe",
 					execute: async () => ({ output: [{ type: "text", text: "42" }] }),
 				}),
@@ -502,16 +501,16 @@ describe("pi actor", () => {
 		expect(result).toMatchObject({ status: "done", text: "Hi there!" });
 	});
 
-	test("a watching connection gets a fresh snapshot when a failed commit reopens the harness, then the next run's batches", async (c) => {
+	test("a watching connection gets a fresh view when a failed commit reopens the harness, then the next run's frames", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const conn = client.agent
 			.getOrCreate(["poison-watch", randomUUID()])
 			.connect();
-		const frames: PiEventsFrame[] = [];
-		// SAFETY: RivetKit types event payloads as unknown on the client, and pi() sends only PiEventsFrame on pi.events.
-		conn.on("pi.events", (frame) => void frames.push(frame as PiEventsFrame));
+		const frames: PiViewFrame[] = [];
+		// SAFETY: RivetKit types event payloads as unknown on the client, and pi() sends only PiViewFrame on pi.view.
+		conn.on("pi.view", (frame) => void frames.push(frame as PiViewFrame));
 		const root = await conn.harness.root();
-		await conn.conversation.watchEvents(root.id);
+		await conn.conversation.watch(root.id);
 		await conn.failCommitsOfPoison();
 
 		await expect(conn.writePoison()).rejects.toThrow();
@@ -520,20 +519,20 @@ describe("pi actor", () => {
 			text: "Hi there!",
 		});
 
-		// The reopened harness reattaches the watch: a seq 0 snapshot, then the run's batches in order.
-		await vi.waitFor(() =>
-			expect(
-				frames.some((frame) =>
-					frame.events.some((event) => event.type === "run_end"),
-				),
-			).toBe(true),
-		);
-		const reattached = frames.findIndex((frame) => frame.seq === 0);
-		expect(frames[reattached]?.events).toEqual([
-			expect.objectContaining({ type: "snapshot" }),
-		]);
-		expect(frames.slice(reattached).map((frame) => frame.seq)).toEqual(
-			frames.slice(reattached).map((_, index) => index),
+		// The reopened harness reattaches the watch: a seq 0 view, then the run's frames in order.
+		const reattached = () => frames.findIndex((frame) => frame.seq === 0);
+		await vi.waitFor(() => {
+			expect(reattached()).toBeGreaterThanOrEqual(0);
+			const view = frames
+				.slice(reattached())
+				.reduce(
+					(held, frame) => frame.value ?? applyImmutable(held, frame.ops ?? []),
+					frames[reattached()]?.value as ConversationView,
+				);
+			expect(JSON.stringify(view.entries)).toContain("Hi there!");
+		});
+		expect(frames.slice(reattached()).map((frame) => frame.seq)).toEqual(
+			frames.slice(reattached()).map((_, index) => index),
 		);
 	});
 

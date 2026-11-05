@@ -102,13 +102,15 @@ After a crash or a cut-off upgrade, the agent reads the saved steps on wake and 
 
 | Stopped while | On wake |
 | --- | --- |
-| The model was answering | The model call is sent again from the start. The partial answer is lost. |
+| The model was answering | The call counts as a failed attempt, and the partial answer is saved as a stopped message. The model call is sent again after the retry backoff. With no retries left, the run ends unanswered. |
 | A tool marked `replay: "safe"` ran | The tool runs again. |
 | Any other tool ran | The tool isn't run again. Its result tells the model the call stopped partway. |
 | A task phase ran | The phase runs again, and earlier phases are kept. |
 | The run was cancelled with `abort` | Nothing resumes. |
 
-Nothing runs while a crashed Actor is down. The run resumes when the Actor starts again. A client that is still connected gets a fresh snapshot on its event stream.
+Streamed output is saved in batches, about once a second. A crash can lose about the last second of a partial answer or of a tool's running output. Finished messages and tool results are saved before the run continues.
+
+Nothing runs while a crashed Actor is down. The run resumes when the Actor starts again. A client that is still connected gets a fresh view of the conversation.
 
 ## Upgrades
 

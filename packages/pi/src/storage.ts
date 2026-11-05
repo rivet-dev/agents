@@ -68,11 +68,11 @@ export const migratePiTables = migrations({
 export type StoredWatch = {
 	connId: string;
 	key: string;
-	spec: WatchSpec;
+	/** `events` watches were saved before 0.5.6. Reattaching deletes them. */
+	spec: WatchSpec | { kind: "events" };
 };
 
 export type WatchSpec =
-	| { kind: "events"; conversationId: ConversationId }
 	| { kind: "view"; conversationId: ConversationId }
 	| { kind: "taskGraph" }
 	| { kind: "doc"; docKind: string; conversationId: ConversationId };
@@ -118,8 +118,8 @@ export async function loadWatches(db: PiDatabase): Promise<StoredWatch[]> {
 	return rows.map((row) => ({
 		connId: row.conn_id,
 		key: row.watch_key,
-		// Only `saveWatch` writes this column, from a `WatchSpec`.
-		spec: JSON.parse(row.spec_json) as WatchSpec,
+		// Only `saveWatch` writes this column, from a `StoredWatch`.
+		spec: JSON.parse(row.spec_json) as StoredWatch["spec"],
 	}));
 }
 

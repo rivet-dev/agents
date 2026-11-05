@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, opt, str } from "@earendil-works/pi-schema";
 import { defineTool } from "@earendil-works/pi-durable";
 import { actor, type Registry } from "rivetkit";
 import { createClient } from "rivetkit/client";
@@ -7,7 +7,7 @@ export const deploy = defineTool({
 	name: "deploy",
 	description:
 		"Deploy a version to production. Every deploy needs a person's approval: call it without approvalId to ask for one.",
-	parameters: Type.Object({ version: Type.String(), approvalId: Type.Optional(Type.String()) }),
+	parameters: obj({ version: str(), approvalId: opt(str()) }),
 	execute: async ({ version, approvalId }, _api, context) => {
 		if (approvalId === undefined) {
 			const id = crypto.randomUUID();

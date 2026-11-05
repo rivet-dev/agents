@@ -6,18 +6,5 @@
 		"noEmit": true
 	},
 	"include": ["**/*.ts", "**/*.tsx"],
-	"exclude": [
-		"node_modules",
-		// These read Pi's `pi.events` payloads on the client. RivetKit 2.3.23 infers
-		// client event payloads as `unknown` (`InferSchemaMap` of `event<T>()`),
-		// so they only type-check once RivetKit fixes that inference. Chat.tsx is
-		// excluded because it imports useAgentChat.ts.
-		"client-sdk/client.ts",
-		"human-in-the-loop/ApprovalDialog.tsx",
-		"pi/stream.ts",
-		"react-sdk/Chat.tsx",
-		"react-sdk/useAgentChat.ts",
-		"sandbox-code-mode/cli.ts",
-		"session-lifecycle/client.ts"
-	]
+	"exclude": ["node_modules"]
 }

@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { num, obj, str } from "@earendil-works/pi-schema";
 import { createRegistry, defineExtension, defineTask, defineTool } from "@earendil-works/pi-durable";
 import { pi } from "@rivet-dev/pi";
 import { setup } from "rivetkit";
@@ -45,7 +45,7 @@ const DeployPreview = defineTask<
 const deployPreview = defineTool({
 	name: "deploy_preview",
 	description: "Deploy a preview of a pull request and post its URL on the pull request.",
-	parameters: Type.Object({ repo: Type.String({ description: "owner/name" }), pr: Type.Number() }),
+	parameters: obj({ repo: str({ description: "owner/name" }), pr: num() }),
 	execute: async (args, api, context) => {
 		// Owned by this tool call, so cancelling the run aborts the task too.
 		const id = await api.createTask(DeployPreview, args, { ownership: { kind: "task", taskId: api.taskId } }, context);
