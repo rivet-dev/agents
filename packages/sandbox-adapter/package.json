@@ -15,6 +15,7 @@
 		"e2b",
 		"daytona",
 		"freestyle",
+		"boxd",
 		"docker",
 		"agent",
 		"ai",
@@ -54,6 +55,10 @@
 			"types": "./dist/freestyle.d.ts",
 			"default": "./dist/freestyle.js"
 		},
+		"./boxd": {
+			"types": "./dist/boxd.d.ts",
+			"default": "./dist/boxd.js"
+		},
 		"./pi": {
 			"types": "./dist/pi/index.d.ts",
 			"default": "./dist/pi/index.js"
@@ -67,6 +72,7 @@
 		"test": "vitest run"
 	},
 	"peerDependencies": {
+		"@boxd-sh/sdk": "^0.3.0",
 		"@daytonaio/sdk": "^0.216.0",
 		"@earendil-works/chord": "~1.5.0",
 		"@earendil-works/pi-durable": "~1.5.0",
@@ -74,6 +80,9 @@
 		"freestyle": "^0.2.16"
 	},
 	"peerDependenciesMeta": {
+		"@boxd-sh/sdk": {
+			"optional": true
+		},
 		"@daytonaio/sdk": {
 			"optional": true
 		},
@@ -91,6 +100,7 @@
 		}
 	},
 	"devDependencies": {
+		"@boxd-sh/sdk": "^0.3.0",
 		"@daytonaio/sdk": "^0.216.0",
 		"@earendil-works/chord": "1.5.0",
 		"@earendil-works/pi-durable": "1.5.0",
