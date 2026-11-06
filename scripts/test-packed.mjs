@@ -96,7 +96,7 @@ if (
 	);
 }
 
-// The e2b, daytona, and freestyle entrypoints need optional peer SDKs, so only check that
+// The e2b, daytona, freestyle, and boxd entrypoints need optional peer SDKs, so only check that
 // they were packed.
 const adapterFiles = await readdir(
 	join(fixture, "node_modules/@rivet-dev/sandbox-adapter/dist"),
@@ -107,6 +107,7 @@ for (const entry of [
 	"e2b.js",
 	"daytona.js",
 	"freestyle.js",
+	"boxd.js",
 ]) {
 	if (!adapterFiles.includes(entry))
 		throw new Error(`packed sandbox adapter is missing dist/${entry}`);

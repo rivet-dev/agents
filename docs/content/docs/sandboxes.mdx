@@ -1,6 +1,6 @@
 ---
 title: "Sandboxes"
-description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, Docker, or a sandbox provider you write."
+description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, boxd, Docker, or a sandbox provider you write."
 ---
 
 An agent doesn't need a sandbox. Without one, its file tools work on files in the Actor's own database. Add a sandbox only when the agent needs a shell.
@@ -83,6 +83,7 @@ agentOS needs no provider account. To use E2B or Daytona instead, see
 | <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer">E2B</a> | `e2b` | Paused | Deleted |
 | <a href="https://daytona.io" target="_blank" rel="noopener noreferrer">Daytona</a> | `@daytonaio/sdk` | Stopped | Deleted |
 | <a href="https://freestyle.sh" target="_blank" rel="noopener noreferrer">Freestyle</a> | `freestyle` | Paused | Deleted |
+| <a href="https://boxd.sh/?ref=rivet" target="_blank" rel="noopener noreferrer">boxd</a> | `@boxd-sh/sdk` | Hibernated | Deleted |
 | <a href="https://docs.docker.com" target="_blank" rel="noopener noreferrer">Docker</a> | None. Uses the `docker` CLI. | Stopped | Removed |
 
 Provider credentials stay on your worker and never enter the sandbox.
@@ -148,6 +149,24 @@ npm add @rivet-dev/sandbox-adapter freestyle
 | `cwd` | Working directory inside the VM. Created when the Actor connects. Defaults to `/workspace`. |
 
 A Freestyle VM has no network access until a `firewall` rule allows it. Commands run as `root` through Python 3, so the image must include it. Every `freestyle/ubuntu*` snapshot does.
+
+### boxd
+
+```sh
+npm add @rivet-dev/sandbox-adapter @boxd-sh/sdk
+```
+
+<CodeSnippet file="examples/docs/sandboxes/boxd.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `create` | Options for boxd's `machines.create`, or a function that receives the Actor context and returns them. Defaults to a machine from the default Ubuntu image in your organization's default size. |
+| `client` | A boxd client. Defaults to `new Boxd()`, which reads `BOXD_API_KEY`. |
+| `cwd` | Working directory inside the machine. Created when the Actor connects. Defaults to `/home/boxd`. |
+
+Each sandbox is a full Linux VM with a persistent disk. Commands run with `/bin/sh` as the `boxd` user, who has passwordless `sudo`. While the Actor sleeps the machine is hibernated: its memory is saved to disk, so files and background processes come back on the next connect. A timeout or an abort ends the command and its child processes. On a timeout, `stdout` and `stderr` hold the output so far.
+
+The machine can reach the internet by default. To limit what it can reach, pass a machine spec with an `egress` allowlist as `create.spec`. See the <a href="https://docs.boxd.sh/?ref=rivet" target="_blank" rel="noopener noreferrer">boxd docs</a>.
 
 ### Docker
 
