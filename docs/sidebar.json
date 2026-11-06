@@ -234,6 +234,15 @@
 					"href": "/guides/run-amp"
 				}
 			]
+		},
+		{
+			"title": "Migrations",
+			"pages": [
+				{
+					"title": "Cloudflare Sandbox",
+					"href": "/guides/migrate-cloudflare-sandbox"
+				}
+			]
 		}
 	]
 }
