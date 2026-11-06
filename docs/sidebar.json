@@ -239,7 +239,7 @@
 			"title": "Migrations",
 			"pages": [
 				{
-					"title": "Cloudflare Sandbox",
+					"title": "From Cloudflare Sandbox",
 					"href": "/guides/migrate-cloudflare-sandbox"
 				}
 			]

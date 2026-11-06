@@ -16,15 +16,17 @@ console.log(result.exitCode, result.stdout);
 // Connect to receive output events while a command runs.
 const conn = sandbox.connect();
 conn.on("output", (event) => {
-	process.stdout.write((event as OutputEvent).text);
+	const { id, text } = event as OutputEvent;
+	process.stdout.write(`[${id}] ${text}`);
 });
 conn.on("exit", (event) => {
-	const { processId, exitCode } = event as ExitEvent;
-	console.log(`\n${processId} exited with ${exitCode}`);
+	const { id, exitCode } = event as ExitEvent;
+	console.log(`\n${id} exited with ${exitCode}`);
 });
 
 await conn.writeFile("app/main.py", 'print("hello from the sandbox")');
-await conn.execStream("python3 app/main.py");
+// Each stream gets its own id, so concurrent commands' output can be told apart.
+await conn.execStream("python3 app/main.py", "run-main");
 
 // Start a server in the background and open it in a browser.
 const processId = await conn.startProcess("python3 -m http.server 8000");

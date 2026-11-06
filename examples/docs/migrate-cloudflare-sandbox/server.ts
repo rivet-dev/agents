@@ -59,13 +59,14 @@ async function storedSandboxId(c: SandboxContext): Promise<string | undefined> {
 // docs:end open
 
 export interface OutputEvent {
-	// Null for `execStream`, or the id `startProcess` returned.
-	processId: string | null;
+	// The id passed to `execStream`, or the id `startProcess` returned.
+	id: string;
 	text: string;
 }
 
 export interface ExitEvent {
-	processId: string;
+	// The id `startProcess` returned.
+	id: string;
 	exitCode: number | null;
 }
 
@@ -99,11 +100,12 @@ export const sandbox = actor({
 	actions: {
 		// docs:start exec
 		// Runs one command and waits for it to end. A non-zero exit code is a normal result.
-		exec: async (c, command: string) => {
+		// Keep `timeoutMs` below the Actor's `actionTimeout`.
+		exec: async (c, command: string, timeoutMs = 60_000) => {
 			const box = await openSandbox(c);
 			return box.exec(command, {
 				cwd: box.cwd,
-				timeoutMs: 60_000,
+				timeoutMs,
 				// Stops the command if the Actor shuts down.
 				signal: c.abortSignal,
 			});
@@ -112,7 +114,8 @@ export const sandbox = actor({
 
 		// docs:start stream
 		// Sends output to connected clients as it arrives, then returns the full result.
-		execStream: async (c, command: string) => {
+		// The caller picks `id`, so it can tell its output apart from other commands'.
+		execStream: async (c, command: string, id: string) => {
 			const box = await openSandbox(c);
 			const decoder = new TextDecoder();
 			return box.exec(command, {
@@ -120,10 +123,7 @@ export const sandbox = actor({
 				timeoutMs: 10 * 60_000,
 				signal: c.abortSignal,
 				onData: (chunk) =>
-					c.broadcast("output", {
-						processId: null,
-						text: decoder.decode(chunk, { stream: true }),
-					}),
+					c.broadcast("output", { id, text: decoder.decode(chunk, { stream: true }) }),
 			});
 		},
 		// docs:end stream
@@ -144,13 +144,13 @@ export const sandbox = actor({
 					signal: AbortSignal.any([controller.signal, c.abortSignal]),
 					onData: (chunk) =>
 						c.broadcast("output", {
-							processId,
+							id: processId,
 							text: decoder.decode(chunk, { stream: true }),
 						}),
 				})
 				.then(
-					(result) => c.broadcast("exit", { processId, exitCode: result.exitCode }),
-					() => c.broadcast("exit", { processId, exitCode: null }),
+					(result) => c.broadcast("exit", { id: processId, exitCode: result.exitCode }),
+					() => c.broadcast("exit", { id: processId, exitCode: null }),
 				)
 				.finally(() => c.vars.processes.delete(processId));
 
@@ -190,7 +190,7 @@ export const sandbox = actor({
 		// environment variables keeps them out of the command string.
 		deleteFile: async (c, path: string) => {
 			const box = await openSandbox(c);
-			const result = await box.exec('rm -rf -- "$TARGET"', {
+			const result = await box.exec('rm -f -- "$TARGET"', {
 				cwd: box.cwd,
 				env: { TARGET: posix.resolve(box.cwd, path) },
 			});
@@ -199,11 +199,14 @@ export const sandbox = actor({
 		// docs:end files
 
 		// docs:start git
-		// Clones a GitHub repository. The token reaches only this one command.
+		// Clones a private GitHub repository. The token goes in a `-c` setting, which
+		// git does not save, so it is not written to the clone's `.git/config`.
 		gitClone: async (c, repo: string, branch: string, dir: string) => {
 			const box = await openSandbox(c);
+			const token = process.env.GITHUB_TOKEN ?? "";
+			const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
 			const result = await box.exec(
-				'git clone --depth 1 --branch "$BRANCH" "https://x-access-token:$GIT_TOKEN@github.com/$REPO.git" "$DIR"',
+				'git -c "http.extraHeader=$AUTH_HEADER" clone --depth 1 --branch "$BRANCH" "https://github.com/$REPO.git" "$DIR"',
 				{
 					cwd: box.cwd,
 					timeoutMs: 5 * 60_000,
@@ -211,7 +214,7 @@ export const sandbox = actor({
 						REPO: repo,
 						BRANCH: branch,
 						DIR: dir,
-						GIT_TOKEN: process.env.GITHUB_TOKEN ?? "",
+						AUTH_HEADER: `Authorization: Basic ${basic}`,
 					},
 				},
 			);
@@ -226,11 +229,15 @@ export const sandbox = actor({
 			const file = posix.join(box.cwd, ".snippets", `${crypto.randomUUID()}.py`);
 			await box.mkdir(posix.dirname(file));
 			await box.writeFile(file, code);
-			return box.exec('python3 "$FILE"', {
-				cwd: box.cwd,
-				timeoutMs: 60_000,
-				env: { FILE: file },
-			});
+			try {
+				return await box.exec('python3 "$FILE"', {
+					cwd: box.cwd,
+					timeoutMs: 60_000,
+					env: { FILE: file },
+				});
+			} finally {
+				await box.exec('rm -f -- "$FILE"', { cwd: box.cwd, env: { FILE: file } });
+			}
 		},
 		// docs:end code
 
