@@ -23,4 +23,4 @@ This repository holds Rivet's agent projects. Project-specific rules live next t
 
 ## Docs Sync
 
-- `.github/workflows/docs-sync.yml` copies `docs/` and `examples/` into `rivet-dev/website`'s `vendor/agents/` on merge to `main` and opens a PR there. Do not edit `vendor/agents/` in the website.
+- After merging changes to `docs/`, `examples/` or `sandbox-agent/docs/` into `main`, publish them to rivet.dev by following `SYNCING_PRODUCT_DOCS.md` in a checkout of `rivet-dev/website`.
