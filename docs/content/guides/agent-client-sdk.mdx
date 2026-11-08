@@ -1,5 +1,5 @@
 ---
-title: "Client SDK"
+title: "Call an Agent from Your Backend"
 description: "Call an agent from your backend, scripts, or any JavaScript runtime, and stream its work."
 ---
 
@@ -51,20 +51,18 @@ The client is the `rivetkit/client` package. It calls actions on the agent and g
 
 Events go only to a connection that asks for them. Call `conversation.watch(id)` on the connection. It returns the conversation's view as `{ value }`, including any answer in progress, and then the connection receives `pi.view` frames as the agent works.
 
-- Each frame after the first value has Chord operations in `ops`. Apply them with `applyImmutable` from `@earendil-works/chord`, which you install with `npm add @earendil-works/chord`.
+- Each frame after the first value has Chord operations in `ops`. Apply them with `applyImmutable` from `@earendil-works/chord/delta`, which you install with `npm add @earendil-works/chord`.
 - The view holds the newest entries of the transcript. Read older ones with `conversation.entries`.
 - The `seq` number goes up by one for each frame. If a number is missing, call `conversation.watch` again to get a new view.
 - To stop listening, call the function that `on` returns, or `conversation.unwatch(id)`.
 
-See [Session Lifecycle](/agents/docs/session-lifecycle#watch-a-conversation) for what the view holds.
+See [Stream a conversation](/agents/docs#stream-a-conversation) for what the view holds.
 
 ## Results and errors
 
-- The `prompt` action resolves when the run ends. The result is `{ status: "done", text }` with the answer, or `{ status: "unanswered", reason }`.
-- A model error doesn't reject. The status is `"unanswered"`, and `reason` explains why.
-- Pass a `requestId` to make retries safe. A second `prompt` with the same `requestId` returns the first one's result and doesn't run the agent again.
-- While a run is in progress, a new prompt waits as a follow-up. Pass `whenBusy: "steer"` to send it into the current run, or `"reject"` to make `prompt` reject with the `ConversationBusy` code.
-- The `prompt` action rejects with an `ActorError` when the action itself fails. For example, the run passes the ten-minute action timeout (`action_timed_out`). A timeout only stops the wait. The run keeps going until it finishes or `conversation.abort(id)` stops it.
+The `prompt` action resolves with `{ status, text }` when the run ends, and its `requestId` and `whenBusy` options decide what a resent prompt or a prompt during a run does. See [Call the agent](/agents/docs#call-the-agent).
+
+- The `prompt` action rejects with an `ActorError` when the action itself fails. For example, the run passes the ten-minute action timeout (`action_timed_out`). A timeout only stops the wait.
 - To start a run without waiting for it, call `conversation.submit(id, { type: "input", content })`. Follow its progress with `conversation.watch`.
 
 ## Browsers
@@ -81,6 +79,6 @@ A browser shouldn't hold your Rivet credentials. Your backend checks who the use
 
 See [JWTs](/docs/jwt) and [Authentication](/docs/authentication).
 
-The same actions work over HTTP. See the curl tab in the [Quickstart](/agents/docs/quickstart).
+The same actions work over HTTP. See the curl tab in the [Quickstart](/agents/docs).
 
 See the [client documentation](/actors/docs/crash-course#client-documentation) in the Actors docs for everything `rivetkit/client` can do.

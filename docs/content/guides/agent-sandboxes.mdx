@@ -1,5 +1,5 @@
 ---
-title: "Sandboxes"
+title: "Give an Agent a Sandbox"
 description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, Docker, or a sandbox provider you write."
 ---
 
@@ -12,15 +12,7 @@ An agent doesn't need a sandbox. Without one, its file tools work on files in th
 
 ## Without a sandbox
 
-Leave out the `sandbox` option. Pi's `read`, `write`, and `edit` tools then work on files stored in the Actor's own SQLite database:
-
-<CodeSnippet file="examples/docs/sandboxes/no-sandbox.ts" title="server.ts" />
-
-- **Nothing to provision.** There is no sandbox to create, pay for, pause, or delete.
-- **Files are durable.** They are saved with the conversation and survive sleep, crashes, and upgrades.
-- **No shell.** `bash` returns an error, so this agent installs only the file tools.
-
-See [Built-in Tools](/agents/docs/built-in-tools) for what each tool does.
+Leave out the `sandbox` option, and Pi's file tools work on files stored in the Actor's own SQLite database, with nothing to provision and no shell. See [Without a sandbox](/agents/docs#without-a-sandbox).
 
 ## With a sandbox
 
@@ -161,7 +153,7 @@ npm add @rivet-dev/sandbox-adapter
 
 | Option | Description |
 | --- | --- |
-| `image` | Image to run. See [Docker image requirements](/agents/docs/sandbox-adapter#docker-image-requirements). Defaults to `ubuntu:24.04`. |
+| `image` | Image to run. See [Docker image requirements](/guides/sandbox-adapter#docker-image-requirements). Defaults to `ubuntu:24.04`. |
 | `cwd` | Working directory inside the container. Created when the Actor connects. Defaults to `/workspace`. |
 | `env` | Environment variables of the container. |
 | `network` | Docker network to join. Set `"none"` for no network access. Defaults to `bridge`. The `host` network is rejected. |
@@ -194,4 +186,4 @@ Any sandbox can back an agent. Implement <a href="https://github.com/rivet-dev/a
 
 The context `c` carries the owning Actor's `actorId` and a `client()` for your registry. The `Sandbox` that `connect` returns has a `cwd` and the operations the tools run: `exec`, `readFile`, `writeFile`, `mkdir`, `stat`, `readdir`, and `exists`. All paths are absolute paths inside the sandbox. See the <a href="https://github.com/rivet-dev/agents/blob/main/packages/sandbox-adapter/src/e2b.ts" target="_blank" rel="noopener noreferrer">E2B provider</a> for a complete example.
 
-**Next:** [Custom Tools](/agents/docs/custom-tools), tools that run in your backend.
+**Next:** [Custom Tools](/guides/agent-custom-tools), tools that run in your backend.

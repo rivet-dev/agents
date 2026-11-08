@@ -4,186 +4,17 @@
 			"title": "General",
 			"pages": [
 				{
-					"title": "Overview",
+					"title": "Pi Durable",
 					"href": "/agents/docs",
-					"icon": "faSquareInfo"
-				},
-				{
-					"title": "Quickstart",
-					"href": "/agents/docs/quickstart",
-					"icon": "faForwardFast"
+					"icon": {
+						"src": "/images/vendors/pi.svg"
+					}
 				},
 				{
 					"title": "Guides",
 					"icon": "faBookOpen",
 					"collapsible": true,
 					"mirror": "guides"
-				}
-			]
-		},
-		{
-			"title": "Agents",
-			"pages": [
-				{
-					"title": "Pi Durable",
-					"href": "/agents/docs/pi",
-					"icon": {
-						"src": "/images/vendors/pi.svg"
-					}
-				}
-			]
-		},
-		{
-			"title": "Core",
-			"pages": [
-				{
-					"title": "Design Patterns",
-					"href": "/agents/docs/design-patterns",
-					"icon": "faDiagramProject"
-				},
-				{
-					"title": "LLM API Keys",
-					"href": "/agents/docs/api-keys",
-					"icon": "faKey"
-				},
-				{
-					"title": "Sandboxes",
-					"href": "/agents/docs/sandboxes",
-					"icon": "faHardDrive"
-				},
-				{
-					"title": "Custom Tools",
-					"href": "/agents/docs/custom-tools",
-					"icon": "faWrench"
-				},
-				{
-					"title": "Session Lifecycle",
-					"href": "/agents/docs/session-lifecycle",
-					"icon": "faArrowsRotate"
-				}
-			]
-		},
-		{
-			"title": "Concepts",
-			"pages": [
-				{
-					"title": "Agent",
-					"collapsible": true,
-					"icon": "faRobot",
-					"pages": [
-						{
-							"title": "System Prompt",
-							"href": "/agents/docs/system-prompt"
-						},
-						{
-							"title": "Skills",
-							"href": "/agents/docs/skills"
-						},
-						{
-							"title": "Extensions",
-							"href": "/agents/docs/extensions"
-						},
-						{
-							"title": "User Subscriptions",
-							"href": "/agents/docs/user-subscriptions"
-						},
-						{
-							"title": "Observability",
-							"href": "/agents/docs/observability"
-						},
-						{
-							"title": "Architecture",
-							"href": "/agents/docs/architecture"
-						},
-						{
-							"title": "Security Model",
-							"href": "/agents/docs/security-model"
-						}
-					]
-				},
-				{
-					"title": "Tools",
-					"collapsible": true,
-					"icon": "faToolbox",
-					"pages": [
-						{
-							"title": "Built-in Tools",
-							"href": "/agents/docs/built-in-tools"
-						},
-						{
-							"title": "Agent-to-Agent Messages",
-							"href": "/agents/docs/agent-to-agent"
-						},
-						{
-							"title": "Scoped Access with JWTs",
-							"href": "/agents/docs/scoped-access"
-						},
-						{
-							"title": "Human in the Loop",
-							"href": "/agents/docs/human-in-the-loop"
-						}
-					]
-				},
-				{
-					"title": "Orchestrate",
-					"collapsible": true,
-					"icon": "faCircleNodes",
-					"pages": [
-						{
-							"title": "Subagents",
-							"href": "/agents/docs/subagents"
-						},
-						{
-							"title": "Workflows",
-							"href": "/agents/docs/workflows"
-						},
-						{
-							"title": "Schedules",
-							"href": "/agents/docs/schedules"
-						},
-						{
-							"title": "Sandbox Adapter",
-							"href": "/agents/docs/sandbox-adapter"
-						}
-					]
-				},
-				{
-					"title": "Clients",
-					"collapsible": true,
-					"icon": "faLaptopCode",
-					"pages": [
-						{
-							"title": "Client SDK",
-							"href": "/agents/docs/client-sdk"
-						},
-						{
-							"title": "React SDK",
-							"href": "/agents/docs/react-sdk"
-						}
-					]
-				},
-				{
-					"title": "Connectors",
-					"collapsible": true,
-					"icon": "faPlug",
-					"pages": [
-						{
-							"title": "Slack",
-							"href": "/agents/docs/connectors/slack"
-						},
-						{
-							"title": "Linear",
-							"href": "/agents/docs/connectors/linear"
-						},
-						{
-							"title": "GitHub",
-							"href": "/agents/docs/connectors/github"
-						},
-						{
-							"title": "Discord",
-							"href": "/agents/docs/connectors/discord"
-						}
-					]
 				}
 			]
 		}
@@ -211,6 +42,14 @@
 				{
 					"title": "Code Mode in the Sandbox",
 					"href": "/guides/sandbox-code-mode"
+				},
+				{
+					"title": "Agent Design Patterns",
+					"href": "/guides/agent-design-patterns"
+				},
+				{
+					"title": "Trace Agent Runs with OpenTelemetry",
+					"href": "/guides/agent-observability"
 				}
 			]
 		},
@@ -232,6 +71,106 @@
 				{
 					"title": "Amp",
 					"href": "/guides/run-amp"
+				},
+				{
+					"title": "Give an Agent a Sandbox",
+					"href": "/guides/agent-sandboxes"
+				},
+				{
+					"title": "Use a Sandbox from Any Actor",
+					"href": "/guides/sandbox-adapter"
+				}
+			]
+		},
+		{
+			"title": "Agent Tools",
+			"pages": [
+				{
+					"title": "Give an Agent Your Own Tools",
+					"href": "/guides/agent-custom-tools"
+				},
+				{
+					"title": "Give an Agent File and Shell Tools",
+					"href": "/guides/agent-built-in-tools"
+				},
+				{
+					"title": "Bundle Tools and Hooks into Extensions",
+					"href": "/guides/pi-extensions"
+				},
+				{
+					"title": "Build an Agent's System Prompt",
+					"href": "/guides/agent-system-prompt"
+				},
+				{
+					"title": "Give an Agent Skills",
+					"href": "/guides/agent-skills"
+				},
+				{
+					"title": "Human in the Loop",
+					"href": "/guides/agent-human-in-the-loop"
+				},
+				{
+					"title": "Scoped Access with JWTs",
+					"href": "/guides/scoped-access"
+				}
+			]
+		},
+		{
+			"title": "Agent Coordination",
+			"pages": [
+				{
+					"title": "Hand a Task to a Subagent",
+					"href": "/guides/subagents"
+				},
+				{
+					"title": "Agent-to-Agent Messages",
+					"href": "/guides/agent-to-agent"
+				},
+				{
+					"title": "Run an Agent as a Workflow Step",
+					"href": "/guides/agent-workflows"
+				},
+				{
+					"title": "Run an Agent on a Schedule",
+					"href": "/guides/agent-schedules"
+				}
+			]
+		},
+		{
+			"title": "Agent Clients",
+			"pages": [
+				{
+					"title": "Call an Agent from Your Backend",
+					"href": "/guides/agent-client-sdk"
+				},
+				{
+					"title": "Build a Chat UI with React",
+					"href": "/guides/agent-react-sdk"
+				},
+				{
+					"title": "Run Agents on Your Users' Subscriptions",
+					"href": "/guides/user-subscriptions"
+				}
+			]
+		},
+		{
+			"title": "Connectors",
+			"pages": [
+				{
+					"title": "Connect an Agent to Slack",
+					"href": "/guides/connect-slack"
+				},
+				{
+					"title": "Connect an Agent to Linear",
+					"href": "/guides/connect-linear"
+				},
+				{
+					"title": "Connect an Agent to GitHub",
+					"href": "/guides/connect-github"
+				},
+				{
+					"title": "Connect an Agent to Discord",
+					"href": "/guides/connect-discord"
 				}
 			]
 		}

@@ -8,7 +8,7 @@
 		"url": "https://github.com/rivet-dev/agents.git",
 		"directory": "packages/pi"
 	},
-	"homepage": "https://rivet.dev/agents/docs/pi",
+	"homepage": "https://rivet.dev/agents/docs",
 	"bugs": "https://github.com/rivet-dev/agents/issues",
 	"keywords": [
 		"pi",

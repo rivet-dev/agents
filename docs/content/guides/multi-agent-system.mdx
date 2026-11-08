@@ -53,7 +53,7 @@ Each subtask gets its own `researcher`, with its own tools and a fresh conversat
 <CodeSnippet file="examples/docs/multi-agent-system/researcher.ts" title="researcher.ts" />
 
 - The researcher only sees the question it's given, not the orchestrator's conversation, so its context stays small and on topic.
-- `fetch_page` reads a web page. Give a specialist only the tools its job needs. See [Custom Tools](/agents/docs/custom-tools).
+- `fetch_page` reads a web page. Give a specialist only the tools its job needs. See [Custom Tools](/guides/agent-custom-tools).
 - It runs on a smaller, cheaper model than the orchestrator, because each subtask is narrow.
 
 </Step>
@@ -93,7 +93,7 @@ The reviewer takes the report as a message and returns before reviewing it:
 
 <CodeSnippet file="examples/docs/multi-agent-system/reviewer.ts" title="reviewer.ts" highlight="review" />
 
-- `requestReview` submits the report to the reviewer's conversation and returns, so the orchestrator never waits for the review. The request is saved before the action returns. See [Agent-to-Agent Messages](/agents/docs/agent-to-agent).
+- `requestReview` submits the report to the reviewer's conversation and returns, so the orchestrator never waits for the review. The request is saved before the action returns. See [Agent-to-Agent Messages](/guides/agent-to-agent).
 - The reviewer runs on a different model family than the orchestrator, so it doesn't share the same blind spots.
 - Its `onAnswer` saves the review in the reviewer's state, and `getReview` returns it to your app.
 
@@ -134,7 +134,7 @@ Nothing extra is needed. Each agent is its own Rivet Actor that saves every step
 - A researcher that already answered returns its saved answer for the same `requestId` without running again.
 - A researcher that was still working kept going in its own Actor, or resumed from its last saved step if it crashed too. The rerun waits for that run instead of asking again.
 
-See [Resuming a run](/agents/docs/architecture#resuming-a-run) for what happens to each kind of step.
+See [Resuming a run](/agents/docs#resuming-a-run) for what happens to each kind of step.
 
 </Step>
 
@@ -165,15 +165,15 @@ To test recovery, kill the server with `kill -9` while the researchers are worki
 ## Next steps
 
 - [Durable AI Agents](/guides/durable-ai-agents): stream each agent's work to a client as it happens.
-- [Sandboxes](/agents/docs/sandboxes): give a specialist a computer to run code and browse.
-- [Workflows](/agents/docs/workflows): run agents as fixed steps with retries and waits.
-- [Human in the Loop](/agents/docs/human-in-the-loop): ask a person before a report goes out.
-- [Observability](/agents/docs/observability): trace each agent's runs.
+- [Sandboxes](/guides/agent-sandboxes): give a specialist a computer to run code and browse.
+- [Workflows](/guides/agent-workflows): run agents as fixed steps with retries and waits.
+- [Human in the Loop](/guides/agent-human-in-the-loop): ask a person before a report goes out.
+- [Observability](/guides/agent-observability): trace each agent's runs.
 
 ## Related docs
 
-- [Subagents](/agents/docs/subagents): one lead agent that waits for one specialist.
-- [Agent-to-Agent Messages](/agents/docs/agent-to-agent): hand work to another agent without waiting.
-- [Design Patterns](/agents/docs/design-patterns): how to key agents per job, user, or task.
-- [Pi](/agents/docs/pi): `onAnswer`, `c.pi`, and every action an agent has.
-- [Architecture](/agents/docs/architecture): what survives sleep, crashes, and upgrades.
+- [Subagents](/guides/subagents): one lead agent that waits for one specialist.
+- [Agent-to-Agent Messages](/guides/agent-to-agent): hand work to another agent without waiting.
+- [Design Patterns](/guides/agent-design-patterns): how to key agents per job, user, or task.
+- [Pi](/agents/docs): `onAnswer`, `c.pi`, and every action an agent has.
+- [Architecture](/agents/docs#architecture): what survives sleep, crashes, and upgrades.

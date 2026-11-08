@@ -1,5 +1,5 @@
 ---
-title: "Slack"
+title: "Connect an Agent to Slack"
 description: "Talk to an agent by mentioning it in a Slack channel or thread."
 ---
 
@@ -84,7 +84,7 @@ Under **Event Subscriptions**, set the request URL to `https://<your-worker>/sla
 | --- | --- |
 | `SLACK_SIGNING_SECRET` | **Required.** Verifies that requests come from Slack. |
 | `SLACK_BOT_TOKEN` | **Required.** Posts replies with the Slack Web API. |
-| `ANTHROPIC_API_KEY` | **Required.** The agent's model key. For another provider, change `model` and set its key instead, such as `OPENAI_API_KEY` or `OPENROUTER_API_KEY`. See [LLM API Keys](/agents/docs/api-keys). |
+| `ANTHROPIC_API_KEY` | **Required.** The agent's model key. For another provider, change `model` and set its key instead, such as `OPENAI_API_KEY` or `OPENROUTER_API_KEY`. See [Model access](/agents/docs#model-access). |
 
 ## Supported events
 

@@ -52,7 +52,7 @@ Each conversation gets its own `chatAgent`, keyed by the conversation id:
 <CodeSnippet file="examples/docs/durable-ai-agents/chat-agent.ts" title="chat-agent.ts" highlight="agent" />
 
 - There's no step that creates an agent. The client calls `chatAgent.getOrCreate([conversationId])`, so the first message creates the agent and every later message reaches the same one.
-- The agent is a Rivet Actor that runs [Pi](/agents/docs/pi). Pi saves each model call and tool call to the Actor's SQLite database before the next one starts, so there is no separate workflow engine, queue, or database to run.
+- The agent is a Rivet Actor that runs [Pi](/agents/docs). Pi saves each model call and tool call to the Actor's SQLite database before the next one starts, so there is no separate workflow engine, queue, or database to run.
 - An idle agent sleeps and uses no memory. The next message wakes it with its whole conversation.
 
 </Step>
@@ -81,7 +81,7 @@ If the worker crashes while a tool runs, the agent decides on restart whether to
 - The mocks at the bottom of the file stand in for your API. Replace them with your own calls.
 
 <Note>
-For work with several steps that must each finish once, such as charging a card and then sending a receipt, launch a [task](/agents/docs/pi#tools-and-tasks) from the tool. A task saves a checkpoint after each step and resumes from the last one.
+For work with several steps that must each finish once, such as charging a card and then sending a receipt, launch a [task](/agents/docs#tools-and-tasks) from the tool. A task saves a checkpoint after each step and resumes from the last one.
 </Note>
 
 </Step>
@@ -102,7 +102,7 @@ The client connects to the agent for its conversation, prints what changes in it
 
 <CodeSnippet file="examples/docs/durable-ai-agents/client.ts" title="client.ts" highlight="stream,send" />
 
-- Frames go only to a connection that called `conversation.watch`. Each `pi.view` frame carries Chord operations, and `applyImmutable` applies them to the view. See [Session Lifecycle](/agents/docs/session-lifecycle#watch-a-conversation).
+- Frames go only to a connection that called `conversation.watch`. Each `pi.view` frame carries Chord operations, and `applyImmutable` applies them to the view. See [Stream a conversation](/agents/docs#stream-a-conversation).
 - The `pi.live` document in the view holds the answer the model is writing and the tools that are running. Once the answer is finished, it is the newest entry, so the client prints whatever text it has not printed yet.
 - When the agent restarts while the client is connected, it sends a frame with a new `value` on the same connection. The client prints the answer in progress from it and keeps streaming.
 - `submit` saves the message and returns without waiting for the answer. The answer arrives in the view, so a slow answer never holds a call open.
@@ -110,7 +110,7 @@ The client connects to the agent for its conversation, prints what changes in it
 - A message sent while the agent is still answering waits as a follow-up and runs next.
 
 <Warning>
-This client reads your Rivet credentials from the environment, so it can reach any conversation. A browser should connect with a short-lived token that your backend issues for that user's own agent. See [Client SDK](/agents/docs/client-sdk#browsers).
+This client reads your Rivet credentials from the environment, so it can reach any conversation. A browser should connect with a short-lived token that your backend issues for that user's own agent. See [Client SDK](/guides/agent-client-sdk#browsers).
 </Warning>
 
 </Step>
@@ -148,7 +148,7 @@ Type "Find me a flight from SFO to HND on December 10, then book the cheaper one
 2. Start it again with `npx tsx server.ts`. The agent wakes from SQLite and carries on with the same run. The model call that was cut off is sent again after the retry backoff, and `[resumed]` appears in the client.
 3. Stop the client and run `npx tsx client.ts trip-1` again. It prints the conversation, including the booking, which was made once.
 
-See [Resuming a run](/agents/docs/architecture#resuming-a-run) for what happens to each kind of step.
+See [Resuming a run](/agents/docs#resuming-a-run) for what happens to each kind of step.
 
 </Step>
 
@@ -157,15 +157,15 @@ See [Resuming a run](/agents/docs/architecture#resuming-a-run) for what happens 
 ## Next steps
 
 - [Multi-Agent Systems](/guides/multi-agent-system): split a job across specialist agents that each survive restarts.
-- [Human in the Loop](/agents/docs/human-in-the-loop): wait for a person to approve the booking.
-- [Schedules](/agents/docs/schedules): check the flight's status every morning without being asked.
-- [Sandboxes](/agents/docs/sandboxes): give the agent a computer to run code and browse.
-- [React SDK](/agents/docs/react-sdk): build the chat client in React.
+- [Human in the Loop](/guides/agent-human-in-the-loop): wait for a person to approve the booking.
+- [Schedules](/guides/agent-schedules): check the flight's status every morning without being asked.
+- [Sandboxes](/guides/agent-sandboxes): give the agent a computer to run code and browse.
+- [React SDK](/guides/agent-react-sdk): build the chat client in React.
 
 ## Related docs
 
-- [Architecture](/agents/docs/architecture): what survives sleep, crashes, and upgrades.
-- [Pi](/agents/docs/pi): documents, tasks, and every action the agent has.
-- [Custom Tools](/agents/docs/custom-tools): how tools run and what `replay` does.
-- [Session Lifecycle](/agents/docs/session-lifecycle): every event in the stream.
-- [Client SDK](/agents/docs/client-sdk): connections, views, and browser tokens.
+- [Architecture](/agents/docs#architecture): what survives sleep, crashes, and upgrades.
+- [Pi](/agents/docs): documents, tasks, and every action the agent has.
+- [Custom Tools](/guides/agent-custom-tools): how tools run and what `replay` does.
+- [Stream a conversation](/agents/docs#stream-a-conversation): every event in the stream.
+- [Client SDK](/guides/agent-client-sdk): connections, views, and browser tokens.

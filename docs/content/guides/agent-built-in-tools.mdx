@@ -1,5 +1,5 @@
 ---
-title: "Built-in Tools"
+title: "Give an Agent File and Shell Tools"
 description: "Pi's file and shell tools, where they run with and without a sandbox, and how to choose them."
 ---
 
@@ -14,12 +14,7 @@ Built-in tools are Pi's own file and shell tools. The `CodingTools` extension fr
 
 ## Where they run
 
-The `sandbox` option decides where the tools run. They never touch your worker's file system or shell.
-
-| Tool | Without a sandbox | With a sandbox |
-| --- | --- | --- |
-| `read`, `write`, `edit` | Files in the Actor's own SQLite database. | Files in the sandbox. |
-| `bash` | Returns an error. There is no shell. | Runs in the sandbox. |
+The `sandbox` option decides where the tools run. They never touch your worker's file system or shell. With a sandbox, all four tools run there. Without one, the file tools work on files in the Actor's own SQLite database and `bash` returns an error. See [Without a sandbox](/agents/docs#without-a-sandbox).
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 640 220" role="img" aria-label="Without a sandbox, the agent Actor's read, write, and edit tools work on files in the Actor's SQLite database. With a sandbox, read, write, edit, and bash run in the sandbox." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -52,7 +47,7 @@ Without a sandbox, there is nothing to set up. The files are saved with the conv
 <CodeSnippet file="examples/docs/built-in-tools/client.ts" title="client.ts" />
 </CodeGroup>
 
-The second prompt edits the file that the first prompt wrote. To run commands, give the agent a [sandbox](/agents/docs/sandboxes).
+The second prompt edits the file that the first prompt wrote. To run commands, give the agent a [sandbox](/guides/agent-sandboxes).
 
 ## Choose tools
 
@@ -66,4 +61,4 @@ Each tool also has its own factory: `createReadTool`, `createWriteTool`, `create
 - The `bash` tool accepts a timeout, and long output is truncated before it reaches the model.
 - Images aren't supported yet. The `read` tool returns an error for an image file.
 
-To give an agent your own tools, see [Custom Tools](/agents/docs/custom-tools).
+To give an agent your own tools, see [Custom Tools](/guides/agent-custom-tools).

@@ -16,11 +16,17 @@ follow different rules. Nothing in this file applies to them.
 docs/
   sidebar.json
   content/
-    docs/**.mdx         -> /agents/docs/...
+    docs/index.mdx      -> /agents/docs      (the one Pi Durable page)
     guides/*.mdx        -> /guides/...      (merged with other products' guides)
 examples/
   docs/<topic>/*.ts     snippets embedded with <CodeSnippet>
 ```
+
+The website lists Pi Durable as an ecosystem integration on its Ecosystem tab,
+so `content/docs/` holds exactly one page: `index.mdx`, which carries the
+quickstart and everything about `@rivet-dev/pi`. Every other page in this
+bundle is a guide. Do not add a second page under `content/docs/`; write a
+guide instead.
 
 The website links `content/` into its content collection, so **only real pages
 belong under `content/`**. Anything else (scripts, fixtures, notes) goes

@@ -1,5 +1,5 @@
 ---
-title: "Extensions"
+title: "Bundle Tools and Hooks into Extensions"
 description: "Bundle tools, prompt sections, hooks, and tasks into named extensions, and choose which ones each conversation uses."
 ---
 
@@ -41,11 +41,11 @@ An extension is a named bundle of what an agent runs with: tools, prompt section
 
 | Field | Adds | See |
 | --- | --- | --- |
-| `tools` | Functions the model can call. | [Custom Tools](/agents/docs/custom-tools) |
-| `sections` | Parts of the system prompt. | [System Prompt](/agents/docs/system-prompt) |
+| `tools` | Functions the model can call. | [Custom Tools](/guides/agent-custom-tools) |
+| `sections` | Parts of the system prompt. | [System Prompt](/guides/agent-system-prompt) |
 | `hooks` | Code that runs around model requests, tool calls, and compaction. | [Hooks](#hooks) |
 | `wraps` | Decorators for a tool or section, by name. | [Wrap a tool](#wrap-a-tool) |
-| `tasks` | Multi-step work that resumes after a crash. | [Tools and tasks](/agents/docs/pi#tools-and-tasks) |
+| `tasks` | Multi-step work that resumes after a crash. | [Tools and tasks](/agents/docs#tools-and-tasks) |
 
 By default, every conversation uses every installed extension, in install order. When two selected extensions have a tool with the same name, the later one wins.
 
@@ -65,7 +65,7 @@ A hook runs inside a built-in task, such as a tool call, in every conversation t
 | `onYield` | `GenerationTask` | When the model gives a final answer. | Continue the run with another user message. |
 | `beforeCompact` | `CompactionTask` | Before a compaction summarizes the conversation. | Decline it or supply your own summary. |
 
-Hooks run in the agent Actor on your worker, so they can call your APIs. To enforce a rule in every conversation, keep its extension in the default selection. To approve tool calls one by one, see [Human in the Loop](/agents/docs/human-in-the-loop).
+Hooks run in the agent Actor on your worker, so they can call your APIs. To enforce a rule in every conversation, keep its extension in the default selection. To approve tool calls one by one, see [Human in the Loop](/guides/agent-human-in-the-loop).
 
 ## Wrap a tool
 
@@ -97,6 +97,6 @@ The registry lives in your worker's code, and every agent Actor on that worker s
 - **Keep names stable.** Renaming an extension is the same as removing it.
 - **A removed extension stops applying.** Conversations that select it lose its tools, sections, and hooks, and get them back when a later deploy installs it again.
 - **Tasks wait for their extension.** A task from an extension's `tasks` resumes only once that extension is installed, so keep it installed while its tasks can run.
-- **Running tool calls finish on the old code** while the Actor drains. See [Upgrades and crashes](/agents/docs/pi#upgrades-and-crashes).
+- **Running tool calls finish on the old code** while the Actor drains. See [Upgrades](/agents/docs#upgrades).
 
-**Next:** [User Subscriptions](/agents/docs/user-subscriptions), how users run agents on their own Claude or ChatGPT plan.
+**Next:** [User Subscriptions](/guides/user-subscriptions), how users run agents on their own Claude or ChatGPT plan.

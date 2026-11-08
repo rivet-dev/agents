@@ -1,9 +1,9 @@
 ---
-title: "User Subscriptions"
+title: "Run Agents on Your Users' Subscriptions"
 description: "Let your users run agents on their own Claude or ChatGPT subscription."
 ---
 
-They can also bring their own API key. Your app saves each user's login in a credentials Actor, and the agent reads it before every model call.
+Your users can run agents on their own Claude or ChatGPT subscription, or bring their own API key. Your app saves each user's login in a credentials Actor, and the agent reads it before every model call.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 660 250" role="img" aria-label="Your app saves each user&#x27;s login in their credentials Actor. The agent reads and refreshes the credential there, then calls the model provider with the user&#x27;s own login." style="width:100%;min-width:520px;max-width:660px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -31,7 +31,7 @@ They can also bring their own API key. Your app saves each user's login in a cre
 </svg>
 </div>
 
-Store each user's logins in a `credentials` Actor and pass it to `pi({ credentials })`. The agent checks it after `apiKeys` and before the environment, as described in [LLM API Keys](/agents/docs/api-keys). Your application owns login, storage, and refresh:
+Store each user's logins in a `credentials` Actor and pass it to `pi({ credentials })`. The agent checks it after `apiKeys` and before the environment, as described in [Model access](/agents/docs#model-access). Your application owns login, storage, and refresh:
 
 - The `list` action returns the providers the user has a credential for, without the secrets.
 - The `read` action returns a provider's credential. A subscription login never includes its refresh token.
@@ -49,7 +49,7 @@ Your app needs its own login flow, such as a settings page, that saves the resul
 
 ## Share credentials across a team
 
-The `credentials` option picks a `credentials` Actor from the agent's key. The example uses the first key part as the user id, so each user has their own logins. To share one set of logins and API keys across a team or organization, start agent keys with the tenant id, such as `["acme", "user-123"]`. Each tenant then has one `credentials` Actor, and an agent only reads its own tenant's credentials. See [Credentials Shared per Tenant](/agents/docs/design-patterns#credentials-shared-per-tenant).
+The `credentials` option picks a `credentials` Actor from the agent's key. The example uses the first key part as the user id, so each user has their own logins. To share one set of logins and API keys across a team or organization, start agent keys with the tenant id, such as `["acme", "user-123"]`. Each tenant then has one `credentials` Actor, and an agent only reads its own tenant's credentials. See [Credentials Shared per Tenant](/guides/agent-design-patterns#credentials-shared-per-tenant).
 
 <Warning>
 Protect the `credentials` Actor with [authentication](/docs/authentication), because its actions return provider tokens.

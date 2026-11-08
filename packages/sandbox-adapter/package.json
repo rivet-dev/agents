@@ -8,7 +8,7 @@
 		"url": "https://github.com/rivet-dev/agents.git",
 		"directory": "packages/sandbox-adapter"
 	},
-	"homepage": "https://rivet.dev/agents/docs/sandboxes",
+	"homepage": "https://rivet.dev/guides/agent-sandboxes",
 	"bugs": "https://github.com/rivet-dev/agents/issues",
 	"keywords": [
 		"sandbox",

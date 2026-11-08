@@ -110,7 +110,7 @@ The Actor creates its sandbox on the first prompt and reconnects to it on every 
 - `onSleep` pauses the sandbox while the Actor sleeps. The next prompt resumes it with its files intact. `onDestroy` deletes it.
 
 <Note>
-agentOS can't run Amp, because it only runs software from its own registry, not binaries downloaded with `curl`. Daytona can: pass `daytonaProvider()` from `@rivet-dev/sandbox-adapter/daytona` instead, but Daytona returns a command's output only when it exits, so clients get the events all at once at the end. On Freestyle, the VM's firewall must allow the install script's downloads and the Amp service. See [Providers](/agents/docs/sandboxes#providers).
+agentOS can't run Amp, because it only runs software from its own registry, not binaries downloaded with `curl`. Daytona can: pass `daytonaProvider()` from `@rivet-dev/sandbox-adapter/daytona` instead, but Daytona returns a command's output only when it exits, so clients get the events all at once at the end. On Freestyle, the VM's firewall must allow the install script's downloads and the Amp service. See [Providers](/guides/agent-sandboxes#providers).
 </Note>
 
 </Step>
@@ -157,12 +157,12 @@ The first prompt takes longer because it creates the sandbox and installs Amp. T
 
 - [Claude Code](/guides/run-claude-code), [Codex](/guides/run-codex), and [OpenCode](/guides/run-opencode): the same setup with other coding agents.
 - [Sandbox Agent](/sandbox-agent/docs): drive Amp, Claude Code, Codex, OpenCode, and others through one HTTP API with a shared event format and permission requests, instead of each CLI's own flags.
-- [Pi](/agents/docs/pi): a coding agent that runs inside the Actor, with a durable conversation and tools that run in a sandbox.
+- [Pi](/agents/docs): a coding agent that runs inside the Actor, with a durable conversation and tools that run in a sandbox.
 - [Authentication](/docs/authentication): check that the caller may use a session before it runs a prompt.
 
 ## Related docs
 
-- [Sandboxes](/agents/docs/sandboxes): every provider and what each does while the Actor sleeps.
-- [Sandbox Adapter](/agents/docs/sandbox-adapter): the `create`, `connect`, and `exec` API this guide uses.
+- [Sandboxes](/guides/agent-sandboxes): every provider and what each does while the Actor sleeps.
+- [Sandbox Adapter](/guides/sandbox-adapter): the `create`, `connect`, and `exec` API this guide uses.
 - [Events](/actors/docs/events) and [State](/actors/docs/state): how the Actor broadcasts output and keeps the session.
 - <a href="https://ampcode.com/docs/cli/execute-mode" target="_blank" rel="noopener noreferrer">Amp execute mode</a> and <a href="https://ampcode.com/docs/cli/streaming-json" target="_blank" rel="noopener noreferrer">streaming JSON</a>: the options `amp -x` accepts and the format of every message.

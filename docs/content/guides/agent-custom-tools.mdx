@@ -1,5 +1,5 @@
 ---
-title: "Custom Tools"
+title: "Give an Agent Your Own Tools"
 description: "Give an agent tools that run in your backend, with access to your APIs and secrets."
 ---
 
@@ -41,7 +41,7 @@ npm add @earendil-works/pi-schema
 <CodeSnippet file="examples/docs/custom-tools/server.ts" title="server.ts" />
 </CodeGroup>
 
-Both `defineTool` and `defineExtension` come from `@earendil-works/pi-durable`. A tool is installed through an [extension](/agents/docs/extensions), and by default every conversation uses every installed extension.
+Both `defineTool` and `defineExtension` come from `@earendil-works/pi-durable`. A tool is installed through an [extension](/guides/pi-extensions), and by default every conversation uses every installed extension.
 
 - The model reads the tool's `description` and calls it with arguments that match `parameters`. Pi rejects a call whose arguments don't match.
 - The model reads `content` as the result. Clients get `details` for your UI.
@@ -50,9 +50,9 @@ Both `defineTool` and `defineExtension` come from `@earendil-works/pi-durable`. 
 
 ## After a crash
 
-If the Actor restarts while a tool runs, the agent runs that tool again on wake only if the tool sets `replay: "safe"`. The `get_order` tool only reads, so it sets it. See [Resuming a run](/agents/docs/architecture#resuming-a-run) for every case.
+If the Actor restarts while a tool runs, the agent runs that tool again on wake only if the tool sets `replay: "safe"`. The `get_order` tool only reads, so it sets it. See [Resuming a run](/agents/docs#resuming-a-run) for every case.
 
-Leave `replay` unset for a tool with side effects, such as one that deploys a preview. For work that must finish exactly once, launch a [task](/agents/docs/pi#tools-and-tasks) from the tool.
+Leave `replay` unset for a tool with side effects, such as one that deploys a preview. For work that must finish exactly once, launch a [task](/agents/docs#tools-and-tasks) from the tool.
 
 ## Secrets
 
@@ -65,8 +65,8 @@ The orders API token stays in your backend. The tool reads it from the worker's 
 | The conversation and connected clients | No. They store and receive tool arguments and results. |
 | The sandbox | No. Commands run with the sandbox's own environment. |
 
-Tool results and error messages are stored in the conversation and sent to every watching client, so keep secrets out of both. For model keys, see [LLM API Keys](/agents/docs/api-keys).
+Tool results and error messages are stored in the conversation and sent to every watching client, so keep secrets out of both. For model keys, see [Model access](/agents/docs#model-access).
 
-Custom tools need no sandbox. To also give the model file and shell tools, see [Built-in Tools](/agents/docs/built-in-tools).
+Custom tools need no sandbox. To also give the model file and shell tools, see [Built-in Tools](/guides/agent-built-in-tools).
 
-**Next:** [Session Lifecycle](/agents/docs/session-lifecycle), what happens while the agent answers a prompt.
+**Next:** [Call the agent](/agents/docs#call-the-agent), what happens while the agent answers a prompt.

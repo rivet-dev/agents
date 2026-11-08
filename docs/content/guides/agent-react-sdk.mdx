@@ -1,5 +1,5 @@
 ---
-title: "React SDK"
+title: "Build a Chat UI with React"
 description: "Build a chat UI for an agent with React."
 ---
 
@@ -33,14 +33,14 @@ The chat UI uses the `@rivetkit/react` package. The agent logic lives in one hoo
 </CodeGroup>
 
 - The `useActor` hook connects to the agent by name and key. Once the connection opens, the hook calls `conversation.watch` on the root conversation. The returned view has the newest messages and any answer in progress, and from then on the connection receives `pi.view` frames.
-- Each frame has Chord operations. The hook applies them with `applyImmutable` from `@earendil-works/chord`, and reads the messages, the partial answer, and the running tool from the view. See [Session Lifecycle](/agents/docs/session-lifecycle#watch-a-conversation) for what the view holds.
+- Each frame has Chord operations. The hook applies them with `applyImmutable` from `@earendil-works/chord/delta`, and reads the messages, the partial answer, and the running tool from the view. See [Stream a conversation](/agents/docs#stream-a-conversation) for what the view holds.
 - Each frame has a `seq` number. If one is missing, the hook watches again and starts from a new view.
 - The `send` function calls `conversation.submit`, which starts a run without waiting for it. A message sent during a run waits as a follow-up.
 - The view's `pi.live` document has a `run` while the agent works. The `Chat` component switches its button from Send to Stop while it does, and Stop calls `conversation.abort`.
 
 ## Next steps
 
-- To steer a run in progress, see [Session Lifecycle](/agents/docs/session-lifecycle). To handle errors, see [Client SDK](/agents/docs/client-sdk#results-and-errors).
+- To steer a run in progress, see [Call the agent](/agents/docs#call-the-agent). To handle errors, see [Client SDK](/guides/agent-client-sdk#results-and-errors).
 - To send a login token, add `params` to `useActor`.
 - To switch models from the UI, call `conversation.configure(id, { model: { provider, modelId } })` on the connection with one of the agent's `scopedModels`.
 

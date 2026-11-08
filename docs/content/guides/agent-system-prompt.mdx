@@ -1,5 +1,5 @@
 ---
-title: "System Prompt"
+title: "Build an Agent's System Prompt"
 description: "Build an agent's system prompt from sections, load AGENTS.md from the workspace, and add instructions to one conversation or context to one prompt."
 ---
 
@@ -51,14 +51,14 @@ Run `npm test` before proposing a fix. Never edit files in `migrations/`.
 ```
 
 - **Sections render before every model call.** A section can return text that changes, such as the current date, a file, or a value from your database.
-- **Order follows the conversation's extensions,** which is install order by default. See [Extensions](/agents/docs/extensions).
+- **Order follows the conversation's extensions,** which is install order by default. See [Extensions](/guides/pi-extensions).
 - **Return `undefined` to leave a section out.** Pass `{ tag: false }` as the third argument of `section()` to send the text without the tags.
 - **A section that throws keeps its previous text.** The model keeps what it already had, and the error is reported.
-- **`wrapSection`** changes a section from another extension by its key. See [Wrap a tool](/agents/docs/extensions#wrap-a-tool).
+- **`wrapSection`** changes a section from another extension by its key. See [Wrap a tool](/guides/pi-extensions#wrap-a-tool).
 
 ## AGENTS.md
 
-Pi doesn't read `AGENTS.md` on its own. Load it with a section, as `agents_md` does above. The section gets the conversation's workspace as `input.env`, the same files Pi's `read` tool sees: the [sandbox](/agents/docs/sandboxes), or the files in the Actor's database when there is no sandbox. An edit to `AGENTS.md` reaches the model on its next call.
+Pi doesn't read `AGENTS.md` on its own. Load it with a section, as `agents_md` does above. The section gets the conversation's workspace as `input.env`, the same files Pi's `read` tool sees: the [sandbox](/guides/agent-sandboxes), or the files in the Actor's database when there is no sandbox. An edit to `AGENTS.md` reaches the model on its next call.
 
 With a sandbox, reading the file connects the sandbox on the first model call instead of the first tool call.
 
@@ -76,4 +76,4 @@ Put context for a single turn in the prompt itself. The `prompt` action takes a 
 
 <CodeSnippet file="examples/docs/system-prompt/client.ts" title="client.ts" />
 
-**Next:** [Skills](/agents/docs/skills), how to give an agent instructions it loads only when a task needs them.
+**Next:** [Skills](/guides/agent-skills), how to give an agent instructions it loads only when a task needs them.

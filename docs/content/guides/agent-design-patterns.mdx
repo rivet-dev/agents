@@ -1,5 +1,5 @@
 ---
-title: "Design Patterns"
+title: "Agent Design Patterns"
 description: "Patterns for agent keys, subagents, agent-to-agent messages, workflows, schedules, background jobs, and shared credentials."
 ---
 
@@ -83,9 +83,9 @@ A lead agent hands a focused task to a specialist with its own tools and waits f
 <CodeSnippet file="examples/docs/subagents/client.ts" title="client.ts" />
 </CodeGroup>
 
-The `get_order` tool in `get-order.ts` is the one from [Custom Tools](/agents/docs/custom-tools).
+The `get_order` tool in `get-order.ts` is the one from [Custom Tools](/guides/agent-custom-tools).
 
-See [Subagents](/agents/docs/subagents).
+See [Subagents](/guides/subagents).
 
 ## Agents Messaging Each Other
 
@@ -115,7 +115,7 @@ When an agent hands work off and doesn't need the answer, it sends a message ins
 <CodeSnippet file="examples/docs/agent-to-agent/client.ts" title="client.ts" />
 </CodeGroup>
 
-See [Agent-to-Agent Messages](/agents/docs/agent-to-agent).
+See [Agent-to-Agent Messages](/guides/agent-to-agent).
 
 ## Agent as a Workflow Step
 
@@ -147,7 +147,7 @@ npm add @rivet-dev/workflows
 <CodeSnippet file="examples/docs/workflows/client.ts" title="client.ts" />
 </CodeGroup>
 
-See [Workflows](/agents/docs/workflows).
+See [Workflows](/guides/agent-workflows).
 
 ## Scheduled Agents
 
@@ -176,11 +176,11 @@ An agent can wake itself on a schedule and sleep between runs.
 <CodeSnippet file="examples/docs/schedules/client.ts" title="client.ts" />
 </CodeGroup>
 
-See [Schedules](/agents/docs/schedules).
+See [Schedules](/guides/agent-schedules).
 
 ## Background Agents That Must Finish
 
-When nobody is watching a run, such as an agent started by a webhook, a crash must not lose the work or repeat a side effect. Every model call and tool call of a [`pi()`](/agents/docs/pi) run is saved before the next step starts, so the run continues where it stopped. Pass a `requestId`, so a redelivered webhook returns the first submission instead of starting a second run.
+When nobody is watching a run, such as an agent started by a webhook, a crash must not lose the work or repeat a side effect. Every model call and tool call of a [`pi()`](/agents/docs) run is saved before the next step starts, so the run continues where it stopped. Pass a `requestId`, so a redelivered webhook returns the first submission instead of starting a second run.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 600 130" role="img" aria-label="A GitHub webhook submits the issue to the fixer agent with the delivery id as requestId. The fixer agent opens a pull request, a tool that is never repeated after a crash." style="width:100%;min-width:520px;max-width:600px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -213,7 +213,7 @@ When nobody is watching a run, such as an agent started by a webhook, a crash mu
 - The `open_pull_request` tool has no `replay`, so a call cut off by a crash isn't repeated. The model is told the call was interrupted. Mark only tools that are safe to run twice as `replay: "safe"`.
 - When you ship new code, the Actor lets the run finish, for up to `sleepGracePeriod`, before it restarts on the new version. Anything still running then carries on from its last saved step.
 
-See [Architecture](/agents/docs/architecture#resuming-a-run).
+See [Resuming a run](/agents/docs#resuming-a-run).
 
 ## Credentials Shared per Tenant
 
@@ -248,7 +248,7 @@ Start agent keys with the tenant id, and pick the `credentials` Actor from it. E
 <CodeSnippet file="examples/docs/design-patterns/tenant-credentials/client.ts" title="client.ts" />
 </CodeGroup>
 
-See [User Subscriptions](/agents/docs/user-subscriptions).
+See [User Subscriptions](/guides/user-subscriptions).
 
 ## Anti-Patterns
 
@@ -278,14 +278,14 @@ Webhook providers deliver the same event again when your handler is slow or fail
 
 | Goal | Read |
 | --- | --- |
-| Give agents model access | [LLM API Keys](/agents/docs/api-keys) |
-| Give the agent your own APIs | [Custom Tools](/agents/docs/custom-tools) |
-| Let the agent run commands and edit files | [Sandboxes](/agents/docs/sandboxes), then [Built-in Tools](/agents/docs/built-in-tools) |
-| Run agents on your users' own subscriptions | [User Subscriptions](/agents/docs/user-subscriptions) |
-| Make runs finish after a crash, with no one to retry them | [Architecture](/agents/docs/architecture) |
-| Wait for a person before a risky action | [Human in the Loop](/agents/docs/human-in-the-loop) |
-| Share a result through a link | [Scoped Access with JWTs](/agents/docs/scoped-access) |
-| Talk to users in Slack, Linear, GitHub, or Discord | [Slack](/agents/docs/connectors/slack) and the other connectors |
-| See what happens while an agent answers a prompt | [Session Lifecycle](/agents/docs/session-lifecycle) |
-| Build a chat UI | [React SDK](/agents/docs/react-sdk) |
-| Secure and deploy agents | [Security Model](/agents/docs/security-model), then [Deploy](/docs/deploy) |
+| Give agents model access | [Model access](/agents/docs#model-access) |
+| Give the agent your own APIs | [Custom Tools](/guides/agent-custom-tools) |
+| Let the agent run commands and edit files | [Sandboxes](/guides/agent-sandboxes), then [Built-in Tools](/guides/agent-built-in-tools) |
+| Run agents on your users' own subscriptions | [User Subscriptions](/guides/user-subscriptions) |
+| Make runs finish after a crash, with no one to retry them | [Architecture](/agents/docs#architecture) |
+| Wait for a person before a risky action | [Human in the Loop](/guides/agent-human-in-the-loop) |
+| Share a result through a link | [Scoped Access with JWTs](/guides/scoped-access) |
+| Talk to users in Slack, Linear, GitHub, or Discord | [Slack](/guides/connect-slack) and the other connectors |
+| See what happens while an agent answers a prompt | [Call the agent](/agents/docs#call-the-agent) |
+| Build a chat UI | [React SDK](/guides/agent-react-sdk) |
+| Secure and deploy agents | [Security](/agents/docs#security), then [Deploy](/docs/deploy) |

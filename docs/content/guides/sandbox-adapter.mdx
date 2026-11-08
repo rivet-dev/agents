@@ -1,5 +1,5 @@
 ---
-title: "Sandbox Adapter"
+title: "Use a Sandbox from Any Actor"
 description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, or Docker from any Rivet Actor, without the agent harness."
 ---
 
@@ -26,7 +26,7 @@ description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona
 
 `@rivet-dev/sandbox-adapter` gives a Rivet Actor one API to create a sandbox, run commands, use files, and clean up. Use it directly when your Actor runs its own process, such as a build or a coding CLI.
 
-To give a Pi agent a sandbox, pass a provider to `pi()` instead. Pi then makes all the calls on this page for you. See [Sandboxes](/agents/docs/sandboxes), which also lists each provider's options.
+To give a Pi agent a sandbox, pass a provider to `pi()` instead. Pi then makes all the calls on this page for you. See [Sandboxes](/guides/agent-sandboxes), which also lists each provider's options.
 
 ## Use a sandbox from an Actor
 
@@ -42,7 +42,7 @@ The first `run`, `saveFile`, or `readFile` creates the Actor's sandbox. Later ca
 
 ## Choose a provider
 
-Every provider returns the same `SandboxProvider`, so you change one import and one call. See [Providers](/agents/docs/sandboxes#providers) for the options of each one.
+Every provider returns the same `SandboxProvider`, so you change one import and one call. See [Providers](/guides/agent-sandboxes#providers) for the options of each one.
 
 | Provider | Function | Import from | Also install | Credentials |
 | --- | --- | --- | --- | --- |
@@ -136,7 +136,7 @@ With `keepImageEntrypoint`, the image's entrypoint must keep running. The contai
 
 ## Write your own provider
 
-Implement `SandboxProvider` over your sandbox service. See [Write your own provider](/agents/docs/sandboxes#write-your-own-provider) for what each member does.
+Implement `SandboxProvider` over your sandbox service. See [Write your own provider](/guides/agent-sandboxes#write-your-own-provider) for what each member does.
 
 <CodeSnippet file="examples/docs/sandbox-adapter/custom-provider.ts" title="provider.ts" />
 
@@ -145,4 +145,4 @@ Implement `SandboxProvider` over your sandbox service. See [Write your own provi
 
 Pass the result to your Actor in place of `dockerProvider()`, or to `pi()` as `sandbox`.
 
-**Next:** [Sandboxes](/agents/docs/sandboxes), which gives a Pi agent's tools a sandbox through this adapter.
+**Next:** [Sandboxes](/guides/agent-sandboxes), which gives a Pi agent's tools a sandbox through this adapter.
