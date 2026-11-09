@@ -108,7 +108,7 @@ pub(super) fn credentials_available_for(
         AgentId::Claude | AgentId::Amp => has_anthropic,
         AgentId::Codex => has_openai,
         AgentId::Opencode => has_anthropic || has_openai,
-        AgentId::Pi | AgentId::Cursor => true,
+        AgentId::Pi | AgentId::Cursor | AgentId::Omp => true,
         AgentId::Mock => true,
     }
 }
@@ -181,6 +181,8 @@ pub(super) fn fallback_config_options(agent: AgentId) -> Vec<Value> {
                 { "value": "default", "name": "Default" }
             ]
         })],
+        // omp returns its model, mode and thinking options from session/new.
+        AgentId::Omp => Vec::new(),
         AgentId::Mock => vec![
             json!({
                 "id": "model",
@@ -399,6 +401,26 @@ pub(super) fn agent_capabilities_for(agent: AgentId) -> AgentCapabilities {
             command_execution: false,
             file_changes: false,
             mcp_tools: false,
+            streaming_deltas: true,
+            item_started: true,
+            shared_process: false,
+        },
+        AgentId::Omp => AgentCapabilities {
+            plan_mode: true,
+            permissions: true,
+            questions: false,
+            tool_calls: true,
+            tool_results: true,
+            text_messages: true,
+            images: true,
+            file_attachments: false,
+            session_lifecycle: true,
+            error_events: true,
+            reasoning: true,
+            status: false,
+            command_execution: false,
+            file_changes: false,
+            mcp_tools: true,
             streaming_deltas: true,
             item_started: true,
             shared_process: false,
@@ -636,6 +658,7 @@ pub(super) fn build_provider_payload_for_opencode(_state: &Arc<AppState>) -> Val
         AgentId::Opencode,
         AgentId::Pi,
         AgentId::Cursor,
+        AgentId::Omp,
     ];
 
     let has_anthropic = std::env::var("ANTHROPIC_API_KEY").is_ok();
@@ -721,6 +744,7 @@ fn agent_display_name(agent: AgentId) -> &'static str {
         AgentId::Opencode => "OpenCode",
         AgentId::Pi => "Pi",
         AgentId::Cursor => "Cursor Agent",
+        AgentId::Omp => "oh-my-pi",
     }
 }
 
