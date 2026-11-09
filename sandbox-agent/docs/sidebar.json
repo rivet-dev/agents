@@ -115,6 +115,10 @@
             {
               "title": "Pi",
               "href": "/sandbox-agent/docs/agents/pi"
+            },
+            {
+              "title": "oh-my-pi",
+              "href": "/sandbox-agent/docs/agents/omp"
             }
           ]
         },
