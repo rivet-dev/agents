@@ -156,7 +156,7 @@ npm add @rivet-dev/sandbox-adapter
 | `create` | Body of Agent37's `POST /v1/instances`, such as `template`, `resources`, `type`, `region`, or `env`, or a function that receives the Actor context and returns it. The template defaults to `agent37-base`. |
 | `cwd` | Working directory inside the sandbox. Created when the Actor connects. Defaults to the sandbox's home directory, `/home/node` on `agent37-base`. |
 
-Commands run as `root`. A sleeping sandbox keeps its memory and running processes, and wakes on the next command. Agent37 returns a command's output when it ends, and ends a command after 15 minutes. A kill or timeout ends the command and its child processes.
+Commands run as `root`. A sleeping sandbox keeps its files and wakes on the next command. Processes that were running do not survive the sleep. Agent37 returns a command's output when it ends, and ends a command after 15 minutes. A kill or timeout ends the command and its child processes. A process that detaches from it, such as one started with `(command &)`, keeps running. File reads and writes run as commands, so large files are slow: a 10 MB file takes about a minute to write.
 
 ### Docker
 
