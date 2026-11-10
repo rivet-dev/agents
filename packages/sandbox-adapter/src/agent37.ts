@@ -135,10 +135,11 @@ interface ExecResponse {
 	stderr: string;
 }
 
-// Records the shell's pid so a kill can find the command's process tree. A
-// kill that arrives before the pid is written leaves a marker the wrapper checks.
-const EXEC_WRAPPER =
-	'd=/tmp/.rivet-exec; mkdir -p $d && echo $$ > "$d/$1"; if [ -f "$d/$1.kill" ]; then rm -f "$d/$1" "$d/$1.kill"; exit 137; fi; /bin/sh -c "$2"; s=$?; rm -f "$d/$1"; exit $s';
+// Records the command's pid so a kill can find its process tree. A kill that
+// arrives before the pid is written leaves a marker the command checks. Output
+// goes to files because Agent37 answers only when the exec's pipes close, and a
+// background process that inherited them would hold the call open.
+const EXEC_WRAPPER = `d=/tmp/.rivet-exec; mkdir -p $d || exit 1; /bin/sh -c 'echo $$ > "$1"; if [ -f "$1.kill" ]; then rm -f "$1" "$1.kill"; exit 137; fi; exec /bin/sh -c "$2"' sh "$d/$1" "$2" > "$d/$1.out" 2> "$d/$1.err" < /dev/null & wait $! 2> /dev/null; s=$?; cat "$d/$1.out"; cat "$d/$1.err" >&2; rm -f "$d/$1" "$d/$1.out" "$d/$1.err"; exit $s`;
 
 // Stops each process before reading its children so none can fork past the kill.
 const KILL_TREE =
