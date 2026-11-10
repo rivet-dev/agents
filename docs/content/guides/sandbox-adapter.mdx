@@ -1,11 +1,11 @@
 ---
 title: "Use a Sandbox from Any Actor"
-description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, or Docker from any Rivet Actor, without the agent harness."
+description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, Agent37, or Docker from any Rivet Actor, without the agent harness."
 ---
 
 <Diagram
   id="sandbox-adapter"
-  label="Any Rivet Actor calls create or connect on a SandboxProvider from the sandbox adapter, then calls exec and the file operations on the Sandbox it gets back. The adapter talks to the chosen provider: agentOS, E2B, Daytona, Freestyle, or Docker. The Actor stores the sandbox id so it can connect again after it sleeps. There is one sandbox per Actor."
+  label="Any Rivet Actor calls create or connect on a SandboxProvider from the sandbox adapter, then calls exec and the file operations on the Sandbox it gets back. The adapter talks to the chosen provider: agentOS, E2B, Daytona, Freestyle, Agent37, or Docker. The Actor stores the sandbox id so it can connect again after it sleeps. There is one sandbox per Actor."
   stackLabel="One sandbox per Actor"
   nodes={[
     { id: "actor", x: 20, y: 175, w: 200, product: "actors", stack: true, title: "Any Rivet Actor", subtitle: "stores the sandbox id" },
@@ -50,6 +50,7 @@ Every provider returns the same `SandboxProvider`, so you change one import and 
 | E2B | `e2bProvider()` | `@rivet-dev/sandbox-adapter/e2b` | `e2b` | `E2B_API_KEY` |
 | Daytona | `daytonaProvider()` | `@rivet-dev/sandbox-adapter/daytona` | `@daytonaio/sdk` | `DAYTONA_API_KEY` |
 | Freestyle | `freestyleProvider({ create })` | `@rivet-dev/sandbox-adapter/freestyle` | `freestyle` | `FREESTYLE_API_KEY` |
+| Agent37 | `agent37Provider()` | `@rivet-dev/sandbox-adapter/agent37` | Nothing | `AGENT37_API_KEY` |
 | Docker | `dockerProvider()` | `@rivet-dev/sandbox-adapter/docker` | Nothing | None |
 
 ## Manage the lifecycle
@@ -91,6 +92,7 @@ The adapter stores nothing. Your Actor stores the sandbox id and decides when to
 Some providers report output differently:
 
 - **Daytona** returns stdout and stderr together in `stdout`, leaves `stderr` empty, and calls `onData` once when the command ends.
+- **Agent37** calls `onData` with stdout and then stderr when the command ends.
 - **E2B and Daytona** return empty `stdout` and `stderr` after a timeout. On E2B, `onData` has already received the output.
 
 ## Use files

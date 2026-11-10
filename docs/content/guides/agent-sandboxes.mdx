@@ -1,6 +1,6 @@
 ---
 title: "Give an Agent a Sandbox"
-description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, Docker, or a sandbox provider you write."
+description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, Agent37, Docker, or a sandbox provider you write."
 ---
 
 An agent doesn't need a sandbox. Without one, its file tools work on files in the Actor's own database. Add a sandbox only when the agent needs a shell.
@@ -75,6 +75,7 @@ agentOS needs no provider account. To use E2B or Daytona instead, see
 | <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer">E2B</a> | `e2b` | Paused | Deleted |
 | <a href="https://daytona.io" target="_blank" rel="noopener noreferrer">Daytona</a> | `@daytonaio/sdk` | Stopped | Deleted |
 | <a href="https://freestyle.sh" target="_blank" rel="noopener noreferrer">Freestyle</a> | `freestyle` | Paused | Deleted |
+| <a href="https://www.agent37.com" target="_blank" rel="noopener noreferrer">Agent37</a> | None | Asleep | Deleted |
 | <a href="https://docs.docker.com" target="_blank" rel="noopener noreferrer">Docker</a> | None. Uses the `docker` CLI. | Stopped | Removed |
 
 Provider credentials stay on your worker and never enter the sandbox.
@@ -140,6 +141,22 @@ npm add @rivet-dev/sandbox-adapter freestyle
 | `cwd` | Working directory inside the VM. Created when the Actor connects. Defaults to `/workspace`. |
 
 A Freestyle VM has no network access until a `firewall` rule allows it. Commands run as `root` through Python 3, so the image must include it. Every `freestyle/ubuntu*` snapshot does.
+
+### Agent37
+
+```sh
+npm add @rivet-dev/sandbox-adapter
+```
+
+<CodeSnippet file="examples/docs/sandboxes/agent37.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `apiKey` | Agent37 API key. Defaults to `AGENT37_API_KEY`. |
+| `create` | Body of Agent37's `POST /v1/instances`, such as `template`, `resources`, `type`, `region`, or `env`, or a function that receives the Actor context and returns it. The template defaults to `agent37-base`. |
+| `cwd` | Working directory inside the sandbox. Created when the Actor connects. Defaults to the sandbox's home directory, `/home/node` on `agent37-base`. |
+
+Commands run as `root`. A sleeping sandbox keeps its memory and running processes, and wakes on the next command. Agent37 returns a command's output when it ends, and ends a command after 15 minutes. A kill or timeout ends the command and its child processes.
 
 ### Docker
 
