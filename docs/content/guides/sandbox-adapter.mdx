@@ -1,6 +1,6 @@
 ---
 title: "Use a Sandbox from Any Actor"
-description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, or Docker from any Rivet Actor, without the agent harness."
+description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, AWS Lambda MicroVMs, or Docker from any Rivet Actor, without the agent harness."
 ---
 
 <Diagram
@@ -50,6 +50,7 @@ Every provider returns the same `SandboxProvider`, so you change one import and 
 | E2B | `e2bProvider()` | `@rivet-dev/sandbox-adapter/e2b` | `e2b` | `E2B_API_KEY` |
 | Daytona | `daytonaProvider()` | `@rivet-dev/sandbox-adapter/daytona` | `@daytonaio/sdk` | `DAYTONA_API_KEY` |
 | Freestyle | `freestyleProvider({ create })` | `@rivet-dev/sandbox-adapter/freestyle` | `freestyle` | `FREESTYLE_API_KEY` |
+| AWS Lambda MicroVMs | `lambdaMicrovmsProvider({ create })` | `@rivet-dev/sandbox-adapter/lambda-microvms` | `@aws-sdk/client-lambda-microvms` | AWS credentials |
 | Docker | `dockerProvider()` | `@rivet-dev/sandbox-adapter/docker` | Nothing | None |
 
 ## Manage the lifecycle
