@@ -1,6 +1,6 @@
 ---
 title: "Give an Agent a Sandbox"
-description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, Docker, or a sandbox provider you write."
+description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, Google Cloud Agent Platform, Docker, or a sandbox provider you write."
 ---
 
 An agent doesn't need a sandbox. Without one, its file tools work on files in the Actor's own database. Add a sandbox only when the agent needs a shell.
@@ -75,6 +75,7 @@ agentOS needs no provider account. To use E2B or Daytona instead, see
 | <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer">E2B</a> | `e2b` | Paused | Deleted |
 | <a href="https://daytona.io" target="_blank" rel="noopener noreferrer">Daytona</a> | `@daytonaio/sdk` | Stopped | Deleted |
 | <a href="https://freestyle.sh" target="_blank" rel="noopener noreferrer">Freestyle</a> | `freestyle` | Paused | Deleted |
+| <a href="https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/sandbox" target="_blank" rel="noopener noreferrer">Google Cloud Agent Platform</a> | `google-auth-library` | Paused | Deleted |
 | <a href="https://docs.docker.com" target="_blank" rel="noopener noreferrer">Docker</a> | None. Uses the `docker` CLI. | Stopped | Removed |
 
 Provider credentials stay on your worker and never enter the sandbox.
@@ -140,6 +141,57 @@ npm add @rivet-dev/sandbox-adapter freestyle
 | `cwd` | Working directory inside the VM. Created when the Actor connects. Defaults to `/workspace`. |
 
 A Freestyle VM has no network access until a `firewall` rule allows it. Commands run as `root` through Python 3, so the image must include it. Every `freestyle/ubuntu*` snapshot does.
+
+### Google Cloud Agent Platform
+
+Each Actor gets a shell sandbox from Gemini Enterprise Agent Platform.
+
+```sh
+npm add @rivet-dev/sandbox-adapter google-auth-library
+```
+
+<CodeSnippet file="examples/docs/sandboxes/agent-platform.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `template` | Required. Resource name of a shell sandbox template. Sandboxes are created in its Agent Engine and Region. |
+| `create` | Fields of the new sandbox, such as `ttl`, or a function that receives the Actor context and returns them. |
+| `auth` | Supplies access tokens. Defaults to a `GoogleAuth` from `google-auth-library`, which uses Application Default Credentials. |
+| `apiEndpoint` | Defaults to `https://{location}-aiplatform.googleapis.com` for the template's location. |
+| `cwd` | Working directory inside the sandbox. Created when the Actor connects. Defaults to `/workspace`. |
+| `readyTimeoutMs` | How long a create or connect waits for the sandbox to run. Defaults to 5 minutes. |
+
+Create an Agent Engine and a shell sandbox template once, and reuse the template for every sandbox. Each call returns an operation. The engine's id is in the first operation's name. The template takes a few minutes to create: poll its operation until `done` is `true`, and `response.name` is the template to pass as `template`.
+
+```sh
+PROJECT=my-project
+LOCATION=us-central1
+API="https://$LOCATION-aiplatform.googleapis.com/v1/projects/$PROJECT/locations/$LOCATION"
+
+gcloud services enable aiplatform.googleapis.com --project "$PROJECT"
+
+curl -X POST "$API/reasoningEngines" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" \
+  -d '{"displayName": "sandboxes"}'
+
+curl -X POST "$API/reasoningEngines/ENGINE_ID/sandboxEnvironmentTemplates" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "shell",
+    "defaultContainerEnvironment": {"defaultContainerCategory": "DEFAULT_CONTAINER_CATEGORY_SHELL_SANDBOX"},
+    "egressControlConfig": {"internetAccess": true}
+  }'
+
+curl "https://$LOCATION-aiplatform.googleapis.com/v1/OPERATION_NAME" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)"
+```
+
+- **Permissions.** Your worker's credentials need the `roles/aiplatform.user` role on the project.
+- **Network.** A sandbox has no internet access unless its template sets `internetAccess`.
+- **Commands.** Commands run as `appuser`, without `sudo`. Output arrives once a command ends, so `onData` is called once. Aborting ends the wait, but the command keeps running in the sandbox until it exits or reaches its timeout. A command that reaches `timeoutMs` is killed and returns no output. A command without `timeoutMs` runs until the sandbox's own time limit.
+- **Lifetime.** The sandbox is deleted when its `ttl` ends. After that the Actor gets a new sandbox the next time a tool needs one, and the old files are lost.
 
 ### Docker
 
