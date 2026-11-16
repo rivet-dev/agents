@@ -24,7 +24,7 @@ import type {
 	UserActorConfig,
 } from "./actor-types.js";
 import type { PiAnswer } from "./answers.js";
-import { withExtension } from "./registry.js";
+import { builtInExtensions, withExtensions } from "./registry.js";
 import {
 	closeHarness,
 	createPiRuntime,
@@ -213,11 +213,17 @@ const piOptionKeys = [
 	"onReport",
 	"model",
 	"thinkingLevel",
+	"instructions",
+	"cwd",
+	"maxTurns",
+	"compaction",
 	"scopedModels",
 	"providers",
 	"apiKeys",
 	"credentials",
 	"sandbox",
+	"codingTools",
+	"toolSearch",
 	"documents",
 	"onAnswer",
 ] as const satisfies readonly (keyof PiOptions)[];
@@ -266,13 +272,18 @@ export function pi<
 	PiActions
 > {
 	const { actorConfig, options } = splitConfig<PiOptions>(config, piOptionKeys);
+	const settings = options.compaction
+		? { ...options.settings, compaction: options.compaction }
+		: options.settings;
 	const registry = options.registry ?? createRegistry();
-	const extension = actorExtension(options.tools, options.hooks);
+	const actorTools = actorExtension(options.tools, options.hooks);
 	const piOptions: ResolvedPiOptions = {
 		...options,
-		registry,
-		...(extension &&
-			withExtension({ registry, settings: options.settings }, extension)),
+		settings,
+		...withExtensions({ registry, settings }, [
+			...builtInExtensions(options, registry),
+			...(actorTools ? [actorTools] : []),
+		]),
 	};
 	if (actorConfig.db !== undefined) {
 		throw new Error("pi() owns the actor database; remove the db option");
