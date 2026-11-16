@@ -235,14 +235,6 @@ function buildRegistry(mock: MockModel, root: string) {
 			},
 		},
 	});
-	const backoff = pi({
-		...models,
-		registry: createRegistry(),
-		// A retry wait just past the one-minute threshold, so the actor sleeps through it.
-		settings: { retry: { baseDelayMs: 61_000, maxAgentDelayMs: 61_000 } },
-		options: { sleepTimeout: 300 },
-		onSleep: sleeps.record,
-	});
 	// Every schedule write fails, so a long wait cannot get its wake.
 	const backoffWithoutSchedules = pi({
 		...models,
@@ -345,7 +337,6 @@ function buildRegistry(mock: MockModel, root: string) {
 			coder,
 			coldCoder,
 			files,
-			backoff,
 			backoffWithoutSchedules,
 			jobRunner,
 			unscoped,
@@ -519,17 +510,6 @@ describe("pi actor", () => {
 			}),
 		).rejects.toMatchObject({ group: "user", code: "ConversationBusy" });
 		await handle.conversation.abort(root.id);
-	});
-
-	test("a failed commit reopens the harness, and the next prompt is answered", async (c) => {
-		const { client } = await setupTest(c, registry);
-		const handle = client.agent.getOrCreate(["poison", randomUUID()]);
-		await handle.harness.root();
-		await handle.failCommitsOfPoison();
-
-		await expect(handle.writePoison()).rejects.toThrow();
-		const result = await handle.prompt("say hello");
-		expect(result).toMatchObject({ status: "done", text: "Hi there!" });
 	});
 
 	test("a commit that fails during a run reopens the harness at once, and the run finishes with no call", async (c) => {
@@ -784,32 +764,6 @@ describe("pi actor", () => {
 			readFile(join(workdir, "sandboxes", "outside.txt"), "utf8"),
 		).rejects.toThrow();
 	});
-
-	test("a long retry wait lets the actor sleep, and a scheduled wake finishes the run", async (c) => {
-		const { client } = await setupTest(c, registry);
-		const key = ["backoff", randomUUID()];
-		const handle = client.backoff.getOrCreate(key);
-		const root = await handle.harness.root();
-		const requestsBefore = mockModel.requests.length;
-		const submission = await handle.conversation.submit(root.id, {
-			type: "input",
-			content: "flaky",
-		});
-
-		await sleeps.waitFor(key, 1);
-		// No client calls the actor here: only the scheduled wake can make the retried model request, recorded in this process.
-		await vi.waitFor(
-			() => expect(mockModel.requests.length).toBe(requestsBefore + 2),
-			{ timeout: 90_000 },
-		);
-		const settled = await handle.submission.wait(submission.id);
-		expect(settled.status).toBe("done");
-		const { messages } = await handle.conversation.context(root.id);
-		expect(messages.at(-1)).toMatchObject({
-			role: "assistant",
-			content: [{ type: "text", text: "recovered" }],
-		});
-	}, 120_000);
 
 	test("a long retry wait whose wake cannot be scheduled keeps the actor awake until the run finishes", async (c) => {
 		const { client } = await setupTest(c, registry);

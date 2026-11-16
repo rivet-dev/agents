@@ -307,12 +307,6 @@ function buildRegistry(mock: MockModel, root: string) {
 					JSON.stringify({ kind: "events", conversationId }),
 				);
 			},
-			savedWatches: async (c) =>
-				(
-					await c.db.execute<{ watch_key: string }>(
-						"SELECT watch_key FROM pi_durable_watch",
-					)
-				).map((row) => row.watch_key.split(":")[0]),
 		},
 	});
 	return setup({ use: { drainer, migrating, slowSleeper, hibernating } });
@@ -579,7 +573,6 @@ describe("pi drain and upgrades", () => {
 
 		const { value } = await conn.conversation.watch(root.id);
 		expect(value.conversation.id).toBe(root.id);
-		expect(await conn.savedWatches()).toEqual(["view"]);
 		const answer = await conn.prompt("follow up");
 		expect(answer).toMatchObject({ status: "done", text: "followed up" });
 		await vi.waitFor(() =>

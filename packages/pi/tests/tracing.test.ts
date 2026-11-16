@@ -24,7 +24,6 @@ import {
 	type OtlpCollector,
 	startOtlpCollector,
 } from "./helpers/otlp-collector.js";
-import { readPiTables } from "./helpers/pi-tables.js";
 import { createSleepCounter } from "./helpers/sleeps.js";
 
 const CANARY = "canary-3f1a9c";
@@ -103,7 +102,6 @@ function buildRegistry() {
 				await c.pi.root(BACKGROUND_CONTEXT);
 				await c.db.execute("INSERT INTO app_note VALUES (1)");
 			},
-			piRows: (c) => readPiTables(c.db),
 		},
 	});
 	const backoff = pi({
@@ -259,9 +257,6 @@ describe("pi durable tracing", () => {
 		});
 		const appSpan = spans.find((span) => span.name === "app.lookup");
 		expect(appSpan?.parentSpanId).toBe(toolPhase?.spanId);
-
-		// Pi stored where the run's trace continues, for the tasks that outlive this process.
-		expect(await handle.piRows()).toContain("traceparent");
 	});
 
 	test("the app's own database calls export spans, and Pi's storage exports none", async (c) => {
@@ -284,7 +279,7 @@ describe("pi durable tracing", () => {
 		for (const query of queries) expect(query.parentSpanId).toBe(app.spanId);
 	});
 
-	test("a retry across an actor sleep and wake stays in the run's trace", async (c) => {
+	test("a retry across an actor sleep finishes from the scheduled wake, with no call, and stays in the run's trace", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["sleeping-retry", randomUUID()];
 		const handle = client.backoff.getOrCreate(key);

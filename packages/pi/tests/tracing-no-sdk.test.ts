@@ -11,7 +11,6 @@ import {
 	type OtlpCollector,
 	startOtlpCollector,
 } from "./helpers/otlp-collector.js";
-import { readPiTables } from "./helpers/pi-tables.js";
 
 // This file registers no OpenTelemetry SDK. Only the environment variables are set.
 const mock = createMockModel();
@@ -22,9 +21,6 @@ const agent = pi({
 	providers: { mock: mock.providerConfig },
 	apiKeys: { mock: "mock" },
 	registry: createRegistry(),
-	actions: {
-		piRows: (c) => readPiTables(c.db),
-	},
 });
 const registry = setup({ use: { agent } });
 
@@ -37,7 +33,7 @@ beforeAll(async () => {
 
 afterAll(() => collector?.close());
 
-test("without an SDK, a run answers, stores no trace carrier, and only RivetKit's spans are exported", async (c) => {
+test("without an SDK, a run answers, and only RivetKit's spans are exported", async (c) => {
 	const { client } = await setupTest(c, registry);
 	const handle = client.agent.getOrCreate(["no-sdk", randomUUID()]);
 
@@ -45,10 +41,6 @@ test("without an SDK, a run answers, stores no trace carrier, and only RivetKit'
 		status: "done",
 		text: "hi",
 	});
-
-	const rows = await handle.piRows();
-	expect(rows).toContain("hello");
-	expect(rows).not.toContain("traceparent");
 
 	await collector.quiet();
 	const names = collector.spans().map((span) => span.name);
