@@ -134,6 +134,12 @@ export type ResolvedPiOptions = PiOptions & {
 /** The internal action a scheduled wake calls. */
 const WAKE_ACTION = "pi.wake";
 
+/**
+ * How far ahead the recovery wake is scheduled while Pi work is active. An
+ * actor that crashes during a run resumes within about this long.
+ */
+const RECOVERY_WAKE_MS = 15_000;
+
 interface OpenHarness {
 	harness: Harness;
 	/** Calls `listener` whenever Pi's wake value changes. Returns a function that stops it. */
@@ -573,6 +579,12 @@ function reportBlockedTasks(c: PiContext, inspection: HarnessInspection): void {
  * Pi runs a sleep only once its time has passed, and reports a wake only when
  * the value changes. So a wake that fires early, even by a millisecond,
  * re-reads the value and schedules again.
+ *
+ * While work is active, a recovery `pi.wake` stays scheduled about
+ * `RECOVERY_WAKE_MS` ahead and is re-armed every half of that. Keep-awake
+ * only lasts while the process does, and RivetKit's default crash policy
+ * leaves a crashed actor asleep, so this wake is what resumes its work. A
+ * stop with work still active keeps it, so a cut-off drain resumes too.
  */
 function wakeActor(
 	c: PiContext,
@@ -593,6 +605,10 @@ function wakeActor(
 	let timer: { at: number; handle: ReturnType<typeof setTimeout> } | undefined;
 	let scheduleFailedAt: number | undefined;
 	let stopped = false;
+	/** Re-arms the recovery wake while work is active. */
+	let recoveryTimer: ReturnType<typeof setInterval> | undefined;
+	/** Ids of recovery wakes this generation scheduled and has not cancelled. */
+	let recoveryWakes: string[] = [];
 
 	const stayAwake = () => {
 		if (release) return;
@@ -616,14 +632,53 @@ function wakeActor(
 		const delay = Math.min(Math.max(0, at - now()), 2 ** 31 - 1);
 		timer = { at, handle: setTimeout(resumeDue, delay) };
 	};
+	const cancelRecoveryWakes = (ids: string[]) => {
+		for (const id of ids) {
+			// RivetKit 2.3 has no `cancel`; its wakes fire and find nothing to do.
+			c.schedule.cancel?.(id).catch(() => {});
+		}
+	};
+	const scheduleRecoveryWake = () => {
+		c.schedule.at(Date.now() + RECOVERY_WAKE_MS, WAKE_ACTION).then(
+			(id: unknown) => {
+				const ids = typeof id === "string" ? [id] : [];
+				// Work ended while this was scheduled, so nothing needs it.
+				if (!recoveryTimer && !stopped) return cancelRecoveryWakes(ids);
+				// The newest wake is enough; earlier ones only wake an actor that is already up.
+				cancelRecoveryWakes(recoveryWakes);
+				recoveryWakes = ids;
+			},
+			(error: unknown) => {
+				c.log.warn({
+					msg: "pi durable could not schedule its recovery wake; a crash leaves the actor asleep until it is called",
+					error,
+				});
+			},
+		);
+	};
+	const armRecovery = () => {
+		if (recoveryTimer) return;
+		scheduleRecoveryWake();
+		recoveryTimer = setInterval(scheduleRecoveryWake, RECOVERY_WAKE_MS / 2);
+	};
+	const stopRecovery = () => {
+		clearInterval(recoveryTimer);
+		recoveryTimer = undefined;
+	};
 	const apply = () => {
 		if (stopped) return;
 		const { active, at } = latest;
 		if (timer?.at !== at) clearTimer();
 		if (active) {
 			stayAwake();
+			armRecovery();
 			if (at !== undefined) armTimer(at);
 			return;
+		}
+		if (recoveryTimer) {
+			stopRecovery();
+			cancelRecoveryWakes(recoveryWakes);
+			recoveryWakes = [];
 		}
 		if (at === undefined || at === scheduledAt) return letGo();
 		// The actor may sleep only once its wake is written.
@@ -661,6 +716,8 @@ function wakeActor(
 	const stop = () => {
 		stopped = true;
 		clearTimer();
+		// A scheduled recovery wake stays, so work a stop cut off resumes.
+		stopRecovery();
 		letGo();
 	};
 	// Keep-awake only blocks idle sleep. Once shutdown starts it would only delay it.
@@ -682,6 +739,12 @@ function wakeActor(
 		stop: () => {
 			c.abortSignal.removeEventListener("abort", stop);
 			stop();
+			// Closing with no work left, such as after a drain, needs no recovery wake.
+			// A harness that failed refuses `wake()`; its reopen arms the wake again.
+			if (harness && isUsable(harness) && !harness.wake().active) {
+				cancelRecoveryWakes(recoveryWakes);
+				recoveryWakes = [];
+			}
 		},
 	};
 }
