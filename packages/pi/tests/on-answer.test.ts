@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import {
+	type ConversationId,
 	createRegistry,
 	defineExtension,
 	defineTool,
@@ -22,6 +24,11 @@ import {
 /** Answers by actor key, recorded in this process where the actors run. */
 const answers = new Map<string, PiAnswer[]>();
 const failFor = new Set<string>();
+/** What the typed agent's onAnswer read from `c.pi` and `c.state`, by actor key. */
+const typedAnswers = new Map<
+	string,
+	{ rootId: ConversationId; answered: number }
+>();
 /** What `onReport` received, in this process where the actors run. */
 const reports: Report[] = [];
 
@@ -68,7 +75,24 @@ function buildRegistry(mock: MockModel) {
 		settings: { extensions: [app] },
 		onAnswer,
 	});
-	return setup({ use: { agent, selectingAgent } });
+	// onAnswer's `c` is typed from the actor, with `c.pi`, so it needs no cast.
+	const typedAgent = pi({
+		...models,
+		registry: tools,
+		createState: () => ({ answered: 0 }),
+		onAnswer: async (c, answer) => {
+			c.state.answered += 1;
+			// @ts-expect-error onAnswer's state is the actor's own
+			c.state.missing;
+			const root = await c.pi.root(BACKGROUND_CONTEXT);
+			typedAnswers.set(c.key.join("/"), {
+				rootId: root.id,
+				answered: c.state.answered,
+			});
+			void answer.text;
+		},
+	});
+	return setup({ use: { agent, selectingAgent, typedAgent } });
 }
 
 beforeAll(() => {
@@ -106,6 +130,19 @@ describe("onAnswer", () => {
 		await client.selectingAgent.getOrCreate([key]).prompt("hello");
 		await vi.waitFor(() =>
 			expect(answers.get(key)?.map((a) => a.text)).toEqual(["hi there"]),
+		);
+	});
+
+	test("gets c.pi and the actor's typed state", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = randomUUID();
+		const agent = client.typedAgent.getOrCreate([key]);
+		const root = await agent.harness.root();
+
+		await agent.prompt("hello");
+
+		await vi.waitFor(() =>
+			expect(typedAnswers.get(key)).toEqual({ rootId: root.id, answered: 1 }),
 		);
 	});
 

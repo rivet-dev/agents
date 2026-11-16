@@ -8,6 +8,7 @@ import {
 	hook,
 	type RegistryReader,
 } from "@earendil-works/pi-durable";
+import type { PiAccess } from "./actor.js";
 import { withExtension } from "./registry.js";
 import type { PiContext } from "./runtime.js";
 
@@ -21,9 +22,9 @@ export interface PiAnswer {
 	message: AssistantMessage;
 }
 
-/** Called with the actor's context for every final answer. */
+/** Called with the actor's context, which has `c.pi`, for every final answer. */
 export type PiOnAnswer = (
-	c: PiContext,
+	c: PiContext & PiAccess,
 	answer: PiAnswer,
 ) => void | Promise<void>;
 
@@ -38,7 +39,7 @@ export const ANSWER_EXTENSION = "rivet-pi-on-answer";
  */
 export function withAnswerHook(
 	options: { registry: RegistryReader; settings?: HarnessSettings },
-	c: PiContext,
+	c: PiContext & PiAccess,
 	onAnswer: PiOnAnswer,
 	report: (error: unknown) => void,
 ): { registry: RegistryReader; settings?: HarnessSettings } {
@@ -46,7 +47,7 @@ export function withAnswerHook(
 }
 
 function answerExtension(
-	c: PiContext,
+	c: PiContext & PiAccess,
 	onAnswer: PiOnAnswer,
 	report: (error: unknown) => void,
 ): Extension {
