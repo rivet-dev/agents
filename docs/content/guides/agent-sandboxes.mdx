@@ -16,7 +16,7 @@ Leave out the `sandbox` option, and Pi's file tools work on files stored in the 
 
 ## With a sandbox
 
-When the agent needs to run commands, such as tests or a build, pass a sandbox provider. <a href="https://github.com/rivet-dev/agents/tree/main/packages/sandbox-adapter" target="_blank" rel="noopener noreferrer">`@rivet-dev/sandbox-adapter`</a> gives each Actor its own sandbox, and `CodingTools` run there.
+When the agent needs to run commands, such as tests or a build, pass a sandbox provider. <a href="https://github.com/rivet-dev/agents/tree/main/packages/sandbox-adapter" target="_blank" rel="noopener noreferrer">`@rivet-dev/sandbox-adapter`</a> gives each Actor its own sandbox, and Pi's coding tools, `read`, `write`, `edit`, and `bash`, run there.
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 676 306" role="img" aria-label="The agent Actor sends tool calls through the sandbox adapter, which creates and connects to one sandbox per Actor from a sandbox provider: agentOS, E2B, Daytona, or Freestyle." style="width:100%;min-width:520px;max-width:676px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
