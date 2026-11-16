@@ -145,7 +145,11 @@ export type PiToolContext<
 > &
 	PiAccess;
 
-/** The Pi options with `tools`, `hooks`, and `onAnswer` typed to get the actor's context. */
+/**
+ * The Pi options with `tools`, `hooks`, and `onAnswer` typed to get the actor's
+ * context. The context is never inferred from them, so a tool typed against
+ * the registry that holds this actor cannot turn its state and events `any`.
+ */
 type PiConfigOptions<TContext, TTools> = Omit<
 	PiOptions,
 	"tools" | "hooks" | "onAnswer"
@@ -154,16 +158,18 @@ type PiConfigOptions<TContext, TTools> = Omit<
 	 * Tools defined like actions, by name. `execute(c, args, api, context)`
 	 * gets the actor's context first, and `args` typed from `parameters`.
 	 */
-	tools?: { [K in keyof TTools]: PiTool<TContext, TTools[K] & object> };
+	tools?: {
+		[K in keyof TTools]: PiTool<NoInfer<TContext>, TTools[K] & object>;
+	};
 	/** Pi Durable's hooks with the actor's context first, such as `beforeTool(c, call, api, context)`. */
-	hooks?: PiHooks<TContext>;
+	hooks?: PiHooks<NoInfer<TContext>>;
 	/**
 	 * Called with the actor's context for every final answer, such as to text
 	 * it to the user. A run that resumes after a crash can call it again for
 	 * the same answer if it didn't return. A throw goes to `onReport` and
 	 * leaves the run as it is.
 	 */
-	onAnswer?: (c: TContext, answer: PiAnswer) => void | Promise<void>;
+	onAnswer?: (c: NoInfer<TContext>, answer: PiAnswer) => void | Promise<void>;
 };
 
 /** Ordinary actor config plus the Pi Durable options. The app's actions, lifecycle hooks, Pi tools, and Pi hooks get `c.pi`. */

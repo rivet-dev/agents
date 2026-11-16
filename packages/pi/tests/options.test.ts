@@ -4,7 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
-import { AgentDoc, type ConversationId } from "@earendil-works/pi-durable";
+import {
+	AgentDoc,
+	type ConversationId,
+	createRegistry,
+	defineExtension,
+} from "@earendil-works/pi-durable";
+import {
+	createBashTool,
+	createReadTool,
+} from "@earendil-works/pi-durable/tools";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { afterAll, expect, test } from "vitest";
@@ -38,6 +47,19 @@ const reader = pi({
 	sandbox: localSandboxProvider(join(root, "reader")),
 	codingTools: ["read"],
 });
+// A registry that picked some of the coding tools keeps exactly those.
+const reviewTools = createRegistry();
+reviewTools.install(
+	defineExtension({
+		name: "review-tools",
+		tools: [createReadTool(), createBashTool()],
+	}),
+);
+const reviewer = pi({
+	...models,
+	registry: reviewTools,
+	sandbox: localSandboxProvider(join(root, "reviewer")),
+});
 const configured = pi({
 	...models,
 	instructions: "Fix one project, then stop.",
@@ -55,7 +77,7 @@ const configured = pi({
 			}, BACKGROUND_CONTEXT),
 	},
 });
-const registry = setup({ use: { coder, reader, configured } });
+const registry = setup({ use: { coder, reader, reviewer, configured } });
 
 test("a sandbox without a registry gets Pi's coding tools", async (c) => {
 	const { client } = await setupTest(c, registry);
@@ -89,6 +111,18 @@ test("codingTools installs only the coding tools it lists", async (c) => {
 			"hello.txt",
 		);
 	}
+});
+
+test("a sandbox adds no coding tools to a registry that has some of them", async (c) => {
+	const { client } = await setupTest(c, registry);
+	const handle = client.reviewer.getOrCreate([randomUUID()]);
+	const conversation = await handle.harness.root();
+
+	await handle.prompt("create hello.txt");
+	const { messages } = await handle.conversation.context(conversation.id);
+	expect(
+		messages.find((message) => message.role === "toolResult"),
+	).toMatchObject({ toolName: "write", isError: true });
 });
 
 test("instructions, cwd, and maxTurns start every new conversation", async (c) => {
