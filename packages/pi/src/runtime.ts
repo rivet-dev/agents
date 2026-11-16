@@ -112,7 +112,8 @@ const WAKE_ACTION = "pi.wake";
 
 /**
  * How far ahead the recovery wake is scheduled while Pi work is active. An
- * actor that crashes during a run resumes within about this long.
+ * actor whose process dies during a run resumes within about this long, plus
+ * the time the engine takes to find the process gone.
  */
 const RECOVERY_WAKE_MS = 15_000;
 
@@ -122,6 +123,8 @@ interface OpenHarness {
 	onWakeChange: (listener: () => void) => () => void;
 	/** Resumes Pi's due sleeps, for the scheduled `pi.wake`. */
 	resumeDue: () => void;
+	/** Resolves once the wake for the work a call started is written. */
+	settleWake: () => Promise<void>;
 	stopWake: () => void;
 }
 
@@ -224,16 +227,27 @@ export async function withHarness<T>(
 	const release = countCall(runtime);
 	try {
 		const context = withCallerSpan(c.actorId, BACKGROUND_CONTEXT);
-		return await run(harness, context, (wait) => {
+		const result = await run(harness, context, (wait) => {
 			release();
 			return wait();
 		});
+		await settleWake(runtime);
+		return result;
 	} catch (error) {
 		await recoverHarness(runtime.actor ?? c, runtime, options);
 		throw toClientError(error);
 	} finally {
 		release();
 	}
+}
+
+/**
+ * Waits until the wake for the work a call started is written, so a crash
+ * right after the reply still resumes that work.
+ */
+async function settleWake(runtime: PiRuntime): Promise<void> {
+	const open = await runtime.harness?.catch(() => undefined);
+	await open?.settleWake();
 }
 
 /**
@@ -289,7 +303,9 @@ export async function withPiAccess<T>(
 	Object.defineProperty(c, "pi", { value: harness, configurable: true });
 	const release = countCall(runtime);
 	try {
-		return await body();
+		const result = await body();
+		await settleWake(runtime);
+		return result;
 	} catch (error) {
 		await recoverHarness(runtime.actor ?? c, runtime, options);
 		throw toClientError(error);
@@ -377,6 +393,7 @@ async function openHarness(
 		harness,
 		onWakeChange: wake.subscribe,
 		resumeDue: wake.resumeDue,
+		settleWake: wake.settle,
 		stopWake: wake.stop,
 	};
 }
@@ -533,21 +550,20 @@ function reportBlockedTasks(c: PiContext, inspection: HarnessInspection): void {
 }
 
 /**
- * Keeps the actor awake while Pi Durable can run work, and schedules a wake
- * for its earliest sleeping task, such as a retry backoff. Pi calls `onWake`
- * after open and whenever the value changes. With `onWake`, Pi keeps no timer
- * for sleeps, so the scheduled `pi.wake` action resumes them. While other work
- * is active the actor cannot sleep, so an in-process timer resumes them.
+ * Keeps the actor awake while Pi Durable can run work, and keeps one `pi.wake`
+ * scheduled, as Pi Durable's host contract asks (`HarnessOptions.onWake`). Pi
+ * calls `onWake` after open and whenever `harness.wake()` changes: `active`
+ * while some task can run now or is running, and `at`, the earliest sleep.
+ *
+ * The wake is at the earliest sleep, and while work is active no later than
+ * `RECOVERY_WAKE_MS` ahead. Keep-awake only lasts while the process does, so
+ * that recovery wake is what resumes work a crash cut off. While work runs,
+ * the wake fires on the live actor and `resumeDue` arms the next one. A stop
+ * keeps the wake, so a sleep that cut work off resumes it too.
  *
  * Pi runs a sleep only once its time has passed, and reports a wake only when
  * the value changes. So a wake that fires early, even by a millisecond,
  * re-reads the value and schedules again.
- *
- * While work is active, a recovery `pi.wake` stays scheduled about
- * `RECOVERY_WAKE_MS` ahead and is re-armed every half of that. Keep-awake
- * only lasts while the process does, and RivetKit's default crash policy
- * leaves a crashed actor asleep, so this wake is what resumes its work. A
- * stop with work still active keeps it, so a cut-off drain resumes too.
  */
 function wakeActor(
 	c: PiContext,
@@ -557,21 +573,19 @@ function wakeActor(
 	attach: (harness: Harness) => void;
 	subscribe: (listener: () => void) => () => void;
 	resumeDue: () => void;
+	settle: () => Promise<void>;
 	stop: () => void;
 } {
 	const listeners = new Set<() => void>();
 	let harness: Harness | undefined;
 	let latest: Wake = { active: false };
 	let release: (() => void) | undefined;
-	let scheduledAt: number | undefined;
-	let scheduling = false;
+	/** The one `pi.wake` this generation keeps. `id` resolves once it is written, or to `undefined` if it failed. */
+	let armed: { at: number; id: Promise<string | undefined> } | undefined;
+	/** When a schedule write last failed. Until `RECOVERY_WAKE_MS` later, a timer stands in for the wake. */
+	let failedAt: number | undefined;
 	let timer: { at: number; handle: ReturnType<typeof setTimeout> } | undefined;
-	let scheduleFailedAt: number | undefined;
 	let stopped = false;
-	/** Re-arms the recovery wake while work is active. */
-	let recoveryTimer: ReturnType<typeof setInterval> | undefined;
-	/** Ids of recovery wakes this generation scheduled and has not cancelled. */
-	let recoveryWakes: string[] = [];
 
 	const stayAwake = () => {
 		if (release) return;
@@ -586,7 +600,6 @@ function wakeActor(
 	const clearTimer = () => {
 		if (timer) clearTimeout(timer.handle);
 		timer = undefined;
-		scheduleFailedAt = undefined;
 	};
 	const armTimer = (at: number) => {
 		if (timer?.at === at) return;
@@ -595,96 +608,88 @@ function wakeActor(
 		const delay = Math.min(Math.max(0, at - now()), 2 ** 31 - 1);
 		timer = { at, handle: setTimeout(resumeDue, delay) };
 	};
-	const cancelRecoveryWakes = (ids: string[]) => {
-		for (const id of ids) {
-			// RivetKit 2.3 has no `cancel`; its wakes fire and find nothing to do.
-			c.schedule.cancel?.(id).catch(() => {});
-		}
-	};
-	const scheduleRecoveryWake = () => {
-		c.schedule.at(Date.now() + RECOVERY_WAKE_MS, WAKE_ACTION).then(
-			(id: unknown) => {
-				const ids = typeof id === "string" ? [id] : [];
-				// Work ended while this was scheduled, so nothing needs it.
-				if (!recoveryTimer && !stopped) return cancelRecoveryWakes(ids);
-				// The newest wake is enough; earlier ones only wake an actor that is already up.
-				cancelRecoveryWakes(recoveryWakes);
-				recoveryWakes = ids;
-			},
-			(error: unknown) => {
-				c.log.warn({
-					msg: "pi durable could not schedule its recovery wake; a crash leaves the actor asleep until it is called",
-					error,
-				});
-			},
-		);
-	};
-	const armRecovery = () => {
-		if (recoveryTimer) return;
-		scheduleRecoveryWake();
-		recoveryTimer = setInterval(scheduleRecoveryWake, RECOVERY_WAKE_MS / 2);
-	};
-	const stopRecovery = () => {
-		clearInterval(recoveryTimer);
-		recoveryTimer = undefined;
+	/** Replaces the kept wake. The new one is written before the old one is cancelled, so work never goes without one. */
+	const rearm = (at: number | undefined) => {
+		const previous = armed?.id;
+		const next =
+			at === undefined
+				? undefined
+				: c.schedule.at(at, WAKE_ACTION).then(
+						(id) => {
+							failedAt = undefined;
+							return id;
+						},
+						(error: unknown) => {
+							c.log.warn({
+								msg: "pi durable could not schedule its wake, so the actor stays awake and a timer resumes its work",
+								error,
+							});
+							failedAt = Date.now();
+							if (armed?.id === next) armed = undefined;
+							apply();
+							return undefined;
+						},
+					);
+		armed = next && at !== undefined ? { at, id: next } : undefined;
+		void (async () => {
+			await next;
+			const old = await previous;
+			if (old !== undefined) await c.schedule.cancel(old).catch(() => false);
+		})();
 	};
 	const apply = () => {
 		if (stopped) return;
 		const { active, at } = latest;
-		if (timer?.at !== at) clearTimer();
-		if (active) {
+		const heartbeat = active ? Date.now() + RECOVERY_WAKE_MS : undefined;
+		const target =
+			heartbeat === undefined || at === undefined
+				? (heartbeat ?? at)
+				: Math.min(heartbeat, at);
+		if (active) stayAwake();
+		if (target === undefined) {
+			clearTimer();
+			if (armed) rearm(undefined);
+			return letGo();
+		}
+		if (failedAt !== undefined && Date.now() - failedAt < RECOVERY_WAKE_MS) {
 			stayAwake();
-			armRecovery();
 			if (at !== undefined) armTimer(at);
 			return;
 		}
-		if (recoveryTimer) {
-			stopRecovery();
-			cancelRecoveryWakes(recoveryWakes);
-			recoveryWakes = [];
-		}
-		if (at === undefined || at === scheduledAt) return letGo();
+		clearTimer();
+		// While work runs, an earlier wake still ahead is enough: it fires, and `resumeDue` arms the next one.
+		const kept = active
+			? armed && armed.at <= target && armed.at > Date.now()
+			: armed?.at === target;
+		if (!kept) rearm(target);
+		if (active) return;
 		// The actor may sleep only once its wake is written.
 		stayAwake();
-		if (scheduling || scheduleFailedAt === at) return;
-		scheduling = true;
-		c.schedule
-			.at(at, WAKE_ACTION)
-			.then(
-				() => {
-					scheduledAt = at;
-				},
-				(error: unknown) => {
-					c.log.warn({
-						msg: "pi durable could not schedule its wake, so the actor stays awake until it",
-						error,
-					});
-					armTimer(at);
-					scheduleFailedAt = at;
-				},
-			)
-			.finally(() => {
-				scheduling = false;
-				apply();
-			});
+		const written = armed;
+		void written?.id.then((id) => {
+			if (id !== undefined && armed === written && !latest.active && !stopped)
+				letGo();
+		});
 	};
 	const resumeDue = () => {
 		if (stopped || !harness) return;
-		harness.resume();
 		clearTimer();
-		scheduledAt = undefined;
+		// RivetKit removes a wake before it runs it, so one that came due is gone.
+		if (armed && armed.at <= Date.now()) armed = undefined;
+		harness.resume();
 		latest = harness.wake();
 		apply();
 	};
 	const stop = () => {
 		stopped = true;
 		clearTimer();
-		// A scheduled recovery wake stays, so work a stop cut off resumes.
-		stopRecovery();
+		// The wake stays, so work a stop cut off resumes.
 		letGo();
 	};
 	// Keep-awake only blocks idle sleep. Once shutdown starts it would only delay it.
-	c.abortSignal.addEventListener("abort", stop, { once: true });
+	// A reopen during a drain gets a signal that is already aborted.
+	if (c.abortSignal.aborted) stop();
+	else c.abortSignal.addEventListener("abort", stop, { once: true });
 	return {
 		onWake: (wake) => {
 			latest = wake;
@@ -699,15 +704,21 @@ function wakeActor(
 			return () => listeners.delete(listener);
 		},
 		resumeDue,
+		settle: async () => {
+			// Pi reports a change in a microtask after its commit, so read the value now.
+			if (stopped || !harness || !isUsable(harness)) return;
+			latest = harness.wake();
+			apply();
+			await armed?.id;
+		},
 		stop: () => {
 			c.abortSignal.removeEventListener("abort", stop);
 			stop();
-			// Closing with no work left, such as after a drain, needs no recovery wake.
-			// A harness that failed refuses `wake()`; its reopen arms the wake again.
-			if (harness && isUsable(harness) && !harness.wake().active) {
-				cancelRecoveryWakes(recoveryWakes);
-				recoveryWakes = [];
-			}
+			// Closing with nothing left to wake for, such as after a drain, needs no wake.
+			// A failed harness refuses `wake()`; its wake stays, and the reopen arms a new one.
+			if (!harness || !isUsable(harness)) return;
+			const { active, at } = harness.wake();
+			if (!active && at === undefined && armed) rearm(undefined);
 		},
 	};
 }

@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { ConversationId, SubmissionId } from "@earendil-works/pi-durable";
@@ -10,13 +10,13 @@ const CHILD_SCRIPT = fileURLToPath(
 	new URL("./helpers/crash-child.ts", import.meta.url),
 );
 
-const { registry, toolRuns, answers } = crashAgent({ inChild: false });
+const { registry, events, answers } = crashAgent({ inChild: false });
 
 type Started = { conversationId: ConversationId; submissionId: SubmissionId };
 
 /**
  * Runs the agent in its own process against this file's engine data, and
- * kills that process with its engine once the run's tool is running.
+ * kills that process and its engine once the run's tool is running.
  */
 async function startThenCrash(key: string): Promise<Started> {
 	const child: ChildProcess = spawn(
@@ -44,11 +44,38 @@ async function startThenCrash(key: string): Promise<Started> {
 			);
 		});
 	} finally {
-		if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+		if (child.pid !== undefined) await killWithEngine(child.pid);
 	}
 }
 
-test("an actor killed during a run resumes it by itself, with no call to the actor", async (c) => {
+/**
+ * Kills the child and the engine it started, and waits until the engine is
+ * gone. The engine runs in its own process group, and if it is still up,
+ * `setupTest` reuses it while it shuts down.
+ */
+async function killWithEngine(pid: number): Promise<void> {
+	const children = spawnSync("pgrep", ["-P", String(pid)], { encoding: "utf8" })
+		.stdout.split("\n")
+		.filter(Boolean)
+		.map(Number);
+	for (const target of [-pid, ...children]) {
+		try {
+			process.kill(target, "SIGKILL");
+		} catch {
+			// It already exited.
+		}
+	}
+	await vi.waitFor(
+		() => {
+			for (const engine of children) {
+				expect(() => process.kill(engine, 0)).toThrow();
+			}
+		},
+		{ timeout: 10_000, interval: 50 },
+	);
+}
+
+test("an actor killed during a run resumes it by itself with no call, then stays asleep", async (c) => {
 	const key = `crash-${randomUUID()}`;
 	const { conversationId, submissionId } = await startThenCrash(key);
 
@@ -56,13 +83,17 @@ test("an actor killed during a run resumes it by itself, with no call to the act
 	const { client } = await setupTest(c, registry);
 	await vi.waitFor(
 		() => {
-			expect(toolRuns).toEqual([key]);
+			expect(events).toEqual(["wake", "tool", "answer", "sleep"]);
 			expect(answers.map((answer) => answer.text)).toEqual([
 				"the tool finished",
 			]);
 		},
 		{ timeout: 90_000, interval: 250 },
 	);
+	// Longer than the recovery wake runs ahead of active work: a wake left
+	// scheduled after the run would wake the idle actor in this time.
+	await new Promise((resolve) => setTimeout(resolve, 20_000));
+	expect(events).toEqual(["wake", "tool", "answer", "sleep"]);
 
 	const handle = client.agent.getOrCreate([key]);
 	expect(await handle.submission.wait(submissionId)).toMatchObject({

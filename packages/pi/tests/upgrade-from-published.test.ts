@@ -96,7 +96,7 @@ describe("an actor seeded on the published 0.5.5", () => {
 		["tool", "tool-crash", "the tool finished"],
 		["stream", "stream-crash", "the story, told again"],
 		["backoff", "backoff", "recovered after the upgrade"],
-	] as const)("the run that was in flight (%s) finishes after the upgrade, and a new prompt works", async ([
+	] as const)("the run that was in flight (%s) finishes on the first call after the upgrade, and a new prompt works", async ([
 		name,
 		key,
 		answer,
@@ -105,6 +105,7 @@ describe("an actor seeded on the published 0.5.5", () => {
 		const handle = client.agent.getOrCreate([key]);
 		const { conversationId, submissionId } = seeded[name] as Seeded;
 
+		// 0.5.5 wrote no recovery wake, so this call is what wakes the actor.
 		expect(await handle.submission.wait(submissionId)).toMatchObject({
 			status: "done",
 		});

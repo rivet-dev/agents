@@ -438,7 +438,7 @@ afterAll(async () => {
 });
 
 describe("pi actor", () => {
-	test("a run stopped at the end of the grace period resumes on wake: safe tools rerun, unsafe tools report the interruption", async (c) => {
+	test("a run stopped at the end of the grace period resumes by itself: safe tools rerun, unsafe tools report the interruption", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["crash", randomUUID()];
 		const handle = client.agent.getOrCreate(key);
@@ -453,9 +453,13 @@ describe("pi actor", () => {
 		await handle.nap();
 		await sleeps.waitFor(key, 1);
 
+		// Call nothing: a call would wake the actor and resume the run itself.
+		await vi.waitFor(() => expect(toolRuns).toEqual({ safe: 2, unsafe: 1 }), {
+			timeout: 45_000,
+			interval: 250,
+		});
 		const settled = await handle.submission.wait(submission.id);
 		expect(settled.status).toBe("done");
-		expect(toolRuns).toEqual({ safe: 2, unsafe: 1 });
 		const { messages } = await handle.conversation.context(root.id);
 		const results = messages.filter((message) => message.role === "toolResult");
 		expect(
@@ -475,7 +479,7 @@ describe("pi actor", () => {
 				),
 		);
 		expect(answers).toHaveLength(1);
-	});
+	}, 90_000);
 
 	test("an app action writes a document through c.pi, and clients read it by kind after sleep", async (c) => {
 		const { client } = await setupTest(c, registry);
