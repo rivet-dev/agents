@@ -48,6 +48,12 @@ const VERSION_REFERENCE_FILES = [
 ];
 
 export async function updateVersion(opts: ReleaseOpts) {
+	// A release without Sandbox Agent bumps only the root workspace packages.
+	if (opts.excludeSandboxAgent) {
+		await bumpPackageJsons(opts, ["packages/*/package.json"]);
+		return;
+	}
+
 	// 1. Read current version from Cargo.toml before overwriting
 	const cargoTomlPath = join(opts.sandboxAgentRoot, "Cargo.toml");
 	let cargoContent = await fs.readFile(cargoTomlPath, "utf-8");
@@ -93,15 +99,23 @@ export async function updateVersion(opts: ReleaseOpts) {
 
 	await fs.writeFile(cargoTomlPath, cargoContent);
 
-	// 2. Discover and update every non-private package.json on the release line:
-	// Sandbox Agent SDKs and the root workspace packages.
-	const packageJsonPaths = await glob(
-		["sandbox-agent/sdks/**/package.json", "packages/*/package.json"],
-		{
-			cwd: opts.repoRoot,
-			ignore: ["**/node_modules/**"],
-		},
-	);
+	// 2. Update every non-private package.json on the release line: Sandbox
+	// Agent SDKs and the root workspace packages.
+	await bumpPackageJsons(opts, [
+		"sandbox-agent/sdks/**/package.json",
+		"packages/*/package.json",
+	]);
+
+	// 3. Update version references across docs, examples, and code
+	await updateVersionReferences(opts, oldVersion, oldMinorChannel);
+}
+
+/** Sets `version` in every non-private package.json that `patterns` match under the repository root. */
+async function bumpPackageJsons(opts: ReleaseOpts, patterns: string[]) {
+	const packageJsonPaths = await glob(patterns, {
+		cwd: opts.repoRoot,
+		ignore: ["**/node_modules/**"],
+	});
 
 	// Filter to non-private packages only
 	const toUpdate: string[] = [];
@@ -131,9 +145,6 @@ export async function updateVersion(opts: ReleaseOpts) {
 		);
 		await fs.writeFile(fullPath, updated);
 	}
-
-	// 3. Update version references across docs, examples, and code
-	await updateVersionReferences(opts, oldVersion, oldMinorChannel);
 }
 
 async function updateVersionReferences(

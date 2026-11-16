@@ -17,8 +17,9 @@ This repository holds Rivet's agent projects. Project-specific rules live next t
 
 ## Releases
 
-- Everything in the repository releases together on one version line, tagged `v<version>`: Sandbox Agent crates, binaries, Docker images, and npm packages, plus every non-private package in `packages/`. Do not give a package its own version.
+- By default, everything in the repository releases together on one version line, tagged `v<version>`: Sandbox Agent crates, binaries, Docker images, and npm packages, plus every non-private package in `packages/`. Do not give a package its own version.
 - Run `just release` from the repository root. The script is `scripts/release/main.ts` and the CI workflow is `.github/workflows/release.yaml`.
+- `just release --exclude-sandbox-agent` releases only the packages in `packages/`, for changes that don't touch Sandbox Agent. It builds no Rust binaries or Docker images and publishes no crates or Sandbox Agent npm packages, so Sandbox Agent keeps its last version. The release is still tagged `v<version>`.
 - `ReleaseOpts.repoRoot` is the repository root and `ReleaseOpts.sandboxAgentRoot` is `sandbox-agent/`. Resolve Sandbox Agent paths (Cargo, `sdks/`, Docker, docs) from `sandboxAgentRoot`.
 
 ## Docs Sync
