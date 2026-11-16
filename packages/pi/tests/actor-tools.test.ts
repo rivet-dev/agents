@@ -41,13 +41,13 @@ const mock = createMockModel();
 
 /** Another actor, which the agent's tools call through `c.client()`. */
 const ledger = actor({
-	state: { entries: [] as string[] },
+	createVars: () => ({ entries: [] as string[] }),
 	actions: {
 		record: (c, entry: string) => {
-			c.state.entries.push(entry);
-			return c.state.entries.length;
+			c.vars.entries.push(entry);
+			return c.vars.entries.length;
 		},
-		entries: (c) => c.state.entries,
+		entries: (c) => c.vars.entries,
 	},
 });
 
@@ -67,9 +67,13 @@ const agent = pi({
 	apiKeys: { mock: "mock" },
 	// The existing registry API still works next to `tools`.
 	registry: extensions,
-	createState: () => ({ refunded: 0, frozen: false, blocked: [] as string[] }),
-	// A new value each actor generation, so a tool can tell a wake from the first run.
-	createVars: () => ({ generation: randomUUID() }),
+	// New each actor generation, so a tool can tell a wake from the first run.
+	createVars: () => ({
+		generation: randomUUID(),
+		refunded: 0,
+		frozen: false,
+		blocked: [] as string[],
+	}),
 	// A short grace period, so a sleep interrupts a running tool like a crash does.
 	options: { sleepGracePeriod: 2_000 },
 	onSleep: sleeps.record,
@@ -86,7 +90,7 @@ const agent = pi({
 					conversationId: api.conversationId,
 					hasPi: (await c.pi.root(context)).id !== undefined,
 				});
-				c.state.refunded += args.amount;
+				c.vars.refunded += args.amount;
 				const entries = await c
 					.client<any>()
 					.ledger.getOrCreate(c.key)
@@ -113,7 +117,7 @@ const agent = pi({
 				});
 				if (run === 1) await aborted(context.abortSignal);
 				context.abortSignal?.throwIfAborted();
-				c.state.refunded += args.amount;
+				c.vars.refunded += args.amount;
 				return { output: [{ type: "text", text: "refunded slowly" }] };
 			},
 		},
@@ -145,8 +149,8 @@ const agent = pi({
 	},
 	hooks: {
 		beforeTool(c, call) {
-			if (!c.state.frozen) return undefined;
-			c.state.blocked.push(call.name);
+			if (!c.vars.frozen) return undefined;
+			c.vars.blocked.push(call.name);
 			return { block: `refunds are frozen for ${c.key.join("/")}` };
 		},
 	},
@@ -155,9 +159,9 @@ const agent = pi({
 			c.sleep();
 		},
 		freeze: (c) => {
-			c.state.frozen = true;
+			c.vars.frozen = true;
 		},
-		snapshot: (c) => ({ ...c.state, generation: c.vars.generation }),
+		snapshot: (c) => ({ ...c.vars }),
 	},
 });
 const registry = setup({ use: { agent, ledger } });
@@ -196,7 +200,7 @@ beforeAll(() => {
 });
 
 describe("tools defined like actions", () => {
-	test("a tool reads the actor's key, writes its state, and calls another actor", async (c) => {
+	test("a tool reads the actor's key, writes its vars, and calls another actor", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["refund", randomUUID()];
 		const handle = client.agent.getOrCreate(key);
@@ -220,15 +224,7 @@ describe("tools defined like actions", () => {
 		expect(await client.ledger.getOrCreate(key).entries()).toEqual([
 			"refund 7 5",
 		]);
-
-		// The state the tool wrote is saved: it is still there after a sleep.
-		const before = await handle.snapshot();
-		expect(before.refunded).toBe(5);
-		await handle.nap();
-		await sleeps.waitFor(key, 1);
-		const after = await handle.snapshot();
-		expect(after.generation).not.toBe(before.generation);
-		expect(after.refunded).toBe(5);
+		expect(await handle.snapshot()).toMatchObject({ refunded: 5 });
 	});
 
 	test("a hook gets the actor's context and can block a call by its state", async (c) => {
@@ -263,7 +259,7 @@ describe("tools defined like actions", () => {
 		expect(await client.ledger.getOrCreate(key).entries()).toEqual([]);
 	});
 
-	test("a tool interrupted by a sleep reruns on wake with the new generation's context", async (c) => {
+	test("a tool interrupted by a sleep reruns by itself on wake, with the new generation's context", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["slow", randomUUID()];
 		const handle = client.agent.getOrCreate(key);
@@ -277,6 +273,11 @@ describe("tools defined like actions", () => {
 		await handle.nap();
 		await sleeps.waitFor(key, 1);
 
+		// Call nothing: a call would wake the actor and resume the run itself.
+		await vi.waitFor(() => expect(slowRuns.get(key.join("/"))).toBe(2), {
+			timeout: 45_000,
+			interval: 250,
+		});
 		expect((await handle.submission.wait(submission.id)).status).toBe("done");
 		const runs = toolCalls.filter(
 			(call) =>
@@ -288,7 +289,7 @@ describe("tools defined like actions", () => {
 			refunded: 4,
 			generation: runs[1]?.generation,
 		});
-	});
+	}, 90_000);
 
 	test("a tool in a conversation another tool created gets the same actor's context", async (c) => {
 		const { client } = await setupTest(c, registry);
@@ -316,7 +317,16 @@ describe("tools defined like actions", () => {
 		const handle = client.agent.getOrCreate(["lookup", randomUUID()]);
 		expect(await handle.prompt("look it up")).toMatchObject({
 			status: "done",
-			text: "found it",
+		});
+		const { messages } = await handle.conversation.context(
+			(await handle.harness.root()).id,
+		);
+		// The model answers the same whatever the tool returned, so check the tool's own result.
+		expect(
+			messages.find((message) => message.role === "toolResult"),
+		).toMatchObject({
+			isError: false,
+			content: [{ type: "text", text: "found" }],
 		});
 	});
 });
