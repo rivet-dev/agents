@@ -1,6 +1,7 @@
-import type { Harness } from "@earendil-works/pi-durable";
+import { createRegistry, type Harness } from "@earendil-works/pi-durable";
 import {
 	type ActionContext,
+	type ActorContext,
 	type ActorDefinition,
 	actor,
 	type EventSchemaConfig,
@@ -16,20 +17,24 @@ import {
 	splitConfig,
 	wrapActions,
 } from "./actor-config.js";
+import { actorExtension, type PiHooks, type PiTool } from "./actor-tools.js";
 import type {
 	PiActorDefinition,
 	UserActions,
 	UserActorConfig,
 } from "./actor-types.js";
+import { withExtension } from "./registry.js";
 import {
 	closeHarness,
 	createPiRuntime,
 	openOnWake,
 	PI_RUNTIME,
 	type PiContext,
+	type PiDatabaseProvider,
 	type PiOptions,
 	piRuntime,
 	piStopping,
+	type ResolvedPiOptions,
 	withPiAccess,
 	withUnavailablePi,
 } from "./runtime.js";
@@ -114,7 +119,42 @@ export type PiUserActions<
 	PiAccess
 >;
 
-/** Ordinary actor config plus the Pi Durable options. The app's actions and lifecycle hooks get `c.pi`. */
+/**
+ * The `c` of the app's Pi `tools` and `hooks`: the actor's
+ * context with `c.pi`. They run in the background, with no connection.
+ */
+export type PiToolContext<
+	TState,
+	TConnParams,
+	TConnState,
+	TVars,
+	TInput,
+	TEvents extends EventSchemaConfig,
+	TQueues extends QueueSchemaConfig,
+> = ActorContext<
+	TState,
+	TConnParams,
+	TConnState,
+	TVars,
+	TInput,
+	PiDatabaseProvider,
+	TEvents,
+	TQueues
+> &
+	PiAccess;
+
+/** The Pi options with `tools` and `hooks` typed to get the actor's context. */
+type PiConfigOptions<TContext, TTools> = Omit<PiOptions, "tools" | "hooks"> & {
+	/**
+	 * Tools defined like actions, by name. `execute(c, args, api, context)`
+	 * gets the actor's context first, and `args` typed from `parameters`.
+	 */
+	tools?: { [K in keyof TTools]: PiTool<TContext, TTools[K] & object> };
+	/** Pi Durable's hooks with the actor's context first, such as `beforeTool(c, call, api, context)`. */
+	hooks?: PiHooks<TContext>;
+};
+
+/** Ordinary actor config plus the Pi Durable options. The app's actions, lifecycle hooks, Pi tools, and Pi hooks get `c.pi`. */
 export type PiActorConfigInput<
 	TState = undefined,
 	TConnParams = undefined,
@@ -124,6 +164,7 @@ export type PiActorConfigInput<
 	TEvents extends EventSchemaConfig = Record<never, never>,
 	TQueues extends QueueSchemaConfig = Record<never, never>,
 	TUserActions extends Record<string, unknown> = Record<never, never>,
+	TTools = Record<never, never>,
 > = UserActorConfig<
 	TState,
 	TConnParams,
@@ -133,12 +174,25 @@ export type PiActorConfigInput<
 	TEvents,
 	TQueues,
 	TUserActions,
-	PiOptions,
+	PiConfigOptions<
+		PiToolContext<
+			TState,
+			TConnParams,
+			TConnState,
+			TVars,
+			TInput,
+			TEvents,
+			TQueues
+		>,
+		TTools
+	>,
 	PiAccess
 >;
 
 const piOptionKeys = [
 	"registry",
+	"tools",
+	"hooks",
 	"models",
 	"settings",
 	"env",
@@ -162,7 +216,8 @@ const piOptionKeys = [
  * Pi Durable stores conversations, tasks, and documents in the actor's SQLite
  * database. Runs survive sleep, upgrades, and crashes, and resume when the
  * actor wakes. The actions match Pi Durable's API one to one. The app's own
- * actions and lifecycle hooks get the harness as `c.pi`.
+ * actions and lifecycle hooks get the harness as `c.pi`. Its `tools` and
+ * `hooks` are defined like actions and get the actor's context first.
  */
 export function pi<
 	TState,
@@ -173,6 +228,7 @@ export function pi<
 	TEvents extends EventSchemaConfig = Record<never, never>,
 	TQueues extends QueueSchemaConfig = Record<never, never>,
 	TUserActions extends Record<string, unknown> = Record<never, never>,
+	TTools = Record<never, never>,
 >(
 	config: PiActorConfigInput<
 		TState,
@@ -182,7 +238,8 @@ export function pi<
 		TInput,
 		TEvents,
 		TQueues,
-		TUserActions
+		TUserActions,
+		TTools
 	>,
 ): PiActorDefinition<
 	TState,
@@ -196,15 +253,15 @@ export function pi<
 	PiEvents,
 	PiActions
 > {
-	const { actorConfig, options: piOptions } = splitConfig<PiOptions>(
-		config,
-		piOptionKeys,
-	);
-	if (!piOptions.registry) {
-		throw new Error(
-			"pi() needs a registry; pass createRegistry() from @earendil-works/pi-durable",
-		);
-	}
+	const { actorConfig, options } = splitConfig<PiOptions>(config, piOptionKeys);
+	const registry = options.registry ?? createRegistry();
+	const extension = actorExtension(options.tools, options.hooks);
+	const piOptions: ResolvedPiOptions = {
+		...options,
+		registry,
+		...(extension &&
+			withExtension({ registry, settings: options.settings }, extension)),
+	};
 	if (actorConfig.db !== undefined) {
 		throw new Error("pi() owns the actor database; remove the db option");
 	}
