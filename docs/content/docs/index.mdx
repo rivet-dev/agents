@@ -304,7 +304,7 @@ Your own actions and lifecycle hooks get Pi Durable's `Harness` as `c.pi`. In `o
 
 ### Tools and hooks with the Actor's context
 
-Define tools in `tools` and hooks in `hooks`, keyed by name, the way you define actions. Each gets the Actor's context as `c` first, so a tool can read the agent's key, read and write its state, use `c.pi`, and call other Actors:
+Define tools in `tools` and hooks in `hooks`, keyed by name, the way you define actions. Each gets the Actor's context as `c` first, so a tool can read the agent's key, use its database and `c.pi`, and call other Actors:
 
 <CodeSnippet file="examples/docs/pi/actor-tools.ts" title="server.ts" />
 
