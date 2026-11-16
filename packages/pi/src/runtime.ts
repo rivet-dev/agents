@@ -1,5 +1,8 @@
 import type { Context } from "@earendil-works/chord";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import {
+	BACKGROUND_CONTEXT,
+	withContextValue,
+} from "@earendil-works/chord/context";
 import type { Models, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import {
 	AgentDoc,
@@ -19,6 +22,7 @@ import { sandboxEnv } from "@rivet-dev/sandbox-adapter/pi";
 import { type ActorContext, UserError } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
 import { actorSqlite } from "./actor-sqlite.js";
+import { PI_ACTOR_CONTEXT, type PiHooks, type PiTool } from "./actor-tools.js";
 import {
 	ANSWER_EXTENSION,
 	type PiOnAnswer,
@@ -75,8 +79,22 @@ export interface ConnectedSandbox {
  * Durable options keep the names and types of `HarnessOptions`.
  */
 export interface PiOptions extends PiModelOptions {
-	/** Pi Durable's extension registry: tools, hooks, sections, tasks, and documents. */
-	registry: HarnessOptions["registry"];
+	/**
+	 * Pi Durable's extension registry: tools, hooks, sections, tasks, and
+	 * documents. Optional when `tools` and `hooks` are all the actor needs.
+	 */
+	registry?: HarnessOptions["registry"];
+	/**
+	 * Tools defined like actions, by name. `execute(c, args, api, context)`
+	 * gets the actor's context first. They are installed as the extension
+	 * `rivet-pi-actor`, which conversations that use the default selection get.
+	 */
+	tools?: Record<string, PiTool<any>>;
+	/**
+	 * Pi Durable's hooks with the actor's context first, such as
+	 * `beforeTool(c, call, api, context)`. Installed with `tools`.
+	 */
+	hooks?: PiHooks<any>;
 	/** pi-ai model access. Without it, the actor builds it from `model`, `providers`, `apiKeys`, and `credentials`. */
 	models?: Models;
 	settings?: HarnessSettings;
@@ -106,6 +124,11 @@ export interface PiOptions extends PiModelOptions {
 	 */
 	onAnswer?: PiOnAnswer;
 }
+
+/** `PiOptions` as `pi()` resolved them: the registry includes the app's `tools` and `hooks`. */
+export type ResolvedPiOptions = PiOptions & {
+	registry: HarnessOptions["registry"];
+};
 
 /** The internal action a scheduled wake calls. */
 const WAKE_ACTION = "pi.wake";
@@ -177,7 +200,7 @@ export function piRuntime(c: PiContext): PiRuntime {
  */
 export async function openOnWake(
 	c: PiContext,
-	options: PiOptions,
+	options: ResolvedPiOptions,
 ): Promise<Harness> {
 	piRuntime(c).actor = c;
 	return ensureHarness(c, options, { resume: false });
@@ -186,7 +209,7 @@ export async function openOnWake(
 /** Returns the actor's Pi Durable harness, opening it from SQLite on first use. */
 async function ensureHarness(
 	c: PiContext,
-	options: PiOptions,
+	options: ResolvedPiOptions,
 	open: { resume: boolean } = { resume: true },
 ): Promise<Harness> {
 	const runtime = piRuntime(c);
@@ -218,7 +241,7 @@ async function ensureHarness(
  */
 export async function withHarness<T>(
 	c: PiContext,
-	options: PiOptions,
+	options: ResolvedPiOptions,
 	run: (harness: Harness, context: Context, waiting: Waiting) => Promise<T>,
 ): Promise<T> {
 	const runtime = piRuntime(c);
@@ -278,7 +301,7 @@ function countCall(runtime: PiRuntime): () => void {
  */
 export async function withPiAccess<T>(
 	c: PiContext,
-	options: PiOptions,
+	options: ResolvedPiOptions,
 	body: () => T | Promise<T>,
 	{ opensHarness = true }: { opensHarness?: boolean } = {},
 ): Promise<T> {
@@ -332,7 +355,7 @@ function piClosed(status: Exclude<PiStatus, "open">) {
 async function openHarness(
 	c: PiContext,
 	runtime: PiRuntime,
-	options: PiOptions,
+	options: ResolvedPiOptions,
 	open: { resume: boolean } = { resume: true },
 ): Promise<OpenHarness> {
 	const storage = await SqliteStorage.open(
@@ -383,8 +406,12 @@ async function openHarness(
 				options.onReport?.(report);
 			},
 		},
-		BACKGROUND_CONTEXT,
+		// Pi derives the context of every task, tool, and hook from this one, so
+		// the app's `tools` and `hooks` read the actor's context from it.
+		withContextValue(PI_ACTOR_CONTEXT, c, BACKGROUND_CONTEXT),
 	);
+	// Tools, hooks, and `onAnswer` get this context, so `c.pi` is the open harness, also after a reopen.
+	Object.defineProperty(c, "pi", { value: harness, configurable: true });
 	wake.attach(harness);
 	reportBlockedTasks(c, await harness.inspect(BACKGROUND_CONTEXT));
 	if (open.resume) harness.resume();
@@ -400,7 +427,7 @@ async function openHarness(
 
 /** App documents by `kind`, for clients that name a document. */
 export function documentsByKind(
-	options: PiOptions,
+	options: ResolvedPiOptions,
 ): ReadonlyMap<string, ConversationDocToken<any>> {
 	return new Map(
 		(options.documents ?? []).map((doc) => [doc.definition.kind, doc]),
@@ -421,7 +448,7 @@ function isUsable(harness: Harness): boolean {
 async function recoverHarness(
 	c: PiContext,
 	runtime: PiRuntime,
-	options: PiOptions,
+	options: ResolvedPiOptions,
 ): Promise<void> {
 	const current = runtime.harness;
 	if (!current || runtime.status !== "open") return;
@@ -465,7 +492,10 @@ async function closeOpenHarness(
 	await open.harness.close(BACKGROUND_CONTEXT);
 }
 
-async function createModels(c: PiContext, options: PiOptions): Promise<Models> {
+async function createModels(
+	c: PiContext,
+	options: ResolvedPiOptions,
+): Promise<Models> {
 	const credentials = options.credentials
 		? new SourceCredentialStore(options.credentials(c))
 		: emptyCredentialStore;
@@ -490,7 +520,7 @@ export function parseModelRef(name: string): ModelRef {
  * `conversationCreated` runs after this.
  */
 function startingAgent(
-	options: PiOptions,
+	options: ResolvedPiOptions,
 ): HarnessOptions["conversationCreated"] {
 	const model =
 		options.model === undefined ? undefined : parseModelRef(options.model);
@@ -780,7 +810,7 @@ async function drain(
  */
 export async function closeHarness(
 	c: PiContext,
-	options: PiOptions,
+	options: ResolvedPiOptions,
 	stop: PiStop,
 ): Promise<void> {
 	const runtime = piRuntime(c);

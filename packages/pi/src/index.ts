@@ -12,9 +12,11 @@ export {
 	type PiActionContext,
 	type PiActorConfigInput,
 	type PiEvents,
+	type PiToolContext,
 	type PiUserActions,
 	pi,
 } from "./actor.js";
+export type { PiHooks, PiTool } from "./actor-tools.js";
 export type { PiAnswer, PiOnAnswer } from "./answers.js";
 export type {
 	PiCredentialInfo,

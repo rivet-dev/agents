@@ -24,8 +24,8 @@ import { assertModelAllowed } from "./models.js";
 import type { PiContext } from "./runtime.js";
 import {
 	documentsByKind,
-	type PiOptions,
 	piRuntime,
+	type ResolvedPiOptions,
 	resumeDueSleeps,
 	type Waiting,
 	withHarness,
@@ -117,7 +117,7 @@ export type PiActions = ReturnType<typeof createPiActions>;
  * the same names. Ids replace objects, and conversation methods take the
  * conversation id first. `prompt` is the one convenience action.
  */
-export function createPiActions(options: PiOptions) {
+export function createPiActions(options: ResolvedPiOptions) {
 	const documents = documentsByKind(options);
 	const run = <T>(
 		c: PiContext,
@@ -546,7 +546,7 @@ async function requireTask(
  * is rejected.
  */
 function resolveAgentChange(
-	options: PiOptions,
+	options: ResolvedPiOptions,
 	change: PiAgentChange,
 ): AgentChange {
 	const snapshot = options.registry.snapshot();
