@@ -2,14 +2,21 @@ import type {
 	ActionContext,
 	ActorConfigInput,
 	ActorDefinition,
+	BeforeActionResponseContext,
 	Conn,
 	ConnectContext,
 	DestroyContext,
 	DisconnectContext,
 	EventSchemaConfig,
 	QueueSchemaConfig,
+	RequestContext,
+	RunConfig,
+	RunContext,
 	SleepContext,
+	StateChangeContext,
+	UniversalWebSocket,
 	WakeContext,
+	WebSocketContext,
 } from "rivetkit";
 import type { PiDatabaseProvider } from "./runtime.js";
 
@@ -70,6 +77,75 @@ export interface UserActions<
 				TAccess
 		  >;
 }
+
+/** The run handler, which gets `c.pi` through `TAccess`. */
+type UserRunHandler<
+	TState,
+	TConnParams,
+	TConnState,
+	TVars,
+	TInput,
+	TEvents extends EventSchemaConfig,
+	TQueues extends QueueSchemaConfig,
+	TAccess,
+> = (
+	c: RunContext<
+		TState,
+		TConnParams,
+		TConnState,
+		TVars,
+		TInput,
+		PiDatabaseProvider,
+		TEvents,
+		TQueues
+	> &
+		TAccess,
+) => void | Promise<void>;
+
+type UserRun<
+	TState,
+	TConnParams,
+	TConnState,
+	TVars,
+	TInput,
+	TEvents extends EventSchemaConfig,
+	TQueues extends QueueSchemaConfig,
+	TAccess,
+> =
+	| UserRunHandler<
+			TState,
+			TConnParams,
+			TConnState,
+			TVars,
+			TInput,
+			TEvents,
+			TQueues,
+			TAccess
+	  >
+	| (Omit<
+			RunConfig<
+				TState,
+				TConnParams,
+				TConnState,
+				TVars,
+				TInput,
+				PiDatabaseProvider,
+				TEvents,
+				TQueues
+			>,
+			"run"
+	  > & {
+			run: UserRunHandler<
+				TState,
+				TConnParams,
+				TConnState,
+				TVars,
+				TInput,
+				TEvents,
+				TQueues,
+				TAccess
+			>;
+	  });
 
 /** Lifecycle hooks that get `c.pi` through `TAccess`. */
 interface UserHooks<
@@ -166,6 +242,76 @@ interface UserHooks<
 			TEvents,
 			TQueues
 		>,
+	) => void | Promise<void>;
+	/** A function, or a `RunConfig` whose `run` gets `c.pi`. */
+	run?: UserRun<
+		TState,
+		TConnParams,
+		TConnState,
+		TVars,
+		TInput,
+		TEvents,
+		TQueues,
+		TAccess
+	>;
+	/** `c.pi` is set when Pi Durable is open; it is synchronous, so it never opens Pi Durable. */
+	onStateChange?: (
+		c: StateChangeContext<
+			TState,
+			TConnParams,
+			TConnState,
+			TVars,
+			TInput,
+			PiDatabaseProvider,
+			TEvents,
+			TQueues
+		> &
+			TAccess,
+		newState: TState,
+	) => void;
+	onBeforeActionResponse?: <Out>(
+		c: BeforeActionResponseContext<
+			TState,
+			TConnParams,
+			TConnState,
+			TVars,
+			TInput,
+			PiDatabaseProvider,
+			TEvents,
+			TQueues
+		> &
+			TAccess,
+		name: string,
+		args: unknown[],
+		output: Out,
+	) => Out | Promise<Out>;
+	onRequest?: (
+		c: RequestContext<
+			TState,
+			TConnParams,
+			TConnState,
+			TVars,
+			TInput,
+			PiDatabaseProvider,
+			TEvents,
+			TQueues
+		> &
+			TAccess,
+		request: Request,
+	) => Response | Promise<Response>;
+	onWebSocket?: (
+		c: WebSocketContext<
+			TState,
+			TConnParams,
+			TConnState,
+			TVars,
+			TInput,
+			PiDatabaseProvider,
+			TEvents,
+			TQueues
+		> &
+			TAccess,
+		websocket: UniversalWebSocket,
 	) => void | Promise<void>;
 }
 

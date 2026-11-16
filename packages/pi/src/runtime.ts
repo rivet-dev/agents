@@ -21,6 +21,7 @@ import type { Sandbox, SandboxProvider } from "@rivet-dev/sandbox-adapter";
 import { sandboxEnv } from "@rivet-dev/sandbox-adapter/pi";
 import { type ActorContext, UserError } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
+import type { PiAccess } from "./actor.js";
 import { actorSqlite } from "./actor-sqlite.js";
 import { PI_ACTOR_CONTEXT, type PiHooks, type PiTool } from "./actor-tools.js";
 import {
@@ -339,7 +340,7 @@ export async function withPiAccess<T>(
 
 function harnessNotOpen() {
 	return new UserError(
-		"Pi Durable is not open in this actor generation, so this shutdown hook cannot use c.pi.",
+		"Pi Durable is not open in this actor generation, so this hook cannot use c.pi.",
 	);
 }
 
@@ -368,14 +369,20 @@ async function openHarness(
 	);
 	const now = options.now ?? Date.now;
 	const { registry, settings } = options.onAnswer
-		? withAnswerHook(options, c, options.onAnswer, (error) => {
-				c.log.error({ msg: "pi onAnswer failed", error: String(error) });
-				options.onReport?.({
-					kind: "extension_error",
-					extension: ANSWER_EXTENSION,
-					error,
-				});
-			})
+		? // `c.pi` is set once the harness opens, before any answer.
+			withAnswerHook(
+				options,
+				c as PiContext & PiAccess,
+				options.onAnswer,
+				(error) => {
+					c.log.error({ msg: "pi onAnswer failed", error: String(error) });
+					options.onReport?.({
+						kind: "extension_error",
+						extension: ANSWER_EXTENSION,
+						error,
+					});
+				},
+			)
 		: options;
 	const wake = wakeActor(c, now);
 	const harness = await Harness.open(
@@ -853,6 +860,28 @@ export async function resumeDueSleeps(c: PiContext): Promise<void> {
 /** What a shutdown hook gets from `c.pi` once the actor has started to stop. */
 export function piStopping() {
 	return new UserError("Pi Durable is closed because the actor is stopping.");
+}
+
+/**
+ * Runs a synchronous hook with `c.pi` set to the harness when Pi Durable is
+ * already open in this generation. It never opens Pi Durable, so otherwise
+ * reading `c.pi` throws why it is not open.
+ */
+export function withOpenPi<T>(c: PiContext, body: () => T): T {
+	const runtime = (
+		c.vars as Record<symbol, PiRuntime | undefined> | undefined
+	)?.[PI_RUNTIME];
+	Object.defineProperty(c, "pi", {
+		get: () => {
+			if (runtime && runtime.status !== "open") throw piClosed(runtime.status);
+			// The context Pi Durable opened with holds the open harness as `pi`, or the error that kept it from opening.
+			const harness: Harness | undefined = runtime?.actor?.pi;
+			if (!harness) throw harnessNotOpen();
+			return harness;
+		},
+		configurable: true,
+	});
+	return body();
 }
 
 /** Runs `body` with a `c.pi` that throws `error` when read. */
