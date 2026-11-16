@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { obj } from "@earendil-works/pi-schema";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { expect, test, vi } from "vitest";
 import { pi } from "../src/index.js";
+import { createMockModel, toolCall } from "./helpers/mock-model.js";
 
 /** What each hook read from `c.pi`, by actor key, in this process where the actors run. */
 const seen = new Map<string, Record<string, string>>();
@@ -38,7 +41,40 @@ const agent = pi({
 		},
 	},
 });
-const registry = setup({ use: { agent } });
+
+const mock = createMockModel();
+mock.reply(
+	"count twice",
+	toolCall("count", {}),
+	toolCall("count", {}),
+	fauxAssistantMessage("counted"),
+);
+
+/** Its tool writes state, so `onStateChange` runs with the context tools get. */
+const counter = pi({
+	model: "mock/mock-model",
+	providers: { mock: mock.providerConfig },
+	apiKeys: { mock: "mock" },
+	state: { count: 0 },
+	onStateChange: (c, state) => {
+		record(c.key, "onStateChange", `${state.count} ${c.pi.wake().active}`);
+	},
+	tools: {
+		count: {
+			description: "Counts, then reads c.pi",
+			parameters: obj({}),
+			replay: "safe",
+			async execute(c, _args, _api, context) {
+				c.state.count += 1;
+				const root = await c.pi.root(context);
+				return {
+					output: [{ type: "text", text: `${c.state.count} ${root.id}` }],
+				};
+			},
+		},
+	},
+});
+const registry = setup({ use: { agent, counter } });
 
 test("run, onStateChange, onBeforeActionResponse, onRequest, and onWebSocket get c.pi", async (c) => {
 	const { client } = await setupTest(c, registry);
@@ -63,4 +99,30 @@ test("run, onStateChange, onBeforeActionResponse, onRequest, and onWebSocket get
 			onStateChange: "1 false",
 		}),
 	);
+});
+
+test("a tool that writes state runs onStateChange with c.pi, and the next tool still reads c.pi", async (c) => {
+	const { client } = await setupTest(c, registry);
+	const key = ["tool-state", randomUUID()];
+	const handle = client.counter.getOrCreate(key);
+	const rootId = (await handle.harness.root()).id;
+
+	expect(await handle.prompt("count twice")).toMatchObject({
+		status: "done",
+		text: "counted",
+	});
+	const { messages } = await handle.conversation.context(rootId);
+	expect(
+		messages.flatMap((message) =>
+			message.role === "toolResult"
+				? [{ isError: message.isError, content: message.content }]
+				: [],
+		),
+	).toEqual(
+		[1, 2].map((count) => ({
+			isError: false,
+			content: [{ type: "text", text: `${count} ${rootId}` }],
+		})),
+	);
+	expect(seen.get(key.join("/"))?.onStateChange).toMatch(/^2 /);
 });

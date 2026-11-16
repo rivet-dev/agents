@@ -28,6 +28,7 @@ import { withExtension } from "./registry.js";
 import {
 	closeHarness,
 	createPiRuntime,
+	exposePi,
 	openOnWake,
 	PI_RUNTIME,
 	type PiContext,
@@ -36,9 +37,7 @@ import {
 	piRuntime,
 	piStopping,
 	type ResolvedPiOptions,
-	withOpenPi,
 	withPiAccess,
-	withUnavailablePi,
 } from "./runtime.js";
 import { migratePiTables } from "./storage.js";
 import {
@@ -346,9 +345,9 @@ export function pi<
 					msg: "pi durable could not open on wake; actions will retry",
 					error,
 				});
-				return withUnavailablePi(c, error, () => userOnWake?.(c));
+				exposePi(c);
+				return userOnWake?.(c);
 			}
-			Object.defineProperty(c, "pi", { value: harness, configurable: true });
 			try {
 				await userOnWake?.(c);
 			} finally {
@@ -358,8 +357,10 @@ export function pi<
 		run: withPiRun(actorConfig.run),
 		onStateChange:
 			userOnStateChange &&
-			((c: PiContext, newState: unknown) =>
-				withOpenPi(c, () => userOnStateChange(c, newState))),
+			((c: PiContext, newState: unknown) => {
+				exposePi(c);
+				return userOnStateChange(c, newState);
+			}),
 		onBeforeActionResponse: withPi(actorConfig.onBeforeActionResponse),
 		onRequest: withPi(actorConfig.onRequest),
 		onWebSocket: withPi(actorConfig.onWebSocket),
@@ -370,9 +371,8 @@ export function pi<
 			// disconnect during shutdown never uses Pi, and its watches end when
 			// the harness closes.
 			if (c.abortSignal.aborted || piRuntime(c).status !== "open") {
-				await withUnavailablePi(c, piStopping(), () =>
-					actorConfig.onDisconnect?.(c, conn),
-				);
+				exposePi(c, piStopping());
+				await actorConfig.onDisconnect?.(c, conn);
 				return;
 			}
 			try {
