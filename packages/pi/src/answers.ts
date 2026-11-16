@@ -9,7 +9,7 @@ import {
 	type RegistryReader,
 } from "@earendil-works/pi-durable";
 import type { PiAccess } from "./actor.js";
-import { withExtension } from "./registry.js";
+import { withExtensions } from "./registry.js";
 import type { PiContext } from "./runtime.js";
 
 /** A final answer, as `onAnswer` receives it. */
@@ -43,7 +43,7 @@ export function withAnswerHook(
 	onAnswer: PiOnAnswer,
 	report: (error: unknown) => void,
 ): { registry: RegistryReader; settings?: HarnessSettings } {
-	return withExtension(options, answerExtension(c, onAnswer, report));
+	return withExtensions(options, [answerExtension(c, onAnswer, report)]);
 }
 
 function answerExtension(

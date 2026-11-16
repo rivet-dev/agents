@@ -24,7 +24,11 @@ export type {
 	PiProviderCredential,
 } from "./credentials.js";
 export type { PiModelOptions, PiProviderConfig } from "./models.js";
-export type { PiDatabaseProvider, PiOptions } from "./runtime.js";
+export type {
+	CodingToolName,
+	PiDatabaseProvider,
+	PiOptions,
+} from "./runtime.js";
 export type {
 	PiDocFrame,
 	PiTaskGraphFrame,
