@@ -22,7 +22,10 @@ export interface Kosa8CreateOptions {
 	sleep_after_s?: number;
 	/** Delete the sandbox this many seconds after it is created. */
 	ttl_s?: number;
-	/** Run every command in one long-lived container. */
+	/**
+	 * Run every command in one long-lived container (default true). Without it
+	 * each command starts a fresh container and only /workspace carries over.
+	 */
 	persistent?: boolean;
 	/** Environment variables kept on the sandbox's host and given to every command. */
 	env?: Record<string, string>;
@@ -112,7 +115,7 @@ export function kosa8Provider(
 			const { sandbox } = await kosa8().json<{ sandbox: { id: string } }>(
 				"POST",
 				"/v1/sandboxes",
-				{ body: create },
+				{ body: { persistent: true, ...create } },
 			);
 			return sandbox.id;
 		},
@@ -146,7 +149,7 @@ export function kosa8Provider(
 			return sandbox;
 		},
 		suspend: async (_c, id) => {
-			// 409: it is already asleep, or it cannot sleep (a persistent sandbox stays up).
+			// 409: it is already asleep.
 			await ignoreRefusal(
 				kosa8().json("POST", `/v1/sandboxes/${encodeURIComponent(id)}/sleep`),
 				[404, 409],
@@ -194,9 +197,11 @@ function underFilesRoot(path: string): boolean {
 const EXEC_WRAPPER =
 	'd=/tmp/.rivet-exec; mkdir -p $d && echo $$ > "$d/$1"; if [ -f "$d/$1.kill" ]; then rm -f "$d/$1" "$d/$1.kill"; exit 137; fi; cd -- "$2" || { rm -f "$d/$1"; exit 1; }; if [ "$3" = file ]; then /bin/sh "$4"; s=$?; rm -f -- "$4"; else /bin/sh -c "$4"; s=$?; fi; rm -f "$d/$1"; exit $s';
 
-// Stops each process before reading its children so none can fork past the kill.
+// Stops each process before finding its children so none can fork past the kill.
+// Children are found by parent PID in /proc/*/stat: kosa8 guest kernels have no
+// /proc/<pid>/task/<tid>/children.
 const KILL_TREE =
-	't() { kill -STOP "$1" 2>/dev/null; for c in $(cat /proc/"$1"/task/*/children 2>/dev/null); do t "$c"; done; kill -KILL "$1" 2>/dev/null; }; d=/tmp/.rivet-exec; mkdir -p $d && touch "$d/$1.kill"; if [ -f "$d/$1" ]; then t "$(cat "$d/$1")"; rm -f "$d/$1" "$d/$1.kill"; fi';
+	't() { kill -STOP "$1" 2>/dev/null; for s in /proc/[0-9]*/stat; do st=$(cat "$s" 2>/dev/null) || continue; r=${st##*) }; pp=${r#* }; pp=${pp%% *}; if [ "$pp" = "$1" ]; then c=${s#/proc/}; t "${c%/stat}"; fi; done; kill -KILL "$1" 2>/dev/null; }; d=/tmp/.rivet-exec; mkdir -p $d && touch "$d/$1.kill"; if [ -f "$d/$1" ]; then t "$(cat "$d/$1")"; rm -f "$d/$1" "$d/$1.kill"; fi';
 
 // Writes the staged parts ("$@") to the target ("$1") in order, then removes them.
 const ASSEMBLE =

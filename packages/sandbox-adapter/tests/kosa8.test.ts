@@ -232,6 +232,7 @@ describe.skipIf(process.platform === "win32")(
 
 		test("create sends the create options", () => {
 			expect(fake.sandboxes.get(id)?.body).toEqual({
+				persistent: true,
 				image: "node:22",
 				size: "2x4",
 				env: { GREETING: "hello" },
