@@ -7,8 +7,8 @@ import {
 	type HarnessSettings,
 	hook,
 	type RegistryReader,
-	type RegistrySnapshot,
 } from "@earendil-works/pi-durable";
+import { withExtension } from "./registry.js";
 import type { PiContext } from "./runtime.js";
 
 /** A final answer, as `onAnswer` receives it. */
@@ -42,32 +42,7 @@ export function withAnswerHook(
 	onAnswer: PiOnAnswer,
 	report: (error: unknown) => void,
 ): { registry: RegistryReader; settings?: HarnessSettings } {
-	const extension = answerExtension(c, onAnswer, report);
-	let cached:
-		| { base: RegistrySnapshot; snapshot: RegistrySnapshot }
-		| undefined;
-	const registry: RegistryReader = {
-		snapshot() {
-			const base = options.registry.snapshot();
-			if (cached?.base !== base) {
-				cached = { base, snapshot: withExtension(base, extension) };
-			}
-			return cached.snapshot;
-		},
-		subscribe: (listener) => options.registry.subscribe(listener),
-	};
-	// Without a default selection, every installed extension is selected, this one included.
-	const settings =
-		options.settings &&
-		new Proxy(options.settings, {
-			get(target, property, receiver) {
-				if (property !== "extensions") {
-					return Reflect.get(target, property, receiver);
-				}
-				return target.extensions && [...target.extensions, extension];
-			},
-		});
-	return { registry, settings };
+	return withExtension(options, answerExtension(c, onAnswer, report));
 }
 
 function answerExtension(
@@ -100,22 +75,6 @@ function answerExtension(
 			}),
 		],
 	});
-}
-
-function withExtension(
-	base: RegistrySnapshot,
-	extension: Extension,
-): RegistrySnapshot {
-	const installed = [...base.installed(), extension];
-	return {
-		installed: () => installed,
-		extension: (name) =>
-			name === extension.name ? extension : base.extension(name),
-		tools: () => base.tools(),
-		sections: () => base.sections(),
-		tasks: () => base.tasks(),
-		task: (name) => base.task(name),
-	};
 }
 
 function answerText(message: AssistantMessage): string | undefined {
