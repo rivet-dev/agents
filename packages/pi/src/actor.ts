@@ -23,10 +23,12 @@ import type {
 	UserActions,
 	UserActorConfig,
 } from "./actor-types.js";
+import type { PiAnswer } from "./answers.js";
 import { withExtension } from "./registry.js";
 import {
 	closeHarness,
 	createPiRuntime,
+	exposePi,
 	openOnWake,
 	PI_RUNTIME,
 	type PiContext,
@@ -36,7 +38,6 @@ import {
 	piStopping,
 	type ResolvedPiOptions,
 	withPiAccess,
-	withUnavailablePi,
 } from "./runtime.js";
 import { migratePiTables } from "./storage.js";
 import {
@@ -60,10 +61,11 @@ const piEvents: PiEvents = {
 };
 
 /**
- * `c.pi`: the actor's Pi Durable harness, in the app's own actions and hooks.
+ * `c.pi`: the actor's Pi Durable harness, in the app's own actions and hooks,
+ * `run`, `onRequest`, `onWebSocket`, `onBeforeActionResponse`, and `onAnswer`.
  * Reading it throws when Pi Durable cannot open, such as after a rollback to
- * an older schema. In `onSleep` and `onDestroy` it is set only when Pi Durable
- * is already open in this actor generation.
+ * an older schema. In `onSleep` and `onDestroy` it is set only when Pi
+ * Durable is already open in this actor generation.
  */
 export interface PiAccess {
 	readonly pi: Harness;
@@ -120,7 +122,7 @@ export type PiUserActions<
 >;
 
 /**
- * The `c` of the app's Pi `tools` and `hooks`: the actor's
+ * The `c` of the app's Pi `tools`, `hooks`, and `onAnswer`: the actor's
  * context with `c.pi`. They run in the background, with no connection.
  */
 export type PiToolContext<
@@ -143,8 +145,11 @@ export type PiToolContext<
 > &
 	PiAccess;
 
-/** The Pi options with `tools` and `hooks` typed to get the actor's context. */
-type PiConfigOptions<TContext, TTools> = Omit<PiOptions, "tools" | "hooks"> & {
+/** The Pi options with `tools`, `hooks`, and `onAnswer` typed to get the actor's context. */
+type PiConfigOptions<TContext, TTools> = Omit<
+	PiOptions,
+	"tools" | "hooks" | "onAnswer"
+> & {
 	/**
 	 * Tools defined like actions, by name. `execute(c, args, api, context)`
 	 * gets the actor's context first, and `args` typed from `parameters`.
@@ -152,6 +157,13 @@ type PiConfigOptions<TContext, TTools> = Omit<PiOptions, "tools" | "hooks"> & {
 	tools?: { [K in keyof TTools]: PiTool<TContext, TTools[K] & object> };
 	/** Pi Durable's hooks with the actor's context first, such as `beforeTool(c, call, api, context)`. */
 	hooks?: PiHooks<TContext>;
+	/**
+	 * Called with the actor's context for every final answer, such as to text
+	 * it to the user. A run that resumes after a crash can call it again for
+	 * the same answer if it didn't return. A throw goes to `onReport` and
+	 * leaves the run as it is.
+	 */
+	onAnswer?: (c: TContext, answer: PiAnswer) => void | Promise<void>;
 };
 
 /** Ordinary actor config plus the Pi Durable options. The app's actions, lifecycle hooks, Pi tools, and Pi hooks get `c.pi`. */
@@ -280,6 +292,29 @@ export function pi<
 			withPiAccess(c, piOptions, () => hook(c, ...args), {
 				opensHarness,
 			}));
+	// `onWake` opens Pi Durable before `run` starts, so `run` only needs the
+	// getter. It is not a counted call: one that lasts for the whole generation
+	// would hold every sleep's drain until its deadline.
+	const exposingPi = (run: (c: PiContext) => unknown) => (c: PiContext) => {
+		exposePi(c);
+		return run(c);
+	};
+	// A workflow's run function carries its config on symbol keys, so the wrapper keeps them.
+	const withPiRun = (run: unknown) => {
+		if (typeof run === "function") {
+			const wrapped = exposingPi(run as (c: PiContext) => unknown);
+			for (const key of Object.getOwnPropertySymbols(run)) {
+				Object.defineProperty(
+					wrapped,
+					key,
+					Object.getOwnPropertyDescriptor(run, key) as PropertyDescriptor,
+				);
+			}
+			return wrapped;
+		}
+		const config = run as { run?: (c: PiContext) => unknown } | undefined;
+		return config?.run ? { ...config, run: exposingPi(config.run) } : run;
+	};
 	const userOnWake = actorConfig.onWake;
 	const userOnDisconnect = withPi(actorConfig.onDisconnect);
 
@@ -316,15 +351,19 @@ export function pi<
 					msg: "pi durable could not open on wake; actions will retry",
 					error,
 				});
-				return withUnavailablePi(c, error, () => userOnWake?.(c));
+				exposePi(c);
+				return userOnWake?.(c);
 			}
-			Object.defineProperty(c, "pi", { value: harness, configurable: true });
 			try {
 				await userOnWake?.(c);
 			} finally {
 				harness.resume();
 			}
 		},
+		run: withPiRun(actorConfig.run),
+		onBeforeActionResponse: withPi(actorConfig.onBeforeActionResponse),
+		onRequest: withPi(actorConfig.onRequest),
+		onWebSocket: withPi(actorConfig.onWebSocket),
 		onConnect: withPi(actorConfig.onConnect),
 		onDisconnect: async (c: PiContext, conn: { id: string }) => {
 			// Shutdown runs onDisconnect in the same window as onSleep and
@@ -332,9 +371,8 @@ export function pi<
 			// disconnect during shutdown never uses Pi, and its watches end when
 			// the harness closes.
 			if (c.abortSignal.aborted || piRuntime(c).status !== "open") {
-				await withUnavailablePi(c, piStopping(), () =>
-					actorConfig.onDisconnect?.(c, conn),
-				);
+				exposePi(c, piStopping());
+				await actorConfig.onDisconnect?.(c, conn);
 				return;
 			}
 			try {

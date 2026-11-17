@@ -298,7 +298,7 @@ To read older entries, pass `before` to `conversation.entries(id, { maxEntryId: 
 
 ## Your own actions and `c.pi`
 
-Your own actions and lifecycle hooks get Pi Durable's `Harness` as `c.pi`. In `onSleep` and `onDestroy`, it's set only if Pi is already open. This action reports what the agent has spent on model calls:
+Your own actions, lifecycle hooks, `run`, `onRequest`, `onWebSocket`, `onBeforeActionResponse`, and `onAnswer` get Pi Durable's `Harness` as `c.pi`. In `onSleep` and `onDestroy`, it's set only if Pi is already open. A `workflow()` body gets its own `ctx`, which has no `c.pi`. This action reports what the agent has spent on model calls:
 
 <CodeSnippet file="examples/docs/pi/cost.ts" title="server.ts" />
 
