@@ -22,7 +22,6 @@ type ToolCall = {
 	key: string[];
 	generation: string;
 	conversationId: ConversationId;
-	hasPi: boolean;
 };
 const toolCalls: ToolCall[] = [];
 
@@ -83,12 +82,13 @@ const agent = pi({
 			parameters: obj({ orderId: str(), amount: num() }),
 			replay: "safe",
 			async execute(c, args, api, context) {
+				// Throws, and fails the tool, if the tool's context has no open harness.
+				await c.pi.root(context);
 				toolCalls.push({
 					tool: "refund",
 					key: c.key,
 					generation: c.vars.generation,
 					conversationId: api.conversationId,
-					hasPi: (await c.pi.root(context)).id !== undefined,
 				});
 				c.vars.refunded += args.amount;
 				const entries = await c
@@ -113,7 +113,6 @@ const agent = pi({
 					key: c.key,
 					generation: c.vars.generation,
 					conversationId: api.conversationId,
-					hasPi: true,
 				});
 				if (run === 1) await aborted(context.abortSignal);
 				context.abortSignal?.throwIfAborted();
@@ -168,6 +167,16 @@ const registry = setup({ use: { agent, ledger } });
 
 beforeAll(() => {
 	mock.reply(
+		"refund order 11",
+		toolCall("refund", { orderId: "11", amount: 5 }),
+		fauxAssistantMessage("refunded order 11"),
+	);
+	mock.reply(
+		"refund order 12",
+		toolCall("refund", { orderId: "12", amount: 7 }),
+		fauxAssistantMessage("refunded order 12"),
+	);
+	mock.reply(
 		"refund order 7",
 		toolCall("refund", { orderId: "7", amount: 5 }),
 		fauxAssistantMessage("refunded order 7"),
@@ -218,13 +227,33 @@ describe("tools defined like actions", () => {
 			isError: false,
 			content: [{ type: "text", text: "refunded, ledger has 1" }],
 		});
-		expect(
-			toolCalls.filter((call) => call.key.join("/") === key.join("/")),
-		).toEqual([expect.objectContaining({ tool: "refund", hasPi: true })]);
 		expect(await client.ledger.getOrCreate(key).entries()).toEqual([
 			"refund 7 5",
 		]);
 		expect(await handle.snapshot()).toMatchObject({ refunded: 5 });
+	});
+
+	test("tools of two actors prompted at the same time each see only their own actor", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const keys = [
+			["isolated", randomUUID()],
+			["isolated", randomUUID()],
+		];
+		const [first, second] = keys.map((key) => client.agent.getOrCreate(key));
+		const answers = await Promise.all([
+			first?.prompt("refund order 11"),
+			second?.prompt("refund order 12"),
+		]);
+
+		expect(answers).toMatchObject([{ status: "done" }, { status: "done" }]);
+		expect(await first?.snapshot()).toMatchObject({ refunded: 5 });
+		expect(await second?.snapshot()).toMatchObject({ refunded: 7 });
+		expect(await client.ledger.getOrCreate(keys[0]).entries()).toEqual([
+			"refund 11 5",
+		]);
+		expect(await client.ledger.getOrCreate(keys[1]).entries()).toEqual([
+			"refund 12 7",
+		]);
 	});
 
 	test("a hook gets the actor's context and can block a call by its state", async (c) => {

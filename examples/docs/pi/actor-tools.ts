@@ -23,6 +23,9 @@ const FREEZES = "CREATE TABLE IF NOT EXISTS refund_freezes (frozen_at INTEGER NO
 // One agent per customer, keyed by their email.
 const support = pi({
 	model: "anthropic/claude-opus-5-5",
+	onWake: async (c) => {
+		await c.db.execute(FREEZES);
+	},
 	tools: {
 		refund: {
 			description: "Refund an order, in dollars.",
@@ -39,14 +42,12 @@ const support = pi({
 		// Hooks get the agent's context first too.
 		beforeTool: async (c, call) => {
 			if (call.name !== "refund") return undefined;
-			await c.db.execute(FREEZES);
 			const freezes = await c.db.execute("SELECT 1 FROM refund_freezes LIMIT 1");
 			return freezes.length > 0 ? { block: "Refunds are frozen for this customer." } : undefined;
 		},
 	},
 	actions: {
 		freezeRefunds: async (c) => {
-			await c.db.execute(FREEZES);
 			await c.db.execute("INSERT INTO refund_freezes (frozen_at) VALUES (?)", Date.now());
 		},
 	},
