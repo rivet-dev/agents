@@ -115,15 +115,12 @@ export async function commitAndPush(opts: ReleaseOpts, push: boolean) {
 				cwd: opts.repoRoot,
 			})`git commit -m ${`chore(release): update version to ${opts.version}`}`;
 	} else {
-		const bookmark = await getCurrentBookmark(opts.repoRoot);
-		if (bookmark === "main") {
-			await $({ stdio: "inherit", cwd: opts.repoRoot })`git push`;
-		} else {
-			await $({
-				stdio: "inherit",
-				cwd: opts.repoRoot,
-			})`gt submit --no-edit --publish`;
-		}
+		// The release workflow runs from this branch, so only the push is needed, as with jj.
+		const branch = await getCurrentBookmark(opts.repoRoot);
+		await $({
+			stdio: "inherit",
+			cwd: opts.repoRoot,
+		})`git push --set-upstream origin ${branch}`;
 	}
 }
 
@@ -205,7 +202,14 @@ export async function createGitHubRelease(opts: ReleaseOpts) {
 			await $({
 				stdio: "inherit",
 				cwd: opts.repoRoot,
-			})`gh release create ${tagName} --title ${opts.version} --generate-notes`;
+			})`gh release create ${tagName} --title ${opts.version} --generate-notes ${
+				opts.excludeSandboxAgent
+					? [
+							"--notes",
+							"This release includes only the packages in `packages/`. Sandbox Agent is not part of it.",
+						]
+					: []
+			}`;
 
 			// Check if this is a pre-release (contains -rc. or similar)
 			if (opts.version.includes("-")) {

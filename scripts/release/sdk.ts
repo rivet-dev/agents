@@ -288,8 +288,10 @@ export async function publishNpmLibraries(opts: ReleaseOpts) {
 		"sdks/*/package.json",
 	]);
 
-	// Exclude CLI and gigacode directories (handled by publishNpmCli)
+	// Exclude CLI and gigacode directories (handled by publishNpmCli), and
+	// every Sandbox Agent SDK when the release excludes Sandbox Agent.
 	const sandboxAgentLibraries = sandboxAgentSdks.filter((p) => {
+		if (opts.excludeSandboxAgent) return false;
 		const rel = relative(opts.sandboxAgentRoot, p.dir);
 		return (
 			!(rel === "sdks/cli" || rel.startsWith("sdks/cli/")) &&
