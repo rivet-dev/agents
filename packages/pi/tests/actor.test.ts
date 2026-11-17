@@ -65,6 +65,9 @@ const PI_DURABLE_TABLES_051 = [
 /** Tool calls of the crash test. A tool's first run blocks until the stop aborts it; a rerun returns at once. */
 const toolRuns = { safe: 0, unsafe: 0 };
 
+/** Runs of `poison_tool`. Its first run commits a document that `failCommitsOfPoison` makes storage reject. */
+let poisonRuns = 0;
+
 /** Sandboxes the unreachable provider was asked to create. */
 let sandboxCreates = 0;
 
@@ -131,11 +134,30 @@ function buildRegistry(mock: MockModel, root: string) {
 				return { output: [{ type: "text", text: `${name} done` }] };
 			},
 		});
+	const poisonTool = defineTool({
+		name: "poison_tool",
+		description: "A safe tool whose first run makes a storage commit fail",
+		parameters: obj({}),
+		replay: "safe",
+		execute: async (_args, api, context) => {
+			poisonRuns += 1;
+			if (poisonRuns === 1) {
+				await api.commit(async (tx) => {
+					(await tx.doc(Poison, api.conversationId)).value = "x";
+				}, context);
+			}
+			return { output: [{ type: "text", text: "poison done" }] };
+		},
+	});
 	const tools = createRegistry();
 	tools.install(
 		defineExtension({
 			name: "tools",
-			tools: [waitingTool("safe", "safe"), waitingTool("unsafe", "unsafe")],
+			tools: [
+				waitingTool("safe", "safe"),
+				waitingTool("unsafe", "unsafe"),
+				poisonTool,
+			],
 		}),
 	);
 
@@ -357,6 +379,11 @@ beforeAll(async () => {
 		fauxAssistantMessage("it is 42"),
 	);
 	mockModel.reply(
+		"poison the run",
+		toolCall("poison_tool", {}),
+		fauxAssistantMessage("recovered from storage"),
+	);
+	mockModel.reply(
 		"create hello.txt",
 		toolCall("write", {
 			path: "hello.txt",
@@ -411,7 +438,7 @@ afterAll(async () => {
 });
 
 describe("pi actor", () => {
-	test("a run stopped at the end of the grace period resumes on wake: safe tools rerun, unsafe tools report the interruption", async (c) => {
+	test("a run stopped at the end of the grace period resumes by itself: safe tools rerun, unsafe tools report the interruption", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const key = ["crash", randomUUID()];
 		const handle = client.agent.getOrCreate(key);
@@ -426,9 +453,13 @@ describe("pi actor", () => {
 		await handle.nap();
 		await sleeps.waitFor(key, 1);
 
+		// Call nothing: a call would wake the actor and resume the run itself.
+		await vi.waitFor(() => expect(toolRuns).toEqual({ safe: 2, unsafe: 1 }), {
+			timeout: 45_000,
+			interval: 250,
+		});
 		const settled = await handle.submission.wait(submission.id);
 		expect(settled.status).toBe("done");
-		expect(toolRuns).toEqual({ safe: 2, unsafe: 1 });
 		const { messages } = await handle.conversation.context(root.id);
 		const results = messages.filter((message) => message.role === "toolResult");
 		expect(
@@ -448,7 +479,7 @@ describe("pi actor", () => {
 				),
 		);
 		expect(answers).toHaveLength(1);
-	});
+	}, 90_000);
 
 	test("an app action writes a document through c.pi, and clients read it by kind after sleep", async (c) => {
 		const { client } = await setupTest(c, registry);
@@ -499,6 +530,31 @@ describe("pi actor", () => {
 		await expect(handle.writePoison()).rejects.toThrow();
 		const result = await handle.prompt("say hello");
 		expect(result).toMatchObject({ status: "done", text: "Hi there!" });
+	});
+
+	test("a commit that fails during a run reopens the harness at once, and the run finishes with no call", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const handle = client.agent.getOrCreate(["poison-run", randomUUID()]);
+		const root = await handle.harness.root();
+		await handle.failCommitsOfPoison();
+		const submission = await handle.conversation.submit(root.id, {
+			type: "input",
+			content: "poison the run",
+		});
+
+		// Nothing calls the actor until the tool reruns. The recovery wake would
+		// resume the run only about 15 seconds after it started.
+		await vi.waitFor(() => expect(poisonRuns).toBe(2), { timeout: 10_000 });
+		expect(await handle.submission.wait(submission.id)).toMatchObject({
+			status: "done",
+		});
+		const { messages } = await handle.conversation.context(root.id);
+		expect(
+			messages.find((message) => message.role === "toolResult"),
+		).toMatchObject({
+			isError: false,
+			content: [{ type: "text", text: "poison done" }],
+		});
 	});
 
 	test("a watching connection gets a fresh view when a failed commit reopens the harness, then the next run's frames", async (c) => {

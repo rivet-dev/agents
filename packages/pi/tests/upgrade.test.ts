@@ -477,7 +477,7 @@ describe("pi drain and upgrades", () => {
 		);
 	});
 
-	test("destroying an actor during a run stops the run without waiting for it", async (c) => {
+	test("destroying an actor during a run stops the run without waiting for it, and the run never resumes", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const handle = client.drainer.getOrCreate(["destroy", randomUUID()]);
 		const root = await handle.harness.root();
@@ -493,7 +493,10 @@ describe("pi drain and upgrades", () => {
 		await vi.waitFor(() => expect(blocking.stopped).toBe(1), {
 			timeout: 10_000,
 		});
-	});
+		// Longer than the recovery wake the run kept: nothing reruns the tool.
+		await new Promise((resolve) => setTimeout(resolve, 20_000));
+		expect(blocking.started).toBe(1);
+	}, 60_000);
 
 	test("a task stored by version 1 resumes under version 2 through migrate", async (c) => {
 		const { client } = await setupTest(c, registry);
