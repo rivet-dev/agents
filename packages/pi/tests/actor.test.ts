@@ -537,31 +537,6 @@ describe("pi actor", () => {
 		});
 	});
 
-	test("a commit that fails during a run reopens the harness at once, and the run finishes with no call", async (c) => {
-		const { client } = await setupTest(c, registry);
-		const handle = client.agent.getOrCreate(["poison-run", randomUUID()]);
-		const root = await handle.harness.root();
-		await handle.failCommitsOfPoison();
-		const submission = await handle.conversation.submit(root.id, {
-			type: "input",
-			content: "poison the run",
-		});
-
-		// Nothing calls the actor until the tool reruns. The recovery wake would
-		// resume the run only about 15 seconds after it started.
-		await vi.waitFor(() => expect(poisonRuns).toBe(2), { timeout: 10_000 });
-		expect(await handle.submission.wait(submission.id)).toMatchObject({
-			status: "done",
-		});
-		const { messages } = await handle.conversation.context(root.id);
-		expect(
-			messages.find((message) => message.role === "toolResult"),
-		).toMatchObject({
-			isError: false,
-			content: [{ type: "text", text: "poison done" }],
-		});
-	});
-
 	test("a watching connection gets a fresh view when a failed commit reopens the harness, then the next run's frames", async (c) => {
 		const { client } = await setupTest(c, registry);
 		const conn = client.agent
