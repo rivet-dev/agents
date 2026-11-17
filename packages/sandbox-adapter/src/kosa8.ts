@@ -201,6 +201,7 @@ const EXEC_WRAPPER =
 // Children are found by parent PID in /proc/*/stat: kosa8 guest kernels have no
 // /proc/<pid>/task/<tid>/children.
 const KILL_TREE =
+	// biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion, not a template
 	't() { kill -STOP "$1" 2>/dev/null; for s in /proc/[0-9]*/stat; do st=$(cat "$s" 2>/dev/null) || continue; r=${st##*) }; pp=${r#* }; pp=${pp%% *}; if [ "$pp" = "$1" ]; then c=${s#/proc/}; t "${c%/stat}"; fi; done; kill -KILL "$1" 2>/dev/null; }; d=/tmp/.rivet-exec; mkdir -p $d && touch "$d/$1.kill"; if [ -f "$d/$1" ]; then t "$(cat "$d/$1")"; rm -f "$d/$1" "$d/$1.kill"; fi';
 
 // Writes the staged parts ("$@") to the target ("$1") in order, then removes them.
