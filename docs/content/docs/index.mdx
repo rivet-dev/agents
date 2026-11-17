@@ -302,6 +302,17 @@ Your own actions and lifecycle hooks get Pi Durable's `Harness` as `c.pi`. In `o
 
 <CodeSnippet file="examples/docs/pi/cost.ts" title="server.ts" />
 
+### Tools and hooks with the Actor's context
+
+Define tools in `tools` and hooks in `hooks`, keyed by name, the way you define actions. Each gets the Actor's context as `c` first, so a tool can read the agent's key, use its database and `c.pi`, and call other Actors:
+
+<CodeSnippet file="examples/docs/pi/actor-tools.ts" title="server.ts" />
+
+- A tool's `execute(c, args, api, context)` takes the rest of Pi Durable's `defineTool` fields, such as `replay`. The key in `tools` is its name, and `args` are typed from `parameters`.
+- Every Pi Durable hook works, with `c` first, such as `beforeTool(c, call, api, context)` and `onYield(c, answer, api, context)`.
+- `c` has no connection. Tools and hooks run in the background, also after a wake and in conversations a tool creates.
+- They are installed as the extension `rivet-pi-actor`, which conversations that use the default extensions get. You can still pass a `registry` for other extensions.
+
 ### Keep app state in a document
 
 A <a href="https://github.com/earendil-works/pi/blob/main/packages/durable/README.md#your-own-state" target="_blank" rel="noopener noreferrer">document</a> is typed state saved with the conversation. Change it inside `c.pi.commit`, and read it with `c.pi.snapshot`:
@@ -665,7 +676,9 @@ The `pi()` function accepts every [`actor()`](/actors/docs/actor-configuration) 
 
 | Option | Description |
 | --- | --- |
-| `registry` | Required. Your tools and tasks, from `createRegistry()`. See [Bundle Tools and Hooks into Extensions](/guides/pi-extensions). |
+| `tools` | Tools that get the Actor's context. See [Tools and hooks with the Actor's context](#tools-and-hooks-with-the-actors-context). |
+| `hooks` | Pi Durable hooks that get the Actor's context. |
+| `registry` | Extensions with your tools, sections, and tasks, from `createRegistry()`. See [Bundle Tools and Hooks into Extensions](/guides/pi-extensions). |
 | `model` | Starting model of new conversations, as `provider/modelId`. |
 | `scopedModels` | Models a client may switch to. |
 | `apiKeys` | API keys by provider. See [Keys in code](#keys-in-code). |
