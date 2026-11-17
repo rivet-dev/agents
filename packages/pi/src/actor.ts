@@ -64,8 +64,8 @@ const piEvents: PiEvents = {
  * `c.pi`: the actor's Pi Durable harness, in the app's own actions and hooks,
  * `run`, `onRequest`, `onWebSocket`, `onBeforeActionResponse`, and `onAnswer`.
  * Reading it throws when Pi Durable cannot open, such as after a rollback to
- * an older schema. In `onSleep`, `onDestroy`, and `onStateChange` it is set
- * only when Pi Durable is already open in this actor generation.
+ * an older schema. In `onSleep` and `onDestroy` it is set only when Pi
+ * Durable is already open in this actor generation.
  */
 export interface PiAccess {
 	readonly pi: Harness;
@@ -292,10 +292,17 @@ export function pi<
 			withPiAccess(c, piOptions, () => hook(c, ...args), {
 				opensHarness,
 			}));
+	// `onWake` opens Pi Durable before `run` starts, so `run` only needs the
+	// getter. It is not a counted call: one that lasts for the whole generation
+	// would hold every sleep's drain until its deadline.
+	const exposingPi = (run: (c: PiContext) => unknown) => (c: PiContext) => {
+		exposePi(c);
+		return run(c);
+	};
 	// A workflow's run function carries its config on symbol keys, so the wrapper keeps them.
 	const withPiRun = (run: unknown) => {
 		if (typeof run === "function") {
-			const wrapped = withPi(run as (c: PiContext) => unknown);
+			const wrapped = exposingPi(run as (c: PiContext) => unknown);
 			for (const key of Object.getOwnPropertySymbols(run)) {
 				Object.defineProperty(
 					wrapped,
@@ -306,9 +313,8 @@ export function pi<
 			return wrapped;
 		}
 		const config = run as { run?: (c: PiContext) => unknown } | undefined;
-		return config?.run ? { ...config, run: withPi(config.run) } : run;
+		return config?.run ? { ...config, run: exposingPi(config.run) } : run;
 	};
-	const userOnStateChange = actorConfig.onStateChange;
 	const userOnWake = actorConfig.onWake;
 	const userOnDisconnect = withPi(actorConfig.onDisconnect);
 
@@ -355,12 +361,6 @@ export function pi<
 			}
 		},
 		run: withPiRun(actorConfig.run),
-		onStateChange:
-			userOnStateChange &&
-			((c: PiContext, newState: unknown) => {
-				exposePi(c);
-				return userOnStateChange(c, newState);
-			}),
 		onBeforeActionResponse: withPi(actorConfig.onBeforeActionResponse),
 		onRequest: withPi(actorConfig.onRequest),
 		onWebSocket: withPi(actorConfig.onWebSocket),

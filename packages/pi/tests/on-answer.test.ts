@@ -24,7 +24,7 @@ import {
 /** Answers by actor key, recorded in this process where the actors run. */
 const answers = new Map<string, PiAnswer[]>();
 const failFor = new Set<string>();
-/** What the typed agent's onAnswer read from `c.pi` and `c.state`, by actor key. */
+/** What the typed agent's onAnswer read from `c.pi` and `c.vars`, by actor key. */
 const typedAnswers = new Map<
 	string,
 	{ rootId: ConversationId; answered: number }
@@ -79,17 +79,16 @@ function buildRegistry(mock: MockModel) {
 	const typedAgent = pi({
 		...models,
 		registry: tools,
-		createState: () => ({ answered: 0 }),
-		onAnswer: async (c, answer) => {
-			c.state.answered += 1;
-			// @ts-expect-error onAnswer's state is the actor's own
-			c.state.missing;
+		createVars: () => ({ answered: 0 }),
+		onAnswer: async (c, _answer) => {
+			c.vars.answered += 1;
+			// @ts-expect-error onAnswer's vars are the actor's own
+			c.vars.missing;
 			const root = await c.pi.root(BACKGROUND_CONTEXT);
 			typedAnswers.set(c.key.join("/"), {
 				rootId: root.id,
-				answered: c.state.answered,
+				answered: c.vars.answered,
 			});
-			void answer.text;
 		},
 	});
 	return setup({ use: { agent, selectingAgent, typedAgent } });

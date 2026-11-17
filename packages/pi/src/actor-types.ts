@@ -13,7 +13,6 @@ import type {
 	RunConfig,
 	RunContext,
 	SleepContext,
-	StateChangeContext,
 	UniversalWebSocket,
 	WakeContext,
 	WebSocketContext,
@@ -254,21 +253,6 @@ interface UserHooks<
 		TQueues,
 		TAccess
 	>;
-	/** `c.pi` is set when Pi Durable is open; it is synchronous, so it never opens Pi Durable. */
-	onStateChange?: (
-		c: StateChangeContext<
-			TState,
-			TConnParams,
-			TConnState,
-			TVars,
-			TInput,
-			PiDatabaseProvider,
-			TEvents,
-			TQueues
-		> &
-			TAccess,
-		newState: TState,
-	) => void;
 	onBeforeActionResponse?: <Out>(
 		c: BeforeActionResponseContext<
 			TState,

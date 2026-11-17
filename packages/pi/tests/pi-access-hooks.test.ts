@@ -1,12 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { fauxAssistantMessage } from "@earendil-works/pi-ai";
-import { obj } from "@earendil-works/pi-schema";
 import { setup } from "rivetkit";
 import { setupTest } from "rivetkit/test";
 import { expect, test, vi } from "vitest";
 import { pi } from "../src/index.js";
-import { createMockModel, toolCall } from "./helpers/mock-model.js";
 
 /** What each hook read from `c.pi`, by actor key, in this process where the actors run. */
 const seen = new Map<string, Record<string, string>>();
@@ -16,12 +13,9 @@ const record = (key: string[], hook: string, value: string) => {
 };
 
 const agent = pi({
-	state: { count: 0 },
+	createVars: () => ({ count: 0 }),
 	run: async (c) => {
 		record(c.key, "run", String((await c.pi.root(BACKGROUND_CONTEXT)).id));
-	},
-	onStateChange: (c, state) => {
-		record(c.key, "onStateChange", `${state.count} ${c.pi.wake().active}`);
 	},
 	onBeforeActionResponse: async (c, name, _args, output) => {
 		if (name !== "bump") return output;
@@ -36,47 +30,31 @@ const agent = pi({
 	},
 	actions: {
 		bump: (c) => {
-			c.state.count += 1;
-			return { count: c.state.count };
+			c.vars.count += 1;
+			return { count: c.vars.count };
 		},
 	},
 });
 
-const mock = createMockModel();
-mock.reply(
-	"count twice",
-	toolCall("count", {}),
-	toolCall("count", {}),
-	fauxAssistantMessage("counted"),
-);
-
-/** Its tool writes state, so `onStateChange` runs with the context tools get. */
-const counter = pi({
-	model: "mock/mock-model",
-	providers: { mock: mock.providerConfig },
-	apiKeys: { mock: "mock" },
-	state: { count: 0 },
-	onStateChange: (c, state) => {
-		record(c.key, "onStateChange", `${state.count} ${c.pi.wake().active}`);
+/** Its `run` lasts until Pi Durable closes, like a loop that waits on Pi. */
+const waiting = pi({
+	createVars: () => ({ generation: randomUUID() }),
+	// Long enough that a sleep held to the drain deadline (45 s here) shows.
+	options: { sleepGracePeriod: 60_000 },
+	run: async (c) => {
+		await new Promise<void>((resolve) => c.pi.subscribeClose(() => resolve()));
 	},
-	tools: {
-		count: {
-			description: "Counts, then reads c.pi",
-			parameters: obj({}),
-			replay: "safe",
-			async execute(c, _args, _api, context) {
-				c.state.count += 1;
-				const root = await c.pi.root(context);
-				return {
-					output: [{ type: "text", text: `${c.state.count} ${root.id}` }],
-				};
-			},
+	actions: {
+		generation: (c) => c.vars.generation,
+		nap: (c) => {
+			c.sleep();
 		},
 	},
 });
-const registry = setup({ use: { agent, counter } });
 
-test("run, onStateChange, onBeforeActionResponse, onRequest, and onWebSocket get c.pi", async (c) => {
+const registry = setup({ use: { agent, waiting } });
+
+test("run, onBeforeActionResponse, onRequest, and onWebSocket get c.pi", async (c) => {
 	const { client } = await setupTest(c, registry);
 	const key = ["hooks", randomUUID()];
 	const handle = client.agent.getOrCreate(key);
@@ -85,44 +63,32 @@ test("run, onStateChange, onBeforeActionResponse, onRequest, and onWebSocket get
 	expect(await handle.bump()).toEqual({ count: 1, rootId });
 	expect(await (await handle.fetch("/root")).text()).toBe(String(rootId));
 	const websocket = await handle.webSocket("/root");
-	const message = await new Promise<string>((resolve) => {
+	const message = await new Promise<string>((resolve, reject) => {
 		websocket.addEventListener("message", (event: { data: unknown }) =>
 			resolve(String(event.data)),
+		);
+		websocket.addEventListener("close", () =>
+			reject(new Error("the socket closed before onWebSocket sent")),
 		);
 	});
 	websocket.close();
 	expect(message).toBe(String(rootId));
 
 	await vi.waitFor(() =>
-		expect(seen.get(key.join("/"))).toEqual({
-			run: String(rootId),
-			onStateChange: "1 false",
-		}),
+		expect(seen.get(key.join("/"))).toEqual({ run: String(rootId) }),
 	);
 });
 
-test("a tool that writes state runs onStateChange with c.pi, and the next tool still reads c.pi", async (c) => {
+test("a run that waits on Pi does not hold a sleep until the drain deadline", async (c) => {
 	const { client } = await setupTest(c, registry);
-	const key = ["tool-state", randomUUID()];
-	const handle = client.counter.getOrCreate(key);
-	const rootId = (await handle.harness.root()).id;
+	const handle = client.waiting.getOrCreate(["waiting", randomUUID()]);
+	const before = await handle.generation();
 
-	expect(await handle.prompt("count twice")).toMatchObject({
-		status: "done",
-		text: "counted",
-	});
-	const { messages } = await handle.conversation.context(rootId);
-	expect(
-		messages.flatMap((message) =>
-			message.role === "toolResult"
-				? [{ isError: message.isError, content: message.content }]
-				: [],
-		),
-	).toEqual(
-		[1, 2].map((count) => ({
-			isError: false,
-			content: [{ type: "text", text: `${count} ${rootId}` }],
-		})),
+	await handle.nap();
+	// A new generation answers once the old one stopped. Pi has no work left, so
+	// the stop needs only the close, not the drain's 45 seconds.
+	await vi.waitFor(
+		async () => expect(await handle.generation()).not.toBe(before),
+		{ timeout: 30_000, interval: 250 },
 	);
-	expect(seen.get(key.join("/"))?.onStateChange).toMatch(/^2 /);
-});
+}, 60_000);
