@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { execFileSync } = require("child_process");
+const { spawn } = require("child_process");
 const {
   assertExecutable,
   formatNonExecutableBinaryMessage,
@@ -59,7 +59,35 @@ try {
     process.exit(1);
   }
 
-  execFileSync(binPath, process.argv.slice(2), { stdio: "inherit" });
+  const child = spawn(binPath, process.argv.slice(2), {
+    stdio: "inherit",
+  });
+
+  const forwardSignal = (signal) => {
+    if (!child.killed) {
+      child.kill(signal);
+    }
+  };
+
+  const onSigint = () => forwardSignal("SIGINT");
+  const onSigterm = () => forwardSignal("SIGTERM");
+  const onSigquit = () => forwardSignal("SIGQUIT");
+
+  process.on("SIGINT", onSigint);
+  process.on("SIGTERM", onSigterm);
+  process.on("SIGQUIT", onSigquit);
+
+  child.on("exit", (code, signal) => {
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
+    process.off("SIGQUIT", onSigquit);
+
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(code ?? 0);
+  });
 } catch (e) {
   if (e.status !== undefined) process.exit(e.status);
   throw e;
