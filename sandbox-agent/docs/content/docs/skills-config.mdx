@@ -1,0 +1,79 @@
+---
+title: "Skills"
+description: "Configure skill sources for agent sessions."
+sidebarTitle: "Skills"
+icon: "sparkles"
+---
+
+Skills are local instruction bundles stored in `SKILL.md` files.
+
+## Configuring skills
+
+Use `setSkillsConfig` / `getSkillsConfig` / `deleteSkillsConfig` to manage skill source config by directory + skill name.
+
+```ts
+import { SandboxAgent } from "sandbox-agent";
+
+const sdk = await SandboxAgent.connect({
+  baseUrl: "http://127.0.0.1:2468",
+});
+
+// Add a skill
+await sdk.setSkillsConfig(
+  {
+    directory: "/workspace",
+    skillName: "default",
+  },
+  {
+    sources: [
+      { type: "github", source: "rivet-dev/skills", skills: ["sandbox-agent"] },
+      { type: "local", source: "/workspace/my-custom-skill" },
+    ],
+  },
+);
+
+// Create a session using the configured skills
+const session = await sdk.createSession({
+  agent: "claude",
+  cwd: "/workspace",
+});
+
+await session.prompt([
+  { type: "text", text: "Use available skills to help with this task." },
+]);
+
+// List skills
+const config = await sdk.getSkillsConfig({
+  directory: "/workspace",
+  skillName: "default",
+});
+
+console.log(config.sources.length);
+
+// Delete skill
+await sdk.deleteSkillsConfig({
+  directory: "/workspace",
+  skillName: "default",
+});
+
+```
+
+## Skill sources
+
+Each `skills.sources` entry describes where to find skills.
+
+| Type | `source` value | Example |
+|------|---------------|---------|
+| `github` | `owner/repo` | `"rivet-dev/skills"` |
+| `local` | filesystem path | `"/workspace/my-skill"` |
+| `git` | git clone URL | `"https://git.example.com/skills.git"` |
+
+Optional fields:
+
+- `skills`: subset of skill directory names to include
+- `ref`: branch/tag/commit (for `github` and `git`)
+- `subpath`: subdirectory within repo to scan
+
+## Custom skills
+
+To write, upload, and configure your own skills inside the sandbox, see [Custom Tools](/sandbox-agent/docs/custom-tools).

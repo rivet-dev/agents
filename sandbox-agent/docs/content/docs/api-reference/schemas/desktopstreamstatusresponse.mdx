@@ -1,0 +1,26 @@
+---
+title: "DesktopStreamStatusResponse"
+description: "HTTP API schema for DesktopStreamStatusResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "active"
+  ],
+  "properties": {
+    "active": {
+      "type": "boolean"
+    },
+    "processId": {
+      "type": "string",
+      "nullable": true
+    },
+    "windowId": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+}
+```

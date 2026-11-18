@@ -1,0 +1,25 @@
+{
+  "name": "sandbox-agent-workspace",
+  "private": true,
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "generate": "turbo run generate",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.6",
+    "@types/node": "^24.5.2",
+    "turbo": "^2.4.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^19.1.12",
+      "@types/react-dom": "^19.1.6"
+    }
+  }
+}

@@ -1,0 +1,93 @@
+---
+title: "Move the desktop mouse."
+description: "POST /v1/desktop/mouse/move: request parameters and responses."
+---
+
+`POST /v1/desktop/mouse/move`
+
+Performs a health-gated absolute pointer move on the managed desktop and
+returns the resulting mouse position.
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopMouseMoveRequest"
+  }
+}
+```
+
+Related schemas: [DesktopMouseMoveRequest](/sandbox-agent/docs/api-reference/schemas/desktopmousemoverequest/).
+
+## Responses
+
+### 200
+
+Desktop mouse position after move
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopMousePositionResponse"
+  }
+}
+```
+
+Related schemas: [DesktopMousePositionResponse](/sandbox-agent/docs/api-reference/schemas/desktopmousepositionresponse/).
+
+### 400
+
+Invalid mouse move request
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 502
+
+Desktop runtime health or input failed
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

@@ -1,0 +1,98 @@
+---
+title: "Move a desktop window."
+description: "POST /v1/desktop/windows/{id}/move: request parameters and responses."
+---
+
+`POST /v1/desktop/windows/{id}/move`
+
+Moves the specified window to the given position.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | Yes | string | X11 window ID |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "id",
+    "in": "path",
+    "description": "X11 window ID",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  }
+]
+```
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopWindowMoveRequest"
+  }
+}
+```
+
+Related schemas: [DesktopWindowMoveRequest](/sandbox-agent/docs/api-reference/schemas/desktopwindowmoverequest/).
+
+## Responses
+
+### 200
+
+Window info after move
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopWindowInfo"
+  }
+}
+```
+
+Related schemas: [DesktopWindowInfo](/sandbox-agent/docs/api-reference/schemas/desktopwindowinfo/).
+
+### 404
+
+Window not found
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

@@ -1,0 +1,28 @@
+---
+title: "DesktopLaunchResponse"
+description: "HTTP API schema for DesktopLaunchResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "processId"
+  ],
+  "properties": {
+    "pid": {
+      "type": "integer",
+      "format": "int32",
+      "nullable": true,
+      "minimum": 0
+    },
+    "processId": {
+      "type": "string"
+    },
+    "windowId": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+}
+```

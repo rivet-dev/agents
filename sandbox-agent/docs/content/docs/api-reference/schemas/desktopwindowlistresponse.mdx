@@ -1,0 +1,23 @@
+---
+title: "DesktopWindowListResponse"
+description: "HTTP API schema for DesktopWindowListResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "windows"
+  ],
+  "properties": {
+    "windows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/DesktopWindowInfo"
+      }
+    }
+  }
+}
+```
+
+Related schemas: [DesktopWindowInfo](/sandbox-agent/docs/api-reference/schemas/desktopwindowinfo/).

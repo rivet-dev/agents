@@ -1,0 +1,24 @@
+---
+title: "FsWriteResponse"
+description: "HTTP API schema for FsWriteResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "path",
+    "bytesWritten"
+  ],
+  "properties": {
+    "bytesWritten": {
+      "type": "integer",
+      "format": "int64",
+      "minimum": 0
+    },
+    "path": {
+      "type": "string"
+    }
+  }
+}
+```

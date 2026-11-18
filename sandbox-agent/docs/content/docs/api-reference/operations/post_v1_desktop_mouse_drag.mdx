@@ -1,0 +1,93 @@
+---
+title: "Drag the desktop mouse."
+description: "POST /v1/desktop/mouse/drag: request parameters and responses."
+---
+
+`POST /v1/desktop/mouse/drag`
+
+Performs a health-gated drag gesture against the managed desktop and
+returns the resulting mouse position.
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopMouseDragRequest"
+  }
+}
+```
+
+Related schemas: [DesktopMouseDragRequest](/sandbox-agent/docs/api-reference/schemas/desktopmousedragrequest/).
+
+## Responses
+
+### 200
+
+Desktop mouse position after drag
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopMousePositionResponse"
+  }
+}
+```
+
+Related schemas: [DesktopMousePositionResponse](/sandbox-agent/docs/api-reference/schemas/desktopmousepositionresponse/).
+
+### 400
+
+Invalid mouse drag request
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 502
+
+Desktop runtime health or input failed
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

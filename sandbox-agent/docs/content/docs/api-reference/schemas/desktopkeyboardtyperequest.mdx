@@ -1,0 +1,24 @@
+---
+title: "DesktopKeyboardTypeRequest"
+description: "HTTP API schema for DesktopKeyboardTypeRequest."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "text"
+  ],
+  "properties": {
+    "delayMs": {
+      "type": "integer",
+      "format": "int32",
+      "nullable": true,
+      "minimum": 0
+    },
+    "text": {
+      "type": "string"
+    }
+  }
+}
+```

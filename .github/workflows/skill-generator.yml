@@ -16,7 +16,7 @@ jobs:
           node-version: 20
 
       - name: Generate skill artifacts
-        run: node scripts/skill-generator/generate.js
+        run: node sandbox-agent/scripts/skill-generator/generate.js
 
       - name: Sync to skills repo
         env:
@@ -42,7 +42,7 @@ jobs:
 
           mkdir -p /tmp/rivet-skills/skills/sandbox-agent
           rm -rf /tmp/rivet-skills/skills/sandbox-agent/*
-          cp -R scripts/skill-generator/dist/* /tmp/rivet-skills/skills/sandbox-agent/
+          cp -R sandbox-agent/scripts/skill-generator/dist/* /tmp/rivet-skills/skills/sandbox-agent/
 
           cd /tmp/rivet-skills
           git add skills/sandbox-agent

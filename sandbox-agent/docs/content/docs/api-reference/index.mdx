@@ -1,0 +1,88 @@
+---
+title: "HTTP API"
+description: "Sandbox Agent HTTP endpoints, request schemas, and responses."
+---
+
+Use the Sandbox Agent HTTP API from any language. The server listens on port `2468` by default.
+
+[Download the OpenAPI specification](/sandbox-agent/openapi.json).
+
+Browse [schemas](/sandbox-agent/docs/api-reference/schemas/) and [authentication schemes](/sandbox-agent/docs/api-reference/authentication/).
+
+## v1
+
+[All v1 endpoints](/sandbox-agent/docs/api-reference/tags/v1/).
+
+| Method | Endpoint | Reference |
+| --- | --- | --- |
+| GET | `/v1/acp` | [get_v1_acp_servers](/sandbox-agent/docs/api-reference/operations/get_v1_acp_servers/) |
+| GET | `/v1/acp/{server_id}` | [get_v1_acp](/sandbox-agent/docs/api-reference/operations/get_v1_acp/) |
+| POST | `/v1/acp/{server_id}` | [post_v1_acp](/sandbox-agent/docs/api-reference/operations/post_v1_acp/) |
+| DELETE | `/v1/acp/{server_id}` | [delete_v1_acp](/sandbox-agent/docs/api-reference/operations/delete_v1_acp/) |
+| GET | `/v1/agents` | [get_v1_agents](/sandbox-agent/docs/api-reference/operations/get_v1_agents/) |
+| GET | `/v1/agents/{agent}` | [get_v1_agent](/sandbox-agent/docs/api-reference/operations/get_v1_agent/) |
+| POST | `/v1/agents/{agent}/install` | [post_v1_agent_install](/sandbox-agent/docs/api-reference/operations/post_v1_agent_install/) |
+| GET | `/v1/config/mcp` | [get_v1_config_mcp](/sandbox-agent/docs/api-reference/operations/get_v1_config_mcp/) |
+| PUT | `/v1/config/mcp` | [put_v1_config_mcp](/sandbox-agent/docs/api-reference/operations/put_v1_config_mcp/) |
+| DELETE | `/v1/config/mcp` | [delete_v1_config_mcp](/sandbox-agent/docs/api-reference/operations/delete_v1_config_mcp/) |
+| GET | `/v1/config/skills` | [get_v1_config_skills](/sandbox-agent/docs/api-reference/operations/get_v1_config_skills/) |
+| PUT | `/v1/config/skills` | [put_v1_config_skills](/sandbox-agent/docs/api-reference/operations/put_v1_config_skills/) |
+| DELETE | `/v1/config/skills` | [delete_v1_config_skills](/sandbox-agent/docs/api-reference/operations/delete_v1_config_skills/) |
+| GET | `/v1/desktop/clipboard` | [Read the desktop clipboard.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_clipboard/) |
+| POST | `/v1/desktop/clipboard` | [Write to the desktop clipboard.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_clipboard/) |
+| GET | `/v1/desktop/display/info` | [Get desktop display information.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_display_info/) |
+| POST | `/v1/desktop/keyboard/down` | [Press and hold a desktop keyboard key.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_keyboard_down/) |
+| POST | `/v1/desktop/keyboard/press` | [Press a desktop keyboard shortcut.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_keyboard_press/) |
+| POST | `/v1/desktop/keyboard/type` | [Type desktop keyboard text.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_keyboard_type/) |
+| POST | `/v1/desktop/keyboard/up` | [Release a desktop keyboard key.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_keyboard_up/) |
+| POST | `/v1/desktop/launch` | [Launch a desktop application.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_launch/) |
+| POST | `/v1/desktop/mouse/click` | [Click on the desktop.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_click/) |
+| POST | `/v1/desktop/mouse/down` | [Press and hold a desktop mouse button.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_down/) |
+| POST | `/v1/desktop/mouse/drag` | [Drag the desktop mouse.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_drag/) |
+| POST | `/v1/desktop/mouse/move` | [Move the desktop mouse.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_move/) |
+| GET | `/v1/desktop/mouse/position` | [Get the current desktop mouse position.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_mouse_position/) |
+| POST | `/v1/desktop/mouse/scroll` | [Scroll the desktop mouse wheel.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_scroll/) |
+| POST | `/v1/desktop/mouse/up` | [Release a desktop mouse button.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_mouse_up/) |
+| POST | `/v1/desktop/open` | [Open a file or URL with the default handler.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_open/) |
+| POST | `/v1/desktop/recording/start` | [Start desktop recording.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_recording_start/) |
+| POST | `/v1/desktop/recording/stop` | [Stop desktop recording.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_recording_stop/) |
+| GET | `/v1/desktop/recordings` | [List desktop recordings.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_recordings/) |
+| GET | `/v1/desktop/recordings/{id}` | [Get desktop recording metadata.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_recording/) |
+| DELETE | `/v1/desktop/recordings/{id}` | [Delete a desktop recording.](/sandbox-agent/docs/api-reference/operations/delete_v1_desktop_recording/) |
+| GET | `/v1/desktop/recordings/{id}/download` | [Download a desktop recording.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_recording_download/) |
+| GET | `/v1/desktop/screenshot` | [Capture a full desktop screenshot.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_screenshot/) |
+| GET | `/v1/desktop/screenshot/region` | [Capture a desktop screenshot region.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_screenshot_region/) |
+| POST | `/v1/desktop/start` | [Start the private desktop runtime.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_start/) |
+| GET | `/v1/desktop/status` | [Get desktop runtime status.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_status/) |
+| POST | `/v1/desktop/stop` | [Stop the private desktop runtime.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_stop/) |
+| GET | `/v1/desktop/stream/signaling` | [Open a desktop WebRTC signaling session.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_stream_ws/) |
+| POST | `/v1/desktop/stream/start` | [Start desktop streaming.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_stream_start/) |
+| GET | `/v1/desktop/stream/status` | [Get desktop stream status.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_stream_status/) |
+| POST | `/v1/desktop/stream/stop` | [Stop desktop streaming.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_stream_stop/) |
+| GET | `/v1/desktop/windows` | [List visible desktop windows.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_windows/) |
+| GET | `/v1/desktop/windows/focused` | [Get the currently focused desktop window.](/sandbox-agent/docs/api-reference/operations/get_v1_desktop_windows_focused/) |
+| POST | `/v1/desktop/windows/{id}/focus` | [Focus a desktop window.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_window_focus/) |
+| POST | `/v1/desktop/windows/{id}/move` | [Move a desktop window.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_window_move/) |
+| POST | `/v1/desktop/windows/{id}/resize` | [Resize a desktop window.](/sandbox-agent/docs/api-reference/operations/post_v1_desktop_window_resize/) |
+| GET | `/v1/fs/entries` | [get_v1_fs_entries](/sandbox-agent/docs/api-reference/operations/get_v1_fs_entries/) |
+| DELETE | `/v1/fs/entry` | [delete_v1_fs_entry](/sandbox-agent/docs/api-reference/operations/delete_v1_fs_entry/) |
+| GET | `/v1/fs/file` | [get_v1_fs_file](/sandbox-agent/docs/api-reference/operations/get_v1_fs_file/) |
+| PUT | `/v1/fs/file` | [put_v1_fs_file](/sandbox-agent/docs/api-reference/operations/put_v1_fs_file/) |
+| POST | `/v1/fs/mkdir` | [post_v1_fs_mkdir](/sandbox-agent/docs/api-reference/operations/post_v1_fs_mkdir/) |
+| POST | `/v1/fs/move` | [post_v1_fs_move](/sandbox-agent/docs/api-reference/operations/post_v1_fs_move/) |
+| GET | `/v1/fs/stat` | [get_v1_fs_stat](/sandbox-agent/docs/api-reference/operations/get_v1_fs_stat/) |
+| POST | `/v1/fs/upload-batch` | [post_v1_fs_upload_batch](/sandbox-agent/docs/api-reference/operations/post_v1_fs_upload_batch/) |
+| GET | `/v1/health` | [get_v1_health](/sandbox-agent/docs/api-reference/operations/get_v1_health/) |
+| GET | `/v1/processes` | [List all managed processes.](/sandbox-agent/docs/api-reference/operations/get_v1_processes/) |
+| POST | `/v1/processes` | [Create a long-lived managed process.](/sandbox-agent/docs/api-reference/operations/post_v1_processes/) |
+| GET | `/v1/processes/config` | [Get process runtime configuration.](/sandbox-agent/docs/api-reference/operations/get_v1_processes_config/) |
+| POST | `/v1/processes/config` | [Update process runtime configuration.](/sandbox-agent/docs/api-reference/operations/post_v1_processes_config/) |
+| POST | `/v1/processes/run` | [Run a one-shot command.](/sandbox-agent/docs/api-reference/operations/post_v1_processes_run/) |
+| GET | `/v1/processes/{id}` | [Get a single process by ID.](/sandbox-agent/docs/api-reference/operations/get_v1_process/) |
+| DELETE | `/v1/processes/{id}` | [Delete a process record.](/sandbox-agent/docs/api-reference/operations/delete_v1_process/) |
+| POST | `/v1/processes/{id}/input` | [Write input to a process.](/sandbox-agent/docs/api-reference/operations/post_v1_process_input/) |
+| POST | `/v1/processes/{id}/kill` | [Send SIGKILL to a process.](/sandbox-agent/docs/api-reference/operations/post_v1_process_kill/) |
+| GET | `/v1/processes/{id}/logs` | [Fetch process logs.](/sandbox-agent/docs/api-reference/operations/get_v1_process_logs/) |
+| POST | `/v1/processes/{id}/stop` | [Send SIGTERM to a process.](/sandbox-agent/docs/api-reference/operations/post_v1_process_stop/) |
+| POST | `/v1/processes/{id}/terminal/resize` | [Resize a process terminal.](/sandbox-agent/docs/api-reference/operations/post_v1_process_terminal_resize/) |
+| GET | `/v1/processes/{id}/terminal/ws` | [Open an interactive WebSocket terminal session.](/sandbox-agent/docs/api-reference/operations/get_v1_process_terminal_ws/) |

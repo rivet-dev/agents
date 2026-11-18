@@ -1,0 +1,32 @@
+{
+  "name": "@sandbox-agent/cli",
+  "version": "0.5.6",
+  "description": "CLI for sandbox-agent - run AI coding agents in sandboxes",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rivet-dev/agents.git"
+  },
+  "bin": {
+    "sandbox-agent": "bin/sandbox-agent"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sandbox-agent/cli-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  },
+  "optionalDependencies": {
+    "@sandbox-agent/cli-darwin-arm64": "workspace:*",
+    "@sandbox-agent/cli-darwin-x64": "workspace:*",
+    "@sandbox-agent/cli-linux-x64": "workspace:*",
+    "@sandbox-agent/cli-linux-arm64": "workspace:*",
+    "@sandbox-agent/cli-win32-x64": "workspace:*"
+  },
+  "files": [
+    "bin"
+  ]
+}

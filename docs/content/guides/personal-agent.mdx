@@ -1,0 +1,150 @@
+---
+title: "Personal Agent over SMS"
+description: "Give each user their own agent that they sign in to with their phone number and talk to by text message."
+---
+
+import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
+
+<ExampleLinkBar href="https://github.com/rivet-dev/agents/tree/main/examples/docs/personal-agent" />
+
+<Diagram
+  id="personal-agent"
+  label="Your sign-in page calls sendCode and verify on the user Actor for the phone number. Twilio posts each text to the /sms/webhook route of your HTTP server, which checks isSignedIn on the user Actor and calls submit on that user's assistant agent. The assistant texts its answer back through Twilio from onAnswer. The numbers show the order of the calls. There is one user Actor and one assistant agent per phone number, and the assistant can optionally use a sandbox."
+  stackLabel="One per phone number"
+  nodes={[
+    { id: "signin", x: 20, y: 40, w: 150, title: "Sign-in page", subtitle: "your app" },
+    { id: "twilio", x: 20, y: 150, w: 150, title: "Twilio", subtitle: "SMS and Verify" },
+    { id: "server", kind: "group", x: 300, y: 128, w: 170, h: 84, title: "HTTP server" },
+    { id: "webhook", kind: "slot", x: 315, y: 162, w: 140, h: 36, title: "`/sms/webhook`" },
+    { id: "user", x: 600, y: 40, product: "actors", stack: true, title: "`user`", subtitle: "sign-in in SQLite" },
+    { id: "assistant", x: 600, y: 150, product: "agents", stack: true, title: "`assistant`", subtitle: "the user's agent" },
+    { id: "sandbox", x: 815, y: 150, w: 85, optional: true, title: "Sandbox", subtitle: "optional" },
+  ]}
+  edges={[
+    { from: "signin", to: "user", label: "`sendCode, verify`", step: 1 },
+    { from: "twilio", to: "webhook", label: "text", step: 2 },
+    { from: "webhook", to: "user", fromOffset: -8, toOffset: 20, via: [[520, 172], [520, 90]], label: "`isSignedIn`", labelAt: [553, 134], labelAnchor: "start", step: 3 },
+    { from: "webhook", to: "assistant", fromOffset: 10, toOffset: 10, label: "`submit`", labelAt: [527, 206], step: 4 },
+    { from: "assistant", to: "twilio", fromSide: "bottom", toSide: "bottom", fromOffset: 5, via: [[690, 258], [95, 258]], label: "`onAnswer` texts the reply", step: 5 },
+    { from: "assistant", to: "sandbox", kind: "optional" },
+  ]}
+/>
+
+What we'll build:
+
+- A sign-in where users enter their phone number, then the code they get by text.
+- A `user` Actor per phone number that stores the sign-in in its SQLite database.
+- An `assistant` agent per user that answers texts and can look up the weather.
+- A Twilio webhook that routes each text to the sender's agent.
+
+<Steps>
+
+<Step title="Install">
+
+```sh
+npm add @rivet-dev/pi @earendil-works/pi-durable @earendil-works/pi-ai @earendil-works/pi-schema rivetkit hono @hono/node-server
+```
+
+</Step>
+
+<Step title="Set up Twilio">
+
+In the <a href="https://console.twilio.com" target="_blank" rel="noopener noreferrer">Twilio Console</a>, buy a phone number that can send SMS and create a <a href="https://www.twilio.com/docs/verify/api" target="_blank" rel="noopener noreferrer">Verify service</a> for the sign-in codes. Then set:
+
+```sh
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_PHONE_NUMBER=+15550100000
+TWILIO_VERIFY_SERVICE_SID=VA...
+TWILIO_WEBHOOK_URL=https://<your-worker>/sms/webhook
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+</Step>
+
+<Step title="Create the agent">
+
+Each user gets their own `assistant` agent, keyed by their phone number:
+
+<CodeSnippet file="examples/docs/personal-agent/assistant.ts" title="assistant.ts" highlight="answer" />
+
+- There's no step that creates an agent. The HTTP server calls `assistant.getOrCreate([phone])`, so a user's first text creates their agent and every later text reaches the same one, with the whole conversation so far.
+- `onAnswer` runs for every answer the agent gives, with the agent's own context, so `c.key` is the user's phone number. It texts the answer back. It runs inside the agent's run, so an answer that finishes after a crash or restart still gets sent.
+
+</Step>
+
+<Step title="Add tools">
+
+Tools are installed on the agent's registry, next to its system prompt:
+
+<CodeGroup>
+<CodeSnippet file="examples/docs/personal-agent/assistant.ts" title="assistant.ts" highlight="tools" />
+<CodeSnippet file="examples/docs/personal-agent/weather.ts" title="weather.ts" />
+</CodeGroup>
+
+`get_weather` returns mock weather. Replace its body with a call to a real weather API, or add your own tools the same way. See [Custom Tools](/guides/agent-custom-tools). To let the agent run code, edit files, or browse, give it a [sandbox](/guides/agent-sandboxes) with Pi's built-in tools.
+
+</Step>
+
+<Step title="Create the user Actor">
+
+Each phone number also gets a `user` Actor, keyed by the same number. It runs the two-step sign-in and remembers it in its SQLite database:
+
+<CodeSnippet file="examples/docs/personal-agent/user.ts" title="user.ts" highlight="sign-in" />
+
+- `sendCode` texts the user a code with Twilio Verify, which creates, expires, and rate limits it, so the Actor never stores it.
+- `verify` checks the code and saves the sign-in in the `profile` table.
+- `isSignedIn` tells the HTTP server whether a number has signed in.
+- Keys use the E.164 format, such as `+15551234567`, because that's how Twilio sends the sender's number.
+
+<Warning>
+This sign-in is simplified. Any client can call `user` by phone number. In production, return a session after `verify`, such as a [JWT](/docs/jwt), and protect the Actor with [authentication](/docs/authentication).
+</Warning>
+
+</Step>
+
+<Step title="Route requests">
+
+The HTTP server has one route. Twilio sends every text to `/sms/webhook`, which checks the sender's `user` Actor and hands the text to their `assistant`:
+
+<CodeSnippet file="examples/docs/personal-agent/server.ts" title="server.ts" highlight="webhook" />
+
+- The webhook checks Twilio's signature, which covers the URL Twilio called. Set `TWILIO_WEBHOOK_URL` to exactly the URL you give Twilio, because a proxy or tunnel can change the URL the server sees.
+- It answers with TwiML. An empty `<Response>` sends nothing, because the assistant replies on its own. A number that hasn't signed in gets a message telling it to sign in.
+- `submit` hands the text to the agent and returns without waiting for the answer, so the webhook responds within Twilio's 15-second limit. The agent texts its answer from `onAnswer`.
+- If a text is delivered twice, the `requestId` stops the agent from answering it again.
+
+</Step>
+
+<Step title="Try it">
+
+In the Twilio Console, open your phone number. Under **Messaging**, set **A message comes in** to **Webhook**, `https://<your-worker>/sms/webhook`, `HTTP POST`. This is the same URL as `TWILIO_WEBHOOK_URL`.
+
+<Note>
+If you haven't deployed yet, test locally with <a href="https://ngrok.com/docs/getting-started/" target="_blank" rel="noopener noreferrer">ngrok</a>. Run the server with `npx tsx server.ts`, run `ngrok http 3000` in another terminal, and use the ngrok URL in place of `https://<your-worker>` for both the webhook and `TWILIO_WEBHOOK_URL`.
+</Note>
+
+Sign in with your phone number:
+
+<CodeSnippet file="examples/docs/personal-agent/client.ts" title="client.ts" />
+
+Then text the Twilio number "What's the weather in Tokyo?"
+
+</Step>
+
+</Steps>
+
+## Next steps
+
+- [Sandboxes](/guides/agent-sandboxes): give the agent a computer to run code and browse.
+- [Custom Tools](/guides/agent-custom-tools): add tools for calendars, notes, or your own APIs.
+- [Schedules](/guides/agent-schedules): text the user a forecast every morning without being asked.
+- [Human in the Loop](/guides/agent-human-in-the-loop): ask the user before the agent acts.
+- [Slack](/guides/connect-slack), [Discord](/guides/connect-discord), [GitHub](/guides/connect-github), and [Linear](/guides/connect-linear): reach agents from other places.
+- [User Subscriptions](/guides/user-subscriptions): run each user's agent on their own Claude or ChatGPT plan.
+
+## Related docs
+
+- [Design Patterns](/guides/agent-design-patterns): why each user gets their own agent.
+- [Custom Tools](/guides/agent-custom-tools): how the weather tool works.
+- [Slack](/guides/connect-slack): the same webhook pattern for Slack.

@@ -1,0 +1,40 @@
+---
+title: "ProcessCreateRequest"
+description: "HTTP API schema for ProcessCreateRequest."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "command"
+  ],
+  "properties": {
+    "args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "command": {
+      "type": "string"
+    },
+    "cwd": {
+      "type": "string",
+      "nullable": true
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "interactive": {
+      "type": "boolean"
+    },
+    "tty": {
+      "type": "boolean"
+    }
+  }
+}
+```

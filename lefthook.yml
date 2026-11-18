@@ -1,11 +1,21 @@
+# Hooks live at the repository root because git only reads one config. Each job
+# is scoped to the workspace whose formatter owns the files.
 pre-commit:
   parallel: true
   jobs:
     - name: biome
       glob: "*.{cjs,cts,js,jsx,json,jsonc,mjs,mts,ts,tsx}"
+      exclude:
+        - "sandbox-agent/**"
       run: pnpm exec biome format --write --no-errors-on-unmatched {staged_files}
       stage_fixed: true
-    - name: rustfmt
+    - name: sandbox-agent-biome
+      root: "sandbox-agent/"
+      glob: "*.{cjs,cts,js,jsx,json,jsonc,mjs,mts,ts,tsx}"
+      run: pnpm exec biome format --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+    - name: sandbox-agent-rustfmt
+      root: "sandbox-agent/"
       glob: "*.rs"
       run: rustfmt --edition 2021 {staged_files}
       stage_fixed: true

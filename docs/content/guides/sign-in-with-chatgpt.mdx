@@ -1,0 +1,146 @@
+---
+title: "Sign in with ChatGPT"
+description: "Let users connect their ChatGPT plan so your agents run on it, with no OpenAI API key."
+---
+
+import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
+
+<ExampleLinkBar href="https://github.com/rivet-dev/agents/tree/main/examples/docs/sign-in-with-chatgpt" />
+
+<Diagram
+  id="sign-in-with-chatgpt"
+  label="The user calls start on the chatgptLogin Actor, which returns a sign-in URL. The user signs in at OpenAI and chooses Continue. OpenAI redirects the browser to a 127.0.0.1 URL. The user passes that URL to finish. The chatgptLogin Actor exchanges the code with OpenAI for tokens and saves the login to the user's credentials Actor. The numbers show the order of the steps. There is one chatgptLogin Actor and one credentials Actor per user."
+  stackLabel="One per user"
+  nodes={[
+    { id: "user", x: 20, y: 140, w: 150, h: 84, title: "User", subtitle: "your app" },
+    { id: "login", x: 300, y: 140, h: 84, product: "actors", stack: true, title: "`chatgptLogin`", subtitle: "runs the sign-in" },
+    { id: "openai", x: 600, y: 30, title: "OpenAI", subtitle: "sign-in and tokens" },
+    { id: "credentials", x: 600, y: 270, product: "actors", stack: true, title: "`credentials`", subtitle: "keeps the login" },
+  ]}
+  edges={[
+    { from: "user", to: "login", fromOffset: -26, toOffset: -26, label: "`start`", step: 1 },
+    { from: "login", to: "user", kind: "reply", label: "sign-in URL", step: 2 },
+    { from: "user", to: "openai", fromSide: "top", fromOffset: -20, toOffset: -14, via: [[75, 46]], label: "sign in, Continue", step: 3 },
+    { from: "openai", to: "user", toSide: "top", fromOffset: 14, toOffset: 20, via: [[115, 74]], kind: "reply", label: "redirect to 127.0.0.1", step: 4 },
+    { from: "user", to: "login", fromOffset: 26, toOffset: 26, label: "`finish`", step: 5 },
+    { from: "login", to: "openai", toSide: "bottom", toOffset: 15, via: [[700, 182]], label: "exchange code for tokens", step: 6 },
+    { from: "login", to: "credentials", fromSide: "bottom", via: [[385, 300]], label: "save login", step: 7 },
+  ]}
+/>
+
+What we'll build:
+
+- A **Continue with ChatGPT** flow that connects a user's ChatGPT Plus or Pro plan to your app.
+- A `chatgptLogin` Actor per user that runs the sign-in with pi-ai and saves the result.
+- A `credentials` Actor per user that keeps the login and refreshes its access token.
+- An agent that runs on the user's ChatGPT plan, with no OpenAI API key.
+
+Related docs:
+
+- [User Subscriptions](/guides/user-subscriptions), how agents read logins from a `credentials` Actor.
+- [Model access](/agents/docs#model-access), the order the agent looks for credentials in.
+- <a href="https://developers.openai.com/siwc/token-sharing-open-source" target="_blank" rel="noopener noreferrer">ChatGPT plan usage</a>, OpenAI's guide to the flow.
+
+<Note>
+This flow is for open-source and self-hosted apps. To offer it in a paid or hosted app, fill out OpenAI's <a href="https://openai.com/form/sign-in-with-chatgpt-interest/" target="_blank" rel="noopener noreferrer">interest form</a>.
+</Note>
+
+<Steps>
+
+<Step title="Install">
+
+```sh
+npm add @rivet-dev/pi @earendil-works/pi-durable @earendil-works/pi-ai @earendil-works/pi-coding-agent rivetkit
+```
+
+</Step>
+
+<Step title="Create a host ID">
+
+OpenAI identifies each deployment of your app by an agent host ID. Generate a UUID once and set it on every worker:
+
+```sh
+export CHATGPT_HOST_ID=$(node -e 'console.log(crypto.randomUUID())')
+```
+
+Keep the same value across deploys. It isn't a secret.
+
+</Step>
+
+<Step title="Store the login">
+
+The `credentials` Actor holds each user's login. It gives the agent the access token, never the refresh token, and refreshes it when it's about to expire:
+
+<CodeSnippet file="examples/docs/sign-in-with-chatgpt/credentials.ts" title="credentials.ts" />
+
+<Warning>
+Protect both Actors with [authentication](/docs/authentication). `credentials` returns access tokens, and anyone who can call `finish` can save a login to that user.
+</Warning>
+
+</Step>
+
+<Step title="Run the sign-in">
+
+The `chatgptLogin` Actor drives pi-ai's Sign in with ChatGPT flow:
+
+<CodeSnippet file="examples/docs/sign-in-with-chatgpt/chatgpt-login.ts" title="chatgpt-login.ts" />
+
+- `start` returns the URL to open. Calling it again cancels the sign-in in progress.
+- OpenAI sends the browser back to `http://127.0.0.1:1455/auth/callback`. When the worker runs on another machine, that page doesn't load, and the user pastes its URL into your app.
+- `finish` exchanges the code and saves the login with the provider id `openai`.
+- A sign-in that isn't finished within ten minutes is cancelled.
+- pi-ai listens on port 1455 during a sign-in, so each worker runs one sign-in at a time. A second user's `start` on the same worker fails until the first finishes or is cancelled.
+
+</Step>
+
+<Step title="Define the agent">
+
+<CodeSnippet file="examples/docs/sign-in-with-chatgpt/server.ts" title="server.ts" />
+
+The agent reads the user's credential before every model call, so it can use OpenAI models as soon as the user signs in.
+
+<Note>
+ChatGPT plan tokens only work with the Responses API, so they can't call OpenAI classifier models. Usage counts against the user's plan, and users can set limits for your app in their ChatGPT settings.
+</Note>
+
+</Step>
+
+<Step title="Connect from your app">
+
+<CodeSnippet file="examples/docs/sign-in-with-chatgpt/client.ts" title="client.ts" />
+
+In a web app, open the URL in a new tab and show a field for the pasted URL. Label the button **Continue with ChatGPT**, as OpenAI's <a href="https://developers.openai.com/siwc/ui-ux-guidelines" target="_blank" rel="noopener noreferrer">guidelines</a> require.
+
+</Step>
+
+<Step title="Try it">
+
+Start the worker with your host ID set:
+
+```sh
+CHATGPT_HOST_ID=<your host ID> npx tsx server.ts
+```
+
+In another terminal, run the client:
+
+```sh
+npx tsx client.ts
+```
+
+Open the URL it prints, choose **Continue**, and paste the URL you land on if the page asks. The client then prints a five-word greeting from the agent, answered on your ChatGPT plan.
+
+</Step>
+
+</Steps>
+
+## Next steps
+
+- [User Subscriptions](/guides/user-subscriptions): run each user's agent on their own Claude or ChatGPT plan.
+- [Personal Agent over SMS](/guides/personal-agent): give each signed-in user their own long-lived agent.
+- [Custom Tools](/guides/agent-custom-tools): add tools that call your own APIs.
+
+## Related docs
+
+- [Authentication](/docs/authentication): protect the `credentials` and `chatgptLogin` Actors.
+- [Scoped Access](/guides/scoped-access): limit what each caller can do with an agent.
+

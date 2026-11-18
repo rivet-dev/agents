@@ -1,0 +1,94 @@
+---
+title: "Send SIGKILL to a process."
+description: "POST /v1/processes/{id}/kill: request parameters and responses."
+---
+
+`POST /v1/processes/{id}/kill`
+
+Sends SIGKILL to the process and optionally waits up to `waitMs`
+milliseconds for the process to exit before returning.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | Yes | string | Process ID |
+| `waitMs` | query | No | integer | Wait up to N ms for process to exit |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "id",
+    "in": "path",
+    "description": "Process ID",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "waitMs",
+    "in": "query",
+    "description": "Wait up to N ms for process to exit",
+    "required": false,
+    "schema": {
+      "type": "integer",
+      "format": "int64",
+      "nullable": true,
+      "minimum": 0
+    }
+  }
+]
+```
+
+## Responses
+
+### 200
+
+Kill signal sent
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessInfo"
+  }
+}
+```
+
+Related schemas: [ProcessInfo](/sandbox-agent/docs/api-reference/schemas/processinfo/).
+
+### 404
+
+Unknown process
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 501
+
+Process API unsupported on this platform
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

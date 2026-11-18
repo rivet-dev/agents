@@ -1,0 +1,77 @@
+---
+title: "Launch a desktop application."
+description: "POST /v1/desktop/launch: request parameters and responses."
+---
+
+`POST /v1/desktop/launch`
+
+Launches an application by name on the managed desktop, optionally waiting
+for its window to appear.
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopLaunchRequest"
+  }
+}
+```
+
+Related schemas: [DesktopLaunchRequest](/sandbox-agent/docs/api-reference/schemas/desktoplaunchrequest/).
+
+## Responses
+
+### 200
+
+Application launched
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopLaunchResponse"
+  }
+}
+```
+
+Related schemas: [DesktopLaunchResponse](/sandbox-agent/docs/api-reference/schemas/desktoplaunchresponse/).
+
+### 404
+
+Application not found
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

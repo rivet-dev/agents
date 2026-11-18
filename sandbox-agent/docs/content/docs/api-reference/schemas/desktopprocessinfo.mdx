@@ -1,0 +1,32 @@
+---
+title: "DesktopProcessInfo"
+description: "HTTP API schema for DesktopProcessInfo."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "name",
+    "running"
+  ],
+  "properties": {
+    "logPath": {
+      "type": "string",
+      "nullable": true
+    },
+    "name": {
+      "type": "string"
+    },
+    "pid": {
+      "type": "integer",
+      "format": "int32",
+      "nullable": true,
+      "minimum": 0
+    },
+    "running": {
+      "type": "boolean"
+    }
+  }
+}
+```

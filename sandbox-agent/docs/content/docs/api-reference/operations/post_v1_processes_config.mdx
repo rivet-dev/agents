@@ -1,0 +1,77 @@
+---
+title: "Update process runtime configuration."
+description: "POST /v1/processes/config: request parameters and responses."
+---
+
+`POST /v1/processes/config`
+
+Replaces the runtime configuration for the process management API.
+Validates that all values are non-zero and clamps default timeout to max.
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessConfig"
+  }
+}
+```
+
+Related schemas: [ProcessConfig](/sandbox-agent/docs/api-reference/schemas/processconfig/).
+
+## Responses
+
+### 200
+
+Updated runtime process config
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessConfig"
+  }
+}
+```
+
+Related schemas: [ProcessConfig](/sandbox-agent/docs/api-reference/schemas/processconfig/).
+
+### 400
+
+Invalid config
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 501
+
+Process API unsupported on this platform
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

@@ -1,0 +1,26 @@
+---
+title: "get_v1_health"
+description: "GET /v1/health: request parameters and responses."
+---
+
+`GET /v1/health`
+
+
+
+## Responses
+
+### 200
+
+Service health response
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/HealthResponse"
+  }
+}
+```
+
+Related schemas: [HealthResponse](/sandbox-agent/docs/api-reference/schemas/healthresponse/).

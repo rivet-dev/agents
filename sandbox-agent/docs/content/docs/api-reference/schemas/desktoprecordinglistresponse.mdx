@@ -1,0 +1,23 @@
+---
+title: "DesktopRecordingListResponse"
+description: "HTTP API schema for DesktopRecordingListResponse."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "recordings"
+  ],
+  "properties": {
+    "recordings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/DesktopRecordingInfo"
+      }
+    }
+  }
+}
+```
+
+Related schemas: [DesktopRecordingInfo](/sandbox-agent/docs/api-reference/schemas/desktoprecordinginfo/).

@@ -1,0 +1,74 @@
+---
+title: "get_v1_config_skills"
+description: "GET /v1/config/skills: request parameters and responses."
+---
+
+`GET /v1/config/skills`
+
+
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `directory` | query | Yes | string | Target directory |
+| `skillName` | query | Yes | string | Skill entry name |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "directory",
+    "in": "query",
+    "description": "Target directory",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "skillName",
+    "in": "query",
+    "description": "Skill entry name",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  }
+]
+```
+
+## Responses
+
+### 200
+
+Skills entry
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/SkillsConfig"
+  }
+}
+```
+
+Related schemas: [SkillsConfig](/sandbox-agent/docs/api-reference/schemas/skillsconfig/).
+
+### 404
+
+Entry not found
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

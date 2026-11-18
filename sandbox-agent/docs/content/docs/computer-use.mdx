@@ -1,0 +1,859 @@
+---
+title: "Computer Use"
+description: "Control a virtual desktop inside the sandbox with mouse, keyboard, screenshots, recordings, and live streaming."
+sidebarTitle: "Computer Use"
+icon: "desktop"
+---
+
+Sandbox Agent provides a managed virtual desktop (Xvfb + openbox) that you can control programmatically. This is useful for browser automation, GUI testing, and AI computer-use workflows.
+
+## Start and stop
+
+<CodeGroup>
+```ts TypeScript
+import { SandboxAgent } from "sandbox-agent";
+
+const sdk = await SandboxAgent.connect({
+  baseUrl: "http://127.0.0.1:2468",
+});
+
+const status = await sdk.startDesktop({
+  width: 1920,
+  height: 1080,
+  dpi: 96,
+});
+
+console.log(status.state); // "active"
+console.log(status.display); // ":99"
+
+// When done
+await sdk.stopDesktop();
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/desktop/start" \
+  -H "Content-Type: application/json" \
+  -d '{"width":1920,"height":1080,"dpi":96}'
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/stop"
+```
+</CodeGroup>
+
+All fields in the start request are optional. Defaults are 1440x900 at 96 DPI.
+
+### Start request options
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `width` | number | 1440 | Desktop width in pixels |
+| `height` | number | 900 | Desktop height in pixels |
+| `dpi` | number | 96 | Display DPI |
+| `displayNum` | number | 99 | Starting X display number. The runtime probes from this number upward to find an available display. |
+| `stateDir` | string | (auto) | Desktop state directory for home, logs, recordings |
+| `streamVideoCodec` | string | `"vp8"` | WebRTC video codec (`vp8`, `vp9`, `h264`) |
+| `streamAudioCodec` | string | `"opus"` | WebRTC audio codec (`opus`, `g722`) |
+| `streamFrameRate` | number | 30 | Streaming frame rate (1-60) |
+| `webrtcPortRange` | string | `"59050-59070"` | UDP port range for WebRTC media |
+| `recordingFps` | number | 30 | Default recording FPS when not specified in `startDesktopRecording` (1-60) |
+
+The streaming and recording options configure defaults for the desktop session. They take effect when streaming or recording is started later.
+
+<CodeGroup>
+```ts TypeScript
+const status = await sdk.startDesktop({
+  width: 1920,
+  height: 1080,
+  streamVideoCodec: "h264",
+  streamFrameRate: 60,
+  webrtcPortRange: "59100-59120",
+  recordingFps: 15,
+});
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/desktop/start" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "width": 1920,
+    "height": 1080,
+    "streamVideoCodec": "h264",
+    "streamFrameRate": 60,
+    "webrtcPortRange": "59100-59120",
+    "recordingFps": 15
+  }'
+```
+</CodeGroup>
+
+## Status
+
+<CodeGroup>
+```ts TypeScript
+const status = await sdk.getDesktopStatus();
+console.log(status.state); // "inactive" | "active" | "failed" | ...
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/desktop/status"
+```
+</CodeGroup>
+
+## Screenshots
+
+Capture the full desktop or a specific region. Optionally include the cursor position.
+
+<CodeGroup>
+```ts TypeScript
+// Full screenshot (PNG by default)
+const png = await sdk.takeDesktopScreenshot();
+
+// JPEG at 70% quality, half scale
+const jpeg = await sdk.takeDesktopScreenshot({
+  format: "jpeg",
+  quality: 70,
+  scale: 0.5,
+});
+
+// Include cursor overlay
+const withCursor = await sdk.takeDesktopScreenshot({
+  showCursor: true,
+});
+
+// Region screenshot
+const region = await sdk.takeDesktopRegionScreenshot({
+  x: 100,
+  y: 100,
+  width: 400,
+  height: 300,
+});
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/desktop/screenshot" --output screenshot.png
+
+curl "http://127.0.0.1:2468/v1/desktop/screenshot?format=jpeg&quality=70&scale=0.5" \
+  --output screenshot.jpg
+
+# Include cursor overlay
+curl "http://127.0.0.1:2468/v1/desktop/screenshot?show_cursor=true" \
+  --output with_cursor.png
+
+curl "http://127.0.0.1:2468/v1/desktop/screenshot/region?x=100&y=100&width=400&height=300" \
+  --output region.png
+```
+</CodeGroup>
+
+### Screenshot options
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `format` | string | `"png"` | Output format: `png`, `jpeg`, or `webp` |
+| `quality` | number | 85 | Compression quality (1-100, JPEG/WebP only) |
+| `scale` | number | 1.0 | Scale factor (0.1-1.0) |
+| `showCursor` | boolean | `false` | Composite a crosshair at the cursor position |
+
+When `showCursor` is enabled, the cursor position is captured at the moment of the screenshot and a red crosshair is drawn at that location. This is useful for AI agents that need to see where the cursor is in the screenshot.
+
+## Mouse
+
+<CodeGroup>
+```ts TypeScript
+// Get current position
+const pos = await sdk.getDesktopMousePosition();
+console.log(pos.x, pos.y);
+
+// Move
+await sdk.moveDesktopMouse({ x: 500, y: 300 });
+
+// Click (left by default)
+await sdk.clickDesktop({ x: 500, y: 300 });
+
+// Right click
+await sdk.clickDesktop({ x: 500, y: 300, button: "right" });
+
+// Double click
+await sdk.clickDesktop({ x: 500, y: 300, clickCount: 2 });
+
+// Drag
+await sdk.dragDesktopMouse({
+  startX: 100, startY: 100,
+  endX: 400, endY: 400,
+});
+
+// Scroll
+await sdk.scrollDesktop({ x: 500, y: 300, deltaY: -3 });
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/desktop/mouse/position"
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/mouse/click" \
+  -H "Content-Type: application/json" \
+  -d '{"x":500,"y":300}'
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/mouse/drag" \
+  -H "Content-Type: application/json" \
+  -d '{"startX":100,"startY":100,"endX":400,"endY":400}'
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/mouse/scroll" \
+  -H "Content-Type: application/json" \
+  -d '{"x":500,"y":300,"deltaY":-3}'
+```
+</CodeGroup>
+
+## Keyboard
+
+<CodeGroup>
+```ts TypeScript
+// Type text
+await sdk.typeDesktopText({ text: "Hello, world!" });
+
+// Press a key with modifiers
+await sdk.pressDesktopKey({
+  key: "c",
+  modifiers: { ctrl: true },
+});
+
+// Low-level key down/up
+await sdk.keyDownDesktop({ key: "Shift_L" });
+await sdk.keyUpDesktop({ key: "Shift_L" });
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/desktop/keyboard/type" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello, world!"}'
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/keyboard/press" \
+  -H "Content-Type: application/json" \
+  -d '{"key":"c","modifiers":{"ctrl":true}}'
+```
+</CodeGroup>
+
+## Clipboard
+
+Read and write the X11 clipboard programmatically.
+
+<CodeGroup>
+```ts TypeScript
+// Read clipboard
+const clipboard = await sdk.getDesktopClipboard();
+console.log(clipboard.text);
+
+// Read primary selection (mouse-selected text)
+const primary = await sdk.getDesktopClipboard({ selection: "primary" });
+
+// Write to clipboard
+await sdk.setDesktopClipboard({ text: "Pasted via API" });
+
+// Write to both clipboard and primary selection
+await sdk.setDesktopClipboard({
+  text: "Synced text",
+  selection: "both",
+});
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/desktop/clipboard"
+
+curl "http://127.0.0.1:2468/v1/desktop/clipboard?selection=primary"
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/clipboard" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Pasted via API"}'
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/clipboard" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Synced text","selection":"both"}'
+```
+</CodeGroup>
+
+The `selection` parameter controls which X11 selection to read or write:
+
+| Value | Description |
+|-------|-------------|
+| `clipboard` (default) | The standard clipboard (Ctrl+C / Ctrl+V) |
+| `primary` | The primary selection (text selected with the mouse) |
+| `both` | Write to both clipboard and primary selection (write only) |
+
+## Display and windows
+
+<CodeGroup>
+```ts TypeScript
+const display = await sdk.getDesktopDisplayInfo();
+console.log(display.resolution); // { width: 1920, height: 1080, dpi: 96 }
+
+const { windows } = await sdk.listDesktopWindows();
+for (const win of windows) {
+  console.log(win.title, win.x, win.y, win.width, win.height);
+}
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/desktop/display/info"
+
+curl "http://127.0.0.1:2468/v1/desktop/windows"
+```
+</CodeGroup>
+
+The windows endpoint filters out noise automatically: window manager internals (Openbox), windows with empty titles, and tiny helper windows (under 120x80) are excluded. The currently active/focused window is always included regardless of filters.
+
+### Focused window
+
+Get the currently focused window without listing all windows.
+
+<CodeGroup>
+```ts TypeScript
+const focused = await sdk.getDesktopFocusedWindow();
+console.log(focused.title, focused.id);
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/desktop/windows/focused"
+```
+</CodeGroup>
+
+Returns 404 if no window currently has focus.
+
+### Window management
+
+Focus, move, and resize windows by their X11 window ID.
+
+<CodeGroup>
+```ts TypeScript
+const { windows } = await sdk.listDesktopWindows();
+const win = windows[0];
+
+// Bring window to foreground
+await sdk.focusDesktopWindow(win.id);
+
+// Move window
+await sdk.moveDesktopWindow(win.id, { x: 100, y: 50 });
+
+// Resize window
+await sdk.resizeDesktopWindow(win.id, { width: 1280, height: 720 });
+```
+
+```bash cURL
+# Focus a window
+curl -X POST "http://127.0.0.1:2468/v1/desktop/windows/12345/focus"
+
+# Move a window
+curl -X POST "http://127.0.0.1:2468/v1/desktop/windows/12345/move" \
+  -H "Content-Type: application/json" \
+  -d '{"x":100,"y":50}'
+
+# Resize a window
+curl -X POST "http://127.0.0.1:2468/v1/desktop/windows/12345/resize" \
+  -H "Content-Type: application/json" \
+  -d '{"width":1280,"height":720}'
+```
+</CodeGroup>
+
+All three endpoints return the updated window info so you can verify the operation took effect. The window manager may adjust the requested position or size.
+
+## App launching
+
+Launch applications or open files/URLs on the desktop without needing to shell out.
+
+<CodeGroup>
+```ts TypeScript
+// Launch an app by name
+const result = await sdk.launchDesktopApp({
+  app: "firefox",
+  args: ["--private"],
+});
+console.log(result.processId); // "proc_7"
+
+// Launch and wait for the window to appear
+const withWindow = await sdk.launchDesktopApp({
+  app: "xterm",
+  wait: true,
+});
+console.log(withWindow.windowId); // "12345" or null if timed out
+
+// Open a URL with the default handler
+const opened = await sdk.openDesktopTarget({
+  target: "https://example.com",
+});
+console.log(opened.processId);
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/desktop/launch" \
+  -H "Content-Type: application/json" \
+  -d '{"app":"firefox","args":["--private"]}'
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/launch" \
+  -H "Content-Type: application/json" \
+  -d '{"app":"xterm","wait":true}'
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/open" \
+  -H "Content-Type: application/json" \
+  -d '{"target":"https://example.com"}'
+```
+</CodeGroup>
+
+The returned `processId` can be used with the [Process API](/sandbox-agent/docs/processes) to read logs (`GET /v1/processes/{id}/logs`) or stop the application (`POST /v1/processes/{id}/stop`).
+
+When `wait` is `true`, the API polls for up to 5 seconds for a window to appear. If the window appears, its ID is returned in `windowId`. If it times out, `windowId` is `null` but the process is still running.
+
+<Tip>
+**Launch/Open vs the Process API:** Both `launch` and `open` are convenience wrappers around the [Process API](/sandbox-agent/docs/processes). They create managed processes (with `owner: "desktop"`) that you can inspect, log, and stop through the same Process endpoints. The difference is that `launch` validates the binary exists in PATH first and can optionally wait for a window to appear, while `open` delegates to the system default handler (`xdg-open`). Use the Process API directly when you need full control over command, environment, working directory, or restart policies.
+</Tip>
+
+## Recording
+
+Record the desktop to MP4.
+
+<CodeGroup>
+```ts TypeScript
+const recording = await sdk.startDesktopRecording({ fps: 30 });
+console.log(recording.id);
+
+// ... do things ...
+
+const stopped = await sdk.stopDesktopRecording();
+
+// List all recordings
+const { recordings } = await sdk.listDesktopRecordings();
+
+// Download
+const mp4 = await sdk.downloadDesktopRecording(recording.id);
+
+// Clean up
+await sdk.deleteDesktopRecording(recording.id);
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/desktop/recording/start" \
+  -H "Content-Type: application/json" \
+  -d '{"fps":30}'
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/recording/stop"
+
+curl "http://127.0.0.1:2468/v1/desktop/recordings"
+
+curl "http://127.0.0.1:2468/v1/desktop/recordings/rec_1/download" --output recording.mp4
+
+curl -X DELETE "http://127.0.0.1:2468/v1/desktop/recordings/rec_1"
+```
+</CodeGroup>
+
+## Desktop processes
+
+The desktop runtime manages several background processes (Xvfb, openbox, neko, ffmpeg). These are all registered with the general [Process API](/sandbox-agent/docs/processes) under the `desktop` owner, so you can inspect logs, check status, and troubleshoot using the same tools you use for any other managed process.
+
+<CodeGroup>
+```ts TypeScript
+// List all processes, including desktop-owned ones
+const { processes } = await sdk.listProcesses();
+
+const desktopProcs = processes.filter((p) => p.owner === "desktop");
+for (const p of desktopProcs) {
+  console.log(p.id, p.command, p.status);
+}
+
+// Read logs from a specific desktop process
+const logs = await sdk.getProcessLogs(desktopProcs[0].id, { tail: 50 });
+for (const entry of logs.entries) {
+  console.log(entry.stream, atob(entry.data));
+}
+```
+
+```bash cURL
+# List all processes (desktop processes have owner: "desktop")
+curl "http://127.0.0.1:2468/v1/processes"
+
+# Get logs from a specific desktop process
+curl "http://127.0.0.1:2468/v1/processes/proc_1/logs?tail=50"
+```
+</CodeGroup>
+
+The desktop status endpoint also includes a summary of running processes:
+
+<CodeGroup>
+```ts TypeScript
+const status = await sdk.getDesktopStatus();
+for (const proc of status.processes) {
+  console.log(proc.name, proc.pid, proc.running);
+}
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/desktop/status"
+# Response includes: processes: [{ name: "Xvfb", pid: 123, running: true }, ...]
+```
+</CodeGroup>
+
+| Process | Role | Restart policy |
+|---------|------|---------------|
+| Xvfb | Virtual X11 framebuffer | Auto-restart while desktop is active |
+| openbox | Window manager | Auto-restart while desktop is active |
+| neko | WebRTC streaming server (started by `startDesktopStream`) | No auto-restart |
+| ffmpeg | Screen recorder (started by `startDesktopRecording`) | No auto-restart |
+
+## Live streaming
+
+Start a WebRTC stream for real-time desktop viewing in a browser.
+
+<CodeGroup>
+```ts TypeScript
+await sdk.startDesktopStream();
+
+// Check stream status
+const status = await sdk.getDesktopStreamStatus();
+console.log(status.active); // true
+console.log(status.processId); // "proc_5"
+
+// Connect via the React DesktopViewer component or
+// use the WebSocket signaling endpoint directly
+// at ws://127.0.0.1:2468/v1/desktop/stream/signaling
+
+await sdk.stopDesktopStream();
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/desktop/stream/start"
+
+# Check stream status
+curl "http://127.0.0.1:2468/v1/desktop/stream/status"
+
+# Connect to ws://127.0.0.1:2468/v1/desktop/stream/signaling for WebRTC signaling
+
+curl -X POST "http://127.0.0.1:2468/v1/desktop/stream/stop"
+```
+</CodeGroup>
+
+For a drop-in React component, see [React Components](/sandbox-agent/docs/react-components).
+
+## API reference
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/desktop/start` | Start the desktop runtime |
+| `POST` | `/v1/desktop/stop` | Stop the desktop runtime |
+| `GET` | `/v1/desktop/status` | Get desktop runtime status |
+| `GET` | `/v1/desktop/screenshot` | Capture full desktop screenshot |
+| `GET` | `/v1/desktop/screenshot/region` | Capture a region screenshot |
+| `GET` | `/v1/desktop/mouse/position` | Get current mouse position |
+| `POST` | `/v1/desktop/mouse/move` | Move the mouse |
+| `POST` | `/v1/desktop/mouse/click` | Click the mouse |
+| `POST` | `/v1/desktop/mouse/down` | Press mouse button down |
+| `POST` | `/v1/desktop/mouse/up` | Release mouse button |
+| `POST` | `/v1/desktop/mouse/drag` | Drag from one point to another |
+| `POST` | `/v1/desktop/mouse/scroll` | Scroll at a position |
+| `POST` | `/v1/desktop/keyboard/type` | Type text |
+| `POST` | `/v1/desktop/keyboard/press` | Press a key with optional modifiers |
+| `POST` | `/v1/desktop/keyboard/down` | Press a key down (hold) |
+| `POST` | `/v1/desktop/keyboard/up` | Release a key |
+| `GET` | `/v1/desktop/display/info` | Get display info |
+| `GET` | `/v1/desktop/windows` | List visible windows |
+| `GET` | `/v1/desktop/windows/focused` | Get focused window info |
+| `POST` | `/v1/desktop/windows/{id}/focus` | Focus a window |
+| `POST` | `/v1/desktop/windows/{id}/move` | Move a window |
+| `POST` | `/v1/desktop/windows/{id}/resize` | Resize a window |
+| `GET` | `/v1/desktop/clipboard` | Read clipboard contents |
+| `POST` | `/v1/desktop/clipboard` | Write to clipboard |
+| `POST` | `/v1/desktop/launch` | Launch an application |
+| `POST` | `/v1/desktop/open` | Open a file or URL |
+| `POST` | `/v1/desktop/recording/start` | Start recording |
+| `POST` | `/v1/desktop/recording/stop` | Stop recording |
+| `GET` | `/v1/desktop/recordings` | List recordings |
+| `GET` | `/v1/desktop/recordings/{id}` | Get recording metadata |
+| `GET` | `/v1/desktop/recordings/{id}/download` | Download recording |
+| `DELETE` | `/v1/desktop/recordings/{id}` | Delete recording |
+| `POST` | `/v1/desktop/stream/start` | Start WebRTC streaming |
+| `POST` | `/v1/desktop/stream/stop` | Stop WebRTC streaming |
+| `GET` | `/v1/desktop/stream/status` | Get stream status |
+| `GET` | `/v1/desktop/stream/signaling` | WebSocket for WebRTC signaling |
+
+### TypeScript SDK methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `startDesktop(request?)` | `DesktopStatusResponse` | Start the desktop |
+| `stopDesktop()` | `DesktopStatusResponse` | Stop the desktop |
+| `getDesktopStatus()` | `DesktopStatusResponse` | Get desktop status |
+| `takeDesktopScreenshot(query?)` | `Uint8Array` | Capture screenshot |
+| `takeDesktopRegionScreenshot(query)` | `Uint8Array` | Capture region screenshot |
+| `getDesktopMousePosition()` | `DesktopMousePositionResponse` | Get mouse position |
+| `moveDesktopMouse(request)` | `DesktopMousePositionResponse` | Move mouse |
+| `clickDesktop(request)` | `DesktopMousePositionResponse` | Click mouse |
+| `mouseDownDesktop(request)` | `DesktopMousePositionResponse` | Mouse button down |
+| `mouseUpDesktop(request)` | `DesktopMousePositionResponse` | Mouse button up |
+| `dragDesktopMouse(request)` | `DesktopMousePositionResponse` | Drag mouse |
+| `scrollDesktop(request)` | `DesktopMousePositionResponse` | Scroll |
+| `typeDesktopText(request)` | `DesktopActionResponse` | Type text |
+| `pressDesktopKey(request)` | `DesktopActionResponse` | Press key |
+| `keyDownDesktop(request)` | `DesktopActionResponse` | Key down |
+| `keyUpDesktop(request)` | `DesktopActionResponse` | Key up |
+| `getDesktopDisplayInfo()` | `DesktopDisplayInfoResponse` | Get display info |
+| `listDesktopWindows()` | `DesktopWindowListResponse` | List windows |
+| `getDesktopFocusedWindow()` | `DesktopWindowInfo` | Get focused window |
+| `focusDesktopWindow(id)` | `DesktopWindowInfo` | Focus a window |
+| `moveDesktopWindow(id, request)` | `DesktopWindowInfo` | Move a window |
+| `resizeDesktopWindow(id, request)` | `DesktopWindowInfo` | Resize a window |
+| `getDesktopClipboard(query?)` | `DesktopClipboardResponse` | Read clipboard |
+| `setDesktopClipboard(request)` | `DesktopActionResponse` | Write clipboard |
+| `launchDesktopApp(request)` | `DesktopLaunchResponse` | Launch an app |
+| `openDesktopTarget(request)` | `DesktopOpenResponse` | Open file/URL |
+| `startDesktopRecording(request?)` | `DesktopRecordingInfo` | Start recording |
+| `stopDesktopRecording()` | `DesktopRecordingInfo` | Stop recording |
+| `listDesktopRecordings()` | `DesktopRecordingListResponse` | List recordings |
+| `getDesktopRecording(id)` | `DesktopRecordingInfo` | Get recording |
+| `downloadDesktopRecording(id)` | `Uint8Array` | Download recording |
+| `deleteDesktopRecording(id)` | `void` | Delete recording |
+| `startDesktopStream()` | `DesktopStreamStatusResponse` | Start streaming |
+| `stopDesktopStream()` | `DesktopStreamStatusResponse` | Stop streaming |
+| `getDesktopStreamStatus()` | `DesktopStreamStatusResponse` | Stream status |
+
+## Customizing the desktop environment
+
+The desktop runs inside the sandbox filesystem, so you can customize it using the [File System](/sandbox-agent/docs/file-system) API before or after starting the desktop. The desktop HOME directory is located at `~/.local/state/sandbox-agent/desktop/home` (or `$XDG_STATE_HOME/sandbox-agent/desktop/home` if `XDG_STATE_HOME` is set).
+
+All configuration files below are written to paths relative to this HOME directory.
+
+### Window manager (openbox)
+
+The desktop uses [openbox](http://openbox.org/) as its window manager. You can customize its behavior, theme, and keyboard shortcuts by writing an `rc.xml` config file.
+
+<CodeGroup>
+```ts TypeScript
+const openboxConfig = `<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <theme>
+    <name>Clearlooks</name>
+    <titleLayout>NLIMC</titleLayout>
+    <font place="ActiveWindow"><name>DejaVu Sans</name><size>10</size></font>
+  </theme>
+  <desktops><number>1</number></desktops>
+  <keyboard>
+    <keybind key="A-F4"><action name="Close"/></keybind>
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+  </keyboard>
+</openbox_config>`;
+
+await sdk.mkdirFs({ path: "~/.local/state/sandbox-agent/desktop/home/.config/openbox" });
+await sdk.writeFsFile(
+  { path: "~/.local/state/sandbox-agent/desktop/home/.config/openbox/rc.xml" },
+  openboxConfig,
+);
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/fs/mkdir?path=~/.local/state/sandbox-agent/desktop/home/.config/openbox"
+
+curl -X PUT "http://127.0.0.1:2468/v1/fs/file?path=~/.local/state/sandbox-agent/desktop/home/.config/openbox/rc.xml" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @rc.xml
+```
+</CodeGroup>
+
+### Autostart programs
+
+Openbox runs scripts in `~/.config/openbox/autostart` on startup. Use this to launch applications, set the background, or configure the environment.
+
+<CodeGroup>
+```ts TypeScript
+const autostart = `#!/bin/sh
+# Set a solid background color
+xsetroot -solid "#1e1e2e" &
+
+# Launch a terminal
+xterm -geometry 120x40+50+50 &
+
+# Launch a browser
+firefox --no-remote &
+`;
+
+await sdk.mkdirFs({ path: "~/.local/state/sandbox-agent/desktop/home/.config/openbox" });
+await sdk.writeFsFile(
+  { path: "~/.local/state/sandbox-agent/desktop/home/.config/openbox/autostart" },
+  autostart,
+);
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/fs/mkdir?path=~/.local/state/sandbox-agent/desktop/home/.config/openbox"
+
+curl -X PUT "http://127.0.0.1:2468/v1/fs/file?path=~/.local/state/sandbox-agent/desktop/home/.config/openbox/autostart" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @autostart.sh
+```
+</CodeGroup>
+
+<Note>
+The autostart script runs when openbox starts, which happens during `startDesktop()`. Write the autostart file before calling `startDesktop()` for it to take effect.
+</Note>
+
+### Background
+
+There is no wallpaper set by default (the background is the X root window default). You can set it using `xsetroot` in the autostart script (as shown above), or use `feh` if you need an image:
+
+<CodeGroup>
+```ts TypeScript
+// Upload a wallpaper image
+import fs from "node:fs";
+
+const wallpaper = await fs.promises.readFile("./wallpaper.png");
+await sdk.writeFsFile(
+  { path: "~/.local/state/sandbox-agent/desktop/home/wallpaper.png" },
+  wallpaper,
+);
+
+// Set the autostart to apply it
+const autostart = `#!/bin/sh
+feh --bg-fill ~/wallpaper.png &
+`;
+
+await sdk.mkdirFs({ path: "~/.local/state/sandbox-agent/desktop/home/.config/openbox" });
+await sdk.writeFsFile(
+  { path: "~/.local/state/sandbox-agent/desktop/home/.config/openbox/autostart" },
+  autostart,
+);
+```
+
+```bash cURL
+curl -X PUT "http://127.0.0.1:2468/v1/fs/file?path=~/.local/state/sandbox-agent/desktop/home/wallpaper.png" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @wallpaper.png
+
+curl -X PUT "http://127.0.0.1:2468/v1/fs/file?path=~/.local/state/sandbox-agent/desktop/home/.config/openbox/autostart" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @autostart.sh
+```
+</CodeGroup>
+
+<Note>
+`feh` is not installed by default. Install it via the [Process API](/sandbox-agent/docs/processes) before starting the desktop: `await sdk.runProcess({ command: "apt-get", args: ["install", "-y", "feh"] })`.
+</Note>
+
+### Fonts
+
+Only `fonts-dejavu-core` is installed by default. To add more fonts, install them with your system package manager or copy font files into the sandbox:
+
+<CodeGroup>
+```ts TypeScript
+// Install a font package
+await sdk.runProcess({
+  command: "apt-get",
+  args: ["install", "-y", "fonts-noto", "fonts-liberation"],
+});
+
+// Or copy a custom font file
+import fs from "node:fs";
+
+const font = await fs.promises.readFile("./CustomFont.ttf");
+await sdk.mkdirFs({ path: "~/.local/state/sandbox-agent/desktop/home/.local/share/fonts" });
+await sdk.writeFsFile(
+  { path: "~/.local/state/sandbox-agent/desktop/home/.local/share/fonts/CustomFont.ttf" },
+  font,
+);
+
+// Rebuild the font cache
+await sdk.runProcess({ command: "fc-cache", args: ["-fv"] });
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/processes/run" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"apt-get","args":["install","-y","fonts-noto","fonts-liberation"]}'
+
+curl -X POST "http://127.0.0.1:2468/v1/fs/mkdir?path=~/.local/state/sandbox-agent/desktop/home/.local/share/fonts"
+
+curl -X PUT "http://127.0.0.1:2468/v1/fs/file?path=~/.local/state/sandbox-agent/desktop/home/.local/share/fonts/CustomFont.ttf" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @CustomFont.ttf
+
+curl -X POST "http://127.0.0.1:2468/v1/processes/run" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"fc-cache","args":["-fv"]}'
+```
+</CodeGroup>
+
+### Cursor theme
+
+<CodeGroup>
+```ts TypeScript
+await sdk.runProcess({
+  command: "apt-get",
+  args: ["install", "-y", "dmz-cursor-theme"],
+});
+
+const xresources = `Xcursor.theme: DMZ-White\nXcursor.size: 24\n`;
+await sdk.writeFsFile(
+  { path: "~/.local/state/sandbox-agent/desktop/home/.Xresources" },
+  xresources,
+);
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/processes/run" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"apt-get","args":["install","-y","dmz-cursor-theme"]}'
+
+curl -X PUT "http://127.0.0.1:2468/v1/fs/file?path=~/.local/state/sandbox-agent/desktop/home/.Xresources" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary 'Xcursor.theme: DMZ-White\nXcursor.size: 24'
+```
+</CodeGroup>
+
+<Note>
+Run `xrdb -merge ~/.Xresources` (via the autostart or process API) after writing the file for changes to take effect.
+</Note>
+
+### Shell and terminal
+
+No terminal emulator or shell is launched by default. Add one to the openbox autostart:
+
+```sh
+# In ~/.config/openbox/autostart
+xterm -geometry 120x40+50+50 &
+```
+
+To use a different shell, set the `SHELL` environment variable in your Dockerfile or install your preferred shell and configure the terminal to use it.
+
+### GTK theme
+
+Applications using GTK will pick up settings from `~/.config/gtk-3.0/settings.ini`:
+
+<CodeGroup>
+```ts TypeScript
+const gtkSettings = `[Settings]
+gtk-theme-name=Adwaita
+gtk-icon-theme-name=Adwaita
+gtk-font-name=DejaVu Sans 10
+gtk-cursor-theme-name=DMZ-White
+gtk-cursor-theme-size=24
+`;
+
+await sdk.mkdirFs({ path: "~/.local/state/sandbox-agent/desktop/home/.config/gtk-3.0" });
+await sdk.writeFsFile(
+  { path: "~/.local/state/sandbox-agent/desktop/home/.config/gtk-3.0/settings.ini" },
+  gtkSettings,
+);
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/fs/mkdir?path=~/.local/state/sandbox-agent/desktop/home/.config/gtk-3.0"
+
+curl -X PUT "http://127.0.0.1:2468/v1/fs/file?path=~/.local/state/sandbox-agent/desktop/home/.config/gtk-3.0/settings.ini" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @settings.ini
+```
+</CodeGroup>
+
+### Summary of configuration paths
+
+All paths are relative to the desktop HOME directory (`~/.local/state/sandbox-agent/desktop/home`).
+
+| What | Path | Notes |
+|------|------|-------|
+| Openbox config | `.config/openbox/rc.xml` | Window manager theme, keybindings, behavior |
+| Autostart | `.config/openbox/autostart` | Shell script run on desktop start |
+| Custom fonts | `.local/share/fonts/` | TTF/OTF files, run `fc-cache -fv` after |
+| Cursor theme | `.Xresources` | Requires `xrdb -merge` to apply |
+| GTK 3 settings | `.config/gtk-3.0/settings.ini` | Theme, icons, fonts for GTK apps |
+| Wallpaper | Any path, referenced from autostart | Requires `feh` or similar tool |

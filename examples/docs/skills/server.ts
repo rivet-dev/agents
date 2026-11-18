@@ -1,0 +1,20 @@
+import { createRegistry } from "@earendil-works/pi-durable";
+import { CodingTools } from "@earendil-works/pi-durable/tools";
+import { pi } from "@rivet-dev/pi";
+import { e2bProvider } from "@rivet-dev/sandbox-adapter/e2b";
+import { setup } from "rivetkit";
+import { Skills } from "./skills";
+
+const extensions = createRegistry();
+extensions.install(CodingTools);
+extensions.install(Skills);
+
+const agent = pi({
+	model: "anthropic/claude-opus-5-5",
+	registry: extensions,
+	sandbox: e2bProvider(),
+});
+
+export const registry = setup({ use: { agent } });
+
+registry.start();

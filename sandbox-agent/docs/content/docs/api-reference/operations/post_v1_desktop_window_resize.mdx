@@ -1,0 +1,98 @@
+---
+title: "Resize a desktop window."
+description: "POST /v1/desktop/windows/{id}/resize: request parameters and responses."
+---
+
+`POST /v1/desktop/windows/{id}/resize`
+
+Resizes the specified window to the given dimensions.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | Yes | string | X11 window ID |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "id",
+    "in": "path",
+    "description": "X11 window ID",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  }
+]
+```
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopWindowResizeRequest"
+  }
+}
+```
+
+Related schemas: [DesktopWindowResizeRequest](/sandbox-agent/docs/api-reference/schemas/desktopwindowresizerequest/).
+
+## Responses
+
+### 200
+
+Window info after resize
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopWindowInfo"
+  }
+}
+```
+
+Related schemas: [DesktopWindowInfo](/sandbox-agent/docs/api-reference/schemas/desktopwindowinfo/).
+
+### 404
+
+Window not found
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

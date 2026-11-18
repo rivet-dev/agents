@@ -1,0 +1,30 @@
+---
+title: "AgentInstallArtifact"
+description: "HTTP API schema for AgentInstallArtifact."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "kind",
+    "path",
+    "source"
+  ],
+  "properties": {
+    "kind": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+}
+```

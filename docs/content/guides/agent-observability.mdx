@@ -1,0 +1,69 @@
+---
+title: "Trace Agent Runs with OpenTelemetry"
+description: "Trace every agent run with OpenTelemetry."
+---
+
+Pi Durable traces each run with [OpenTelemetry](/docs/tracing). You don't set any `pi()` option. Without an OpenTelemetry SDK, tracing does nothing.
+
+## Export traces
+
+Exporting Pi's spans takes two steps:
+
+1. Set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, as in [the RivetKit quickstart](/docs/tracing#quickstart). This exports RivetKit's own spans, such as `agent/prompt`.
+2. Start `NodeSDK` from `@opentelemetry/sdk-node` before your registry, as in [Add application spans](/docs/tracing#add-application-spans). This exports Pi's spans.
+
+The environment variable alone exports only RivetKit's spans. Pi's spans use `@opentelemetry/api` in your process, so they need the SDK.
+
+## What a run looks like
+
+A `prompt` with one tool call produces two linked traces:
+
+```
+agent/prompt                                 the caller's trace
+└── invoke_agent pi
+
+pi.durable.submit                            the run's trace, linked to agent/prompt
+├── pi.durable.phase  pi.generation prepare
+├── pi.durable.phase  pi.generation request
+│   ├── chat claude-opus-5-5                 the model request
+│   └── pi.durable.phase  pi.tool call
+│       └── app.lookup                       your span
+└── pi.durable.phase  pi.generation tools
+    ├── pi.durable.phase  pi.generation prepare
+    └── pi.durable.phase  pi.generation request
+        └── chat claude-opus-5-5
+```
+
+- **Each run is its own trace**, linked to its caller. RivetKit treats scheduled actions and workflow runs the same way. A `conversation.submit` run has the same trace as a `prompt` run, without `invoke_agent pi`.
+- **A run keeps its trace ID** across retries, actor sleeps, and restarts, because Pi stores the trace context with its tasks.
+- **Your spans nest under the phase that runs them.** Start a span in a tool with `@opentelemetry/api` and it appears under the tool's phase.
+- **Your `c.db` calls export `rivet.sqlite.*` spans while an action is open.** That covers your own actions, and tools in a `prompt` run, where the spans appear under the tool's phase. A tool in a `conversation.submit` run exports none, because that action has already returned.
+- **Pi's own storage exports no spans**, so its queries do not bury yours.
+
+## Spans
+
+Every span Pi records has `rivet.actor.id`, the Actor's id.
+
+| Span | Meaning | Attributes |
+| --- | --- | --- |
+| `invoke_agent pi` | A `prompt`, from saving its input until its run settles. A child of the `prompt` action span. | `gen_ai.operation.name`, `gen_ai.agent.name`, `gen_ai.conversation.id`, `gen_ai.request.model` |
+| `pi.durable.submit` | Pi admits a submission. | `submission.type`, `submission.id`, `conversation.id`, `result` |
+| `pi.durable.phase` | One step of a task, such as a model request or a tool call. | `task.id`, `task.name`, `phase`, `kind`, `attempt`, `resumed`, `outcome`, `tool.name`, `tool.call_id` |
+| `chat <model>` | One model call. Each retry and each poll of a deferred answer is its own call. | `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` (with cached tokens), `gen_ai.usage.output_tokens`, `gen_ai.usage.cost_usd` |
+
+## Failures
+
+A failed span has an error status and `error.type`:
+
+| `error.type` | Span | Meaning |
+| --- | --- | --- |
+| `unanswered` | `invoke_agent pi` | The run ended without an answer, such as after a model error. |
+| `run_error` | `invoke_agent pi` | The `prompt` threw. |
+| `task_faulted`, `task_failed`, `task_orphaned` | `pi.durable.phase` | A task stopped in this phase, such as a tool that threw. |
+| `provider_error` | `chat <model>` | The model call failed. Pi may retry it. |
+
+Tracing can't break a run. A collector that is down or a tracer that throws loses spans, and the run still answers.
+
+## What is never recorded
+
+Traces never record prompt text, tool arguments, tool results, or error messages. Error text can repeat what the caller sent, so a failed span names only the type of the failure. Read the details from [the conversation](/guides/agent-client-sdk).
