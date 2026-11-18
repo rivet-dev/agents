@@ -1,0 +1,74 @@
+---
+title: "get_v1_config_mcp"
+description: "GET /v1/config/mcp: request parameters and responses."
+---
+
+`GET /v1/config/mcp`
+
+
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `directory` | query | Yes | string | Target directory |
+| `mcpName` | query | Yes | string | MCP entry name |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "directory",
+    "in": "query",
+    "description": "Target directory",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "mcpName",
+    "in": "query",
+    "description": "MCP entry name",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  }
+]
+```
+
+## Responses
+
+### 200
+
+MCP entry
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/McpServerConfig"
+  }
+}
+```
+
+Related schemas: [McpServerConfig](/sandbox-agent/docs/api-reference/schemas/mcpserverconfig/).
+
+### 404
+
+Entry not found
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

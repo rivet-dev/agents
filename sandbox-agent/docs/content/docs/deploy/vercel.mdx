@@ -1,0 +1,50 @@
+---
+title: "Vercel"
+description: "Deploy Sandbox Agent inside a Vercel Sandbox."
+---
+
+## Prerequisites
+
+- `VERCEL_OIDC_TOKEN` or `VERCEL_ACCESS_TOKEN`
+- `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
+
+## TypeScript example
+
+```bash
+npm install sandbox-agent@0.5.x @vercel/sandbox
+```
+
+```typescript
+import { SandboxAgent } from "sandbox-agent";
+import { vercel } from "sandbox-agent/vercel";
+
+const env: Record<string, string> = {};
+if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+if (process.env.OPENAI_API_KEY) env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+const sdk = await SandboxAgent.start({
+  sandbox: vercel({
+    create: {
+      runtime: "node24",
+      env,
+    },
+  }),
+});
+
+try {
+  const session = await sdk.createSession({ agent: "claude" });
+  const response = await session.prompt([
+    { type: "text", text: "Summarize this repository" },
+  ]);
+  console.log(response.stopReason);
+} finally {
+  await sdk.destroySandbox();
+}
+```
+
+The `vercel` provider handles sandbox creation, Sandbox Agent installation, agent setup, and server startup automatically.
+
+## Authentication
+
+Vercel Sandboxes support OIDC token auth (recommended) and access-token auth.
+See [Vercel Sandbox docs](https://vercel.com/docs/functions/sandbox).

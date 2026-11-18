@@ -1,0 +1,22 @@
+---
+title: "DesktopClipboardWriteRequest"
+description: "HTTP API schema for DesktopClipboardWriteRequest."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "text"
+  ],
+  "properties": {
+    "selection": {
+      "type": "string",
+      "nullable": true
+    },
+    "text": {
+      "type": "string"
+    }
+  }
+}
+```

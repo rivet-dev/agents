@@ -1,0 +1,32 @@
+---
+title: "DesktopResolution"
+description: "HTTP API schema for DesktopResolution."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "width",
+    "height"
+  ],
+  "properties": {
+    "dpi": {
+      "type": "integer",
+      "format": "int32",
+      "nullable": true,
+      "minimum": 0
+    },
+    "height": {
+      "type": "integer",
+      "format": "int32",
+      "minimum": 0
+    },
+    "width": {
+      "type": "integer",
+      "format": "int32",
+      "minimum": 0
+    }
+  }
+}
+```

@@ -1,0 +1,132 @@
+---
+title: "Write input to a process."
+description: "POST /v1/processes/{id}/input: request parameters and responses."
+---
+
+`POST /v1/processes/{id}/input`
+
+Sends data to a process's stdin (pipe mode) or PTY writer (tty mode).
+Data can be encoded as base64, utf8, or text. Returns 413 if the decoded
+payload exceeds the configured `maxInputBytesPerRequest` limit.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | Yes | string | Process ID |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "id",
+    "in": "path",
+    "description": "Process ID",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  }
+]
+```
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessInputRequest"
+  }
+}
+```
+
+Related schemas: [ProcessInputRequest](/sandbox-agent/docs/api-reference/schemas/processinputrequest/).
+
+## Responses
+
+### 200
+
+Input accepted
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessInputResponse"
+  }
+}
+```
+
+Related schemas: [ProcessInputResponse](/sandbox-agent/docs/api-reference/schemas/processinputresponse/).
+
+### 400
+
+Invalid request
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Process not writable
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 413
+
+Input exceeds configured limit
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 501
+
+Process API unsupported on this platform
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

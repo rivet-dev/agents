@@ -1,0 +1,43 @@
+---
+title: "Orchestration Architecture"
+description: "Production topology, backend requirements, and session persistence."
+icon: "sitemap"
+---
+
+This page covers production topology and backend requirements. Read [Architecture](/sandbox-agent/docs/architecture) first for an overview of how the server, SDK, and agent processes fit together.
+
+## Suggested Topology
+
+Run the SDK on your backend, then call it from your frontend.
+
+This extra hop is recommended because it keeps auth/token logic on the backend and makes persistence simpler.
+
+```mermaid placement="top-right"
+  flowchart LR
+    BROWSER["Browser"]
+    subgraph BACKEND["Your backend"]
+      direction TB
+      SDK["Sandbox Agent SDK"]
+    end
+    subgraph SANDBOX_SIMPLE["Sandbox"]
+      SERVER_SIMPLE["Sandbox Agent server"]
+    end
+
+    BROWSER --> BACKEND
+    BACKEND --> SDK --> SERVER_SIMPLE
+```
+
+### Backend requirements
+
+Your backend layer needs to handle:
+
+- **Long-running connections**: prompts can take minutes.
+- **Session affinity**: follow-up messages must reach the same session.
+- **State between requests**: session metadata and event history must persist across requests.
+- **Graceful recovery**: sessions should resume after backend restarts.
+
+We recommend [Rivet](https://rivet.dev) over serverless because actors natively support the long-lived connections, session routing, and state persistence that agent workloads require.
+
+## Session persistence
+
+For storage driver options and replay behavior, see [Persisting Sessions](/sandbox-agent/docs/session-persistence).

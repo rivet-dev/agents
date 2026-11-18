@@ -1,0 +1,131 @@
+---
+title: "Resize a process terminal."
+description: "POST /v1/processes/{id}/terminal/resize: request parameters and responses."
+---
+
+`POST /v1/processes/{id}/terminal/resize`
+
+Sets the PTY window size (columns and rows) for a tty-mode process and
+sends SIGWINCH so the child process can adapt.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | Yes | string | Process ID |
+
+### Parameter schemas
+
+```json
+[
+  {
+    "name": "id",
+    "in": "path",
+    "description": "Process ID",
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  }
+]
+```
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessTerminalResizeRequest"
+  }
+}
+```
+
+Related schemas: [ProcessTerminalResizeRequest](/sandbox-agent/docs/api-reference/schemas/processterminalresizerequest/).
+
+## Responses
+
+### 200
+
+Resize accepted
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProcessTerminalResizeResponse"
+  }
+}
+```
+
+Related schemas: [ProcessTerminalResizeResponse](/sandbox-agent/docs/api-reference/schemas/processterminalresizeresponse/).
+
+### 400
+
+Invalid request
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 404
+
+Unknown process
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Not a terminal process
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 501
+
+Process API unsupported on this platform
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

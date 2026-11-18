@@ -1,0 +1,93 @@
+---
+title: "Press a desktop keyboard shortcut."
+description: "POST /v1/desktop/keyboard/press: request parameters and responses."
+---
+
+`POST /v1/desktop/keyboard/press`
+
+Performs a health-gated `xdotool key` operation against the managed
+desktop.
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopKeyboardPressRequest"
+  }
+}
+```
+
+Related schemas: [DesktopKeyboardPressRequest](/sandbox-agent/docs/api-reference/schemas/desktopkeyboardpressrequest/).
+
+## Responses
+
+### 200
+
+Desktop keyboard action result
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopActionResponse"
+  }
+}
+```
+
+Related schemas: [DesktopActionResponse](/sandbox-agent/docs/api-reference/schemas/desktopactionresponse/).
+
+### 400
+
+Invalid keyboard press request
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 502
+
+Desktop runtime health or input failed
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

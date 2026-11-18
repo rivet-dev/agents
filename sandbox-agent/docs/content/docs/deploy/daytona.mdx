@@ -1,0 +1,70 @@
+---
+title: "Daytona"
+description: "Run Sandbox Agent in a Daytona workspace."
+---
+
+<Warning>
+Daytona Tier 3+ is required for access to common model provider endpoints.
+See [Daytona network limits](https://www.daytona.io/docs/en/network-limits/).
+</Warning>
+
+## Prerequisites
+
+- `DAYTONA_API_KEY`
+- `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
+
+## TypeScript example
+
+```bash
+npm install sandbox-agent@0.5.x @daytonaio/sdk
+```
+
+```typescript
+import { SandboxAgent } from "sandbox-agent";
+import { daytona } from "sandbox-agent/daytona";
+
+const envVars: Record<string, string> = {};
+if (process.env.ANTHROPIC_API_KEY) envVars.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+if (process.env.OPENAI_API_KEY) envVars.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+const sdk = await SandboxAgent.start({
+  sandbox: daytona({
+    create: { envVars },
+  }),
+});
+
+try {
+  const session = await sdk.createSession({ agent: "claude" });
+  const response = await session.prompt([
+    { type: "text", text: "Summarize this repository" },
+  ]);
+  console.log(response.stopReason);
+} finally {
+  await sdk.destroySandbox();
+}
+```
+
+The `daytona` provider uses the `rivetdev/sandbox-agent:0.5.6-full` image by default and starts the server automatically.
+
+## Using snapshots for faster startup
+
+```typescript
+import { Daytona, Image } from "@daytonaio/sdk";
+
+const daytona = new Daytona();
+const SNAPSHOT = "sandbox-agent-ready";
+
+const hasSnapshot = await daytona.snapshot.get(SNAPSHOT).then(() => true, () => false);
+
+if (!hasSnapshot) {
+  await daytona.snapshot.create({
+    name: SNAPSHOT,
+    image: Image.base("ubuntu:22.04").runCommands(
+      "apt-get update && apt-get install -y curl ca-certificates",
+      "curl -fsSL https://releases.rivet.dev/sandbox-agent/0.5.x/install.sh | sh",
+      "sandbox-agent install-agent claude",
+      "sandbox-agent install-agent codex",
+    ),
+  });
+}
+```

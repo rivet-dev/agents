@@ -3,11 +3,10 @@
 # the multi-GB monorepo isn't uploaded — without affecting the shared root
 # .dockerignore or the other Dockerfiles in this repo.
 *
-!frontend
-frontend/*
-!frontend/packages
-frontend/packages/*
-!frontend/packages/website
-**/node_modules
-**/dist
-**/.astro
+!sandbox-agent
+sandbox-agent/*
+!sandbox-agent/frontend
+sandbox-agent/frontend/*
+!sandbox-agent/frontend/packages
+sandbox-agent/frontend/packages/*
+!sandbox-agent/frontend/packages/website

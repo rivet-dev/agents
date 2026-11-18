@@ -1,0 +1,22 @@
+{
+  "name": "@sandbox-agent/cli-darwin-x64",
+  "version": "0.5.6",
+  "description": "sandbox-agent CLI binary for macOS x64",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rivet-dev/agents.git"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "scripts": {
+    "postinstall": "chmod +x bin/sandbox-agent || true"
+  },
+  "files": [
+    "bin"
+  ]
+}

@@ -1,0 +1,93 @@
+---
+title: "Click on the desktop."
+description: "POST /v1/desktop/mouse/click: request parameters and responses."
+---
+
+`POST /v1/desktop/mouse/click`
+
+Performs a health-gated pointer move and click against the managed desktop
+and returns the resulting mouse position.
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopMouseClickRequest"
+  }
+}
+```
+
+Related schemas: [DesktopMouseClickRequest](/sandbox-agent/docs/api-reference/schemas/desktopmouseclickrequest/).
+
+## Responses
+
+### 200
+
+Desktop mouse position after click
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopMousePositionResponse"
+  }
+}
+```
+
+Related schemas: [DesktopMousePositionResponse](/sandbox-agent/docs/api-reference/schemas/desktopmousepositionresponse/).
+
+### 400
+
+Invalid mouse click request
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 502
+
+Desktop runtime health or input failed
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

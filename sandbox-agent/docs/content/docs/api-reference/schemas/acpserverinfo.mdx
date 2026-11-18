@@ -1,0 +1,27 @@
+---
+title: "AcpServerInfo"
+description: "HTTP API schema for AcpServerInfo."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "serverId",
+    "agent",
+    "createdAtMs"
+  ],
+  "properties": {
+    "agent": {
+      "type": "string"
+    },
+    "createdAtMs": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "serverId": {
+      "type": "string"
+    }
+  }
+}
+```

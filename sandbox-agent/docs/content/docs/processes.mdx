@@ -1,0 +1,258 @@
+---
+title: "Processes"
+description: "Run commands and manage long-lived processes inside the sandbox."
+sidebarTitle: "Processes"
+icon: "terminal"
+---
+
+The process API supports:
+
+- **One-shot execution** — run a command to completion and capture stdout, stderr, and exit code
+- **Managed processes** — spawn, list, stop, kill, and delete long-lived processes
+- **Log streaming** — fetch buffered logs or follow live output
+- **Terminals** — full PTY support with bidirectional WebSocket I/O
+- **Configurable limits** — control concurrency, timeouts, and buffer sizes per runtime
+
+## Run a command
+
+Execute a command to completion and get its output.
+
+<CodeGroup>
+```ts TypeScript
+import { SandboxAgent } from "sandbox-agent";
+
+const sdk = await SandboxAgent.connect({
+  baseUrl: "http://127.0.0.1:2468",
+});
+
+const result = await sdk.runProcess({
+  command: "ls",
+  args: ["-la", "/workspace"],
+});
+
+console.log(result.exitCode); // 0
+console.log(result.stdout);
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/processes/run" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"ls","args":["-la","/workspace"]}'
+```
+</CodeGroup>
+
+You can set a timeout and cap output size:
+
+<CodeGroup>
+```ts TypeScript
+const result = await sdk.runProcess({
+  command: "make",
+  args: ["build"],
+  timeoutMs: 60000,
+  maxOutputBytes: 1048576,
+});
+
+if (result.timedOut) {
+  console.log("Build timed out");
+}
+if (result.stdoutTruncated) {
+  console.log("Output was truncated");
+}
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/processes/run" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"make","args":["build"],"timeoutMs":60000,"maxOutputBytes":1048576}'
+```
+</CodeGroup>
+
+## Managed processes
+
+Create a long-lived process that you can interact with, monitor, and stop later.
+
+### Create
+
+<CodeGroup>
+```ts TypeScript
+const proc = await sdk.createProcess({
+  command: "node",
+  args: ["server.js"],
+  cwd: "/workspace",
+});
+
+console.log(proc.id, proc.pid); // proc_1, 12345
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/processes" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"node","args":["server.js"],"cwd":"/workspace"}'
+```
+</CodeGroup>
+
+### List and get
+
+<CodeGroup>
+```ts TypeScript
+const { processes } = await sdk.listProcesses();
+
+for (const p of processes) {
+  console.log(p.id, p.command, p.status);
+}
+
+const proc = await sdk.getProcess("proc_1");
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/processes"
+
+curl "http://127.0.0.1:2468/v1/processes/proc_1"
+```
+</CodeGroup>
+
+### Stop, kill, and delete
+
+<CodeGroup>
+```ts TypeScript
+// SIGTERM with optional wait
+await sdk.stopProcess("proc_1", { waitMs: 5000 });
+
+// SIGKILL
+await sdk.killProcess("proc_1", { waitMs: 1000 });
+
+// Remove exited process record
+await sdk.deleteProcess("proc_1");
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/processes/proc_1/stop?waitMs=5000"
+
+curl -X POST "http://127.0.0.1:2468/v1/processes/proc_1/kill?waitMs=1000"
+
+curl -X DELETE "http://127.0.0.1:2468/v1/processes/proc_1"
+```
+</CodeGroup>
+
+## Logs
+
+### Fetch buffered logs
+
+<CodeGroup>
+```ts TypeScript
+const logs = await sdk.getProcessLogs("proc_1", {
+  tail: 50,
+  stream: "combined",
+});
+
+for (const entry of logs.entries) {
+  console.log(entry.stream, atob(entry.data));
+}
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/processes/proc_1/logs?tail=50&stream=combined"
+```
+</CodeGroup>
+
+### Follow logs
+
+Stream log entries in real time. The subscription replays buffered entries first, then streams new output as it arrives.
+
+```ts TypeScript
+const sub = await sdk.followProcessLogs("proc_1", (entry) => {
+  console.log(entry.stream, atob(entry.data));
+});
+
+// Later, stop following
+sub.close();
+await sub.closed;
+```
+
+## Terminals
+
+Create a process with `tty: true` to allocate a pseudo-terminal, then connect via WebSocket for full bidirectional I/O.
+
+```ts TypeScript
+const proc = await sdk.createProcess({
+  command: "bash",
+  tty: true,
+});
+```
+
+### Write input
+
+<CodeGroup>
+```ts TypeScript
+await sdk.sendProcessInput("proc_1", {
+  data: "echo hello\n",
+  encoding: "utf8",
+});
+```
+
+```bash cURL
+curl -X POST "http://127.0.0.1:2468/v1/processes/proc_1/input" \
+  -H "Content-Type: application/json" \
+  -d '{"data":"echo hello\n","encoding":"utf8"}'
+```
+</CodeGroup>
+
+### Connect to a terminal
+
+Use `ProcessTerminalSession` unless you need direct frame access.
+
+```ts TypeScript
+const terminal = sdk.connectProcessTerminal("proc_1");
+
+terminal.onReady(() => {
+  terminal.resize({ cols: 120, rows: 40 });
+  terminal.sendInput("ls\n");
+});
+
+terminal.onData((bytes) => {
+  process.stdout.write(new TextDecoder().decode(bytes));
+});
+
+terminal.onExit((status) => {
+  console.log("exit:", status.exitCode);
+});
+
+terminal.onError((error) => {
+  console.error(error instanceof Error ? error.message : error.message);
+});
+
+terminal.onClose(() => {
+  console.log("terminal closed");
+});
+```
+
+Since the browser WebSocket API cannot send custom headers, the endpoint accepts an `access_token` query parameter for authentication. The SDK handles this automatically.
+
+### Browser terminal emulators
+
+The terminal session works with any browser terminal emulator like ghostty-web or xterm.js. For a drop-in React terminal, see [React Components](/sandbox-agent/docs/react-components).
+
+## Configuration
+
+Adjust runtime limits like max concurrent processes, timeouts, and buffer sizes.
+
+<CodeGroup>
+```ts TypeScript
+const config = await sdk.getProcessConfig();
+console.log(config);
+
+await sdk.setProcessConfig({
+  ...config,
+  maxConcurrentProcesses: 32,
+  defaultRunTimeoutMs: 60000,
+});
+```
+
+```bash cURL
+curl "http://127.0.0.1:2468/v1/processes/config"
+
+curl -X POST "http://127.0.0.1:2468/v1/processes/config" \
+  -H "Content-Type: application/json" \
+  -d '{"maxConcurrentProcesses":32,"defaultRunTimeoutMs":60000,"maxRunTimeoutMs":300000,"maxOutputBytes":1048576,"maxLogBytesPerProcess":10485760,"maxInputBytesPerRequest":65536}'
+```
+</CodeGroup>

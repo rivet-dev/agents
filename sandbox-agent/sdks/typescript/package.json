@@ -1,0 +1,137 @@
+{
+  "name": "sandbox-agent",
+  "version": "0.5.6",
+  "description": "Universal API for automatic coding agents in sandboxes. Supports Claude Code, Codex, OpenCode, and Amp.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rivet-dev/agents.git"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./local": {
+      "types": "./dist/providers/local.d.ts",
+      "import": "./dist/providers/local.js"
+    },
+    "./e2b": {
+      "types": "./dist/providers/e2b.d.ts",
+      "import": "./dist/providers/e2b.js"
+    },
+    "./daytona": {
+      "types": "./dist/providers/daytona.d.ts",
+      "import": "./dist/providers/daytona.js"
+    },
+    "./agentcomputer": {
+      "types": "./dist/providers/agentcomputer.d.ts",
+      "import": "./dist/providers/agentcomputer.js"
+    },
+    "./docker": {
+      "types": "./dist/providers/docker.d.ts",
+      "import": "./dist/providers/docker.js"
+    },
+    "./vercel": {
+      "types": "./dist/providers/vercel.d.ts",
+      "import": "./dist/providers/vercel.js"
+    },
+    "./cloudflare": {
+      "types": "./dist/providers/cloudflare.d.ts",
+      "import": "./dist/providers/cloudflare.js"
+    },
+    "./modal": {
+      "types": "./dist/providers/modal.d.ts",
+      "import": "./dist/providers/modal.js"
+    },
+    "./computesdk": {
+      "types": "./dist/providers/computesdk.d.ts",
+      "import": "./dist/providers/computesdk.js"
+    },
+    "./sprites": {
+      "types": "./dist/providers/sprites.d.ts",
+      "import": "./dist/providers/sprites.js"
+    }
+  },
+  "peerDependencies": {
+    "@cloudflare/sandbox": ">=0.1.0",
+    "@daytonaio/sdk": ">=0.12.0",
+    "@e2b/code-interpreter": ">=1.0.0",
+    "@fly/sprites": ">=0.0.1",
+    "@vercel/sandbox": ">=0.1.0",
+    "dockerode": ">=4.0.0",
+    "get-port": ">=7.0.0",
+    "modal": ">=0.1.0",
+    "computesdk": ">=0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@cloudflare/sandbox": {
+      "optional": true
+    },
+    "@daytonaio/sdk": {
+      "optional": true
+    },
+    "@e2b/code-interpreter": {
+      "optional": true
+    },
+    "@fly/sprites": {
+      "optional": true
+    },
+    "@vercel/sandbox": {
+      "optional": true
+    },
+    "dockerode": {
+      "optional": true
+    },
+    "get-port": {
+      "optional": true
+    },
+    "modal": {
+      "optional": true
+    },
+    "computesdk": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@sandbox-agent/cli-shared": "workspace:*",
+    "acp-http-client": "workspace:*"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "generate:openapi": "SANDBOX_AGENT_SKIP_INSPECTOR=1 cargo run -p sandbox-agent-openapi-gen -- --out ../../docs/openapi.json",
+    "generate:types": "openapi-typescript ../../docs/openapi.json -o src/generated/openapi.ts && node ./scripts/patch-openapi-types.mjs && biome format --write src/generated/openapi.ts",
+    "generate": "pnpm run generate:openapi && pnpm run generate:types",
+    "build": "pnpm --filter acp-http-client build && pnpm --filter @sandbox-agent/cli-shared build && if [ -z \"$SKIP_OPENAPI_GEN\" ]; then pnpm run generate:openapi; fi && pnpm run generate:types && tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@cloudflare/sandbox": ">=0.1.0",
+    "@daytonaio/sdk": ">=0.12.0",
+    "@e2b/code-interpreter": ">=1.0.0",
+    "@fly/sprites": ">=0.0.1",
+    "@types/dockerode": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "@vercel/sandbox": ">=0.1.0",
+    "dockerode": ">=4.0.0",
+    "get-port": ">=7.0.0",
+    "modal": ">=0.1.0",
+    "computesdk": ">=0.1.0",
+    "openapi-typescript": "^6.7.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "ws": "^8.19.0"
+  },
+  "optionalDependencies": {
+    "@sandbox-agent/cli": "workspace:*"
+  }
+}

@@ -1,0 +1,123 @@
+---
+title: "McpServerConfig"
+description: "HTTP API schema for McpServerConfig."
+---
+
+```json
+{
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "command",
+        "type"
+      ],
+      "properties": {
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "$ref": "#/components/schemas/McpCommand"
+        },
+        "cwd": {
+          "type": "string",
+          "nullable": true
+        },
+        "enabled": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "nullable": true
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "format": "int64",
+          "nullable": true,
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "local"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "url",
+        "type"
+      ],
+      "properties": {
+        "bearerTokenEnvVar": {
+          "type": "string",
+          "nullable": true
+        },
+        "enabled": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "envHeaders": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "nullable": true
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "nullable": true
+        },
+        "oauth": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/McpOAuthConfigOrDisabled"
+            }
+          ],
+          "nullable": true
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "format": "int64",
+          "nullable": true,
+          "minimum": 0
+        },
+        "transport": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/McpRemoteTransport"
+            }
+          ],
+          "nullable": true
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "remote"
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    }
+  ],
+  "discriminator": {
+    "propertyName": "type"
+  }
+}
+```
+
+Related schemas: [McpCommand](/sandbox-agent/docs/api-reference/schemas/mcpcommand/), [McpOAuthConfigOrDisabled](/sandbox-agent/docs/api-reference/schemas/mcpoauthconfigordisabled/), [McpRemoteTransport](/sandbox-agent/docs/api-reference/schemas/mcpremotetransport/).

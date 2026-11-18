@@ -1,0 +1,22 @@
+---
+title: "FsDeleteQuery"
+description: "HTTP API schema for FsDeleteQuery."
+---
+
+```json
+{
+  "type": "object",
+  "required": [
+    "path"
+  ],
+  "properties": {
+    "path": {
+      "type": "string"
+    },
+    "recursive": {
+      "type": "boolean",
+      "nullable": true
+    }
+  }
+}
+```

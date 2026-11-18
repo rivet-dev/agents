@@ -1,0 +1,22 @@
+{
+  "name": "@sandbox-agent/cli-linux-arm64",
+  "version": "0.5.6",
+  "description": "sandbox-agent CLI binary for Linux arm64",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rivet-dev/agents.git"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "scripts": {
+    "postinstall": "chmod +x bin/sandbox-agent || true"
+  },
+  "files": [
+    "bin"
+  ]
+}

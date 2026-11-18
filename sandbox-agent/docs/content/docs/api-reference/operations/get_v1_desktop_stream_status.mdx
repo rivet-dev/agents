@@ -1,0 +1,26 @@
+---
+title: "Get desktop stream status."
+description: "GET /v1/desktop/stream/status: request parameters and responses."
+---
+
+`GET /v1/desktop/stream/status`
+
+Returns the current state of the desktop WebRTC streaming session.
+
+## Responses
+
+### 200
+
+Desktop stream status
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopStreamStatusResponse"
+  }
+}
+```
+
+Related schemas: [DesktopStreamStatusResponse](/sandbox-agent/docs/api-reference/schemas/desktopstreamstatusresponse/).

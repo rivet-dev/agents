@@ -1,0 +1,26 @@
+---
+title: "get_v1_acp_servers"
+description: "GET /v1/acp: request parameters and responses."
+---
+
+`GET /v1/acp`
+
+
+
+## Responses
+
+### 200
+
+Active ACP server instances
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/AcpServerListResponse"
+  }
+}
+```
+
+Related schemas: [AcpServerListResponse](/sandbox-agent/docs/api-reference/schemas/acpserverlistresponse/).

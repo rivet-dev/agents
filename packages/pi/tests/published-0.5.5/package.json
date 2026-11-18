@@ -1,0 +1,14 @@
+{
+	"name": "@rivet-dev/pi-published-0-5-5-fixture",
+	"private": true,
+	"description": "The published @rivet-dev/pi 0.5.5 on Pi 1.4, which tests/upgrade-from-published.test.ts runs to seed actors.",
+	"type": "module",
+	"dependencies": {
+		"@earendil-works/chord": "1.4.0",
+		"@earendil-works/pi-ai": "1.4.0",
+		"@earendil-works/pi-durable": "1.4.0",
+		"@earendil-works/pi-telemetry": "1.4.0",
+		"@rivet-dev/pi": "0.5.5",
+		"rivetkit": "3.0.1"
+	}
+}

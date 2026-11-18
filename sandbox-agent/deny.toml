@@ -1,0 +1,24 @@
+# cargo-deny configuration. The Pip-Boy hygiene check runs it on every PR
+# that changes Rust and fails only on findings the PR adds.
+
+[licenses]
+# The same allow-list as rivet-dev/rivet.
+allow = [
+	"Apache-2.0",
+	"0BSD",
+	"BSD-2-Clause",
+	"BSD-3-Clause",
+	"ISC",
+	"MIT",
+	"MPL-2.0",
+	"CC0-1.0",
+	"Unicode-3.0",
+	"Zlib",
+	"EPL-2.0",
+	"Unlicense",
+	# Boost Software License, not Business Source License (ryu).
+	"BSL-1.0",
+	# Mozilla's CA root list (webpki-roots).
+	"CDLA-Permissive-2.0",
+]
+unused-allowed-license = "allow"

@@ -1,0 +1,93 @@
+---
+title: "Release a desktop keyboard key."
+description: "POST /v1/desktop/keyboard/up: request parameters and responses."
+---
+
+`POST /v1/desktop/keyboard/up`
+
+Performs a health-gated `xdotool keyup` operation against the managed
+desktop.
+
+## Request body
+
+
+
+Required.
+
+### application/json
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopKeyboardUpRequest"
+  }
+}
+```
+
+Related schemas: [DesktopKeyboardUpRequest](/sandbox-agent/docs/api-reference/schemas/desktopkeyboarduprequest/).
+
+## Responses
+
+### 200
+
+Desktop keyboard action result
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/DesktopActionResponse"
+  }
+}
+```
+
+Related schemas: [DesktopActionResponse](/sandbox-agent/docs/api-reference/schemas/desktopactionresponse/).
+
+### 400
+
+Invalid keyboard up request
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 409
+
+Desktop runtime is not ready
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).
+
+### 502
+
+Desktop runtime health or input failed
+
+Content type: `application/json`
+
+```json
+{
+  "schema": {
+    "$ref": "#/components/schemas/ProblemDetails"
+  }
+}
+```
+
+Related schemas: [ProblemDetails](/sandbox-agent/docs/api-reference/schemas/problemdetails/).

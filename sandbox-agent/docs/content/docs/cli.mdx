@@ -1,0 +1,298 @@
+---
+title: "CLI Reference"
+description: "CLI reference for sandbox-agent."
+sidebarTitle: "CLI"
+---
+
+Global flags (available on all commands):
+
+- `-t, --token <TOKEN>`: require/use bearer auth
+- `-n, --no-token`: disable auth
+
+## server
+
+Run the HTTP server.
+
+```bash
+sandbox-agent server [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-H, --host <HOST>` | `127.0.0.1` | Host to bind |
+| `-p, --port <PORT>` | `2468` | Port to bind |
+| `-O, --cors-allow-origin <ORIGIN>` | - | Allowed CORS origin (repeatable) |
+| `-M, --cors-allow-method <METHOD>` | all | Allowed CORS method (repeatable) |
+| `-A, --cors-allow-header <HEADER>` | all | Allowed CORS header (repeatable) |
+| `-C, --cors-allow-credentials` | false | Enable CORS credentials |
+| `--no-telemetry` | false | Disable anonymous telemetry |
+
+```bash
+sandbox-agent server --port 3000
+```
+
+Notes:
+
+- Server logs are redirected to files by default.
+- Set `SANDBOX_AGENT_LOG_STDOUT=1` to force stdout/stderr logging.
+- Use `SANDBOX_AGENT_LOG_DIR` to override log directory.
+
+## install
+
+Install first-party runtime dependencies.
+
+### install desktop
+
+Install the Linux desktop runtime packages required by `/v1/desktop/*`.
+
+```bash
+sandbox-agent install desktop [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--yes` | Skip the confirmation prompt |
+| `--print-only` | Print the package-manager command without executing it |
+| `--package-manager <apt\|dnf\|apk>` | Override package-manager detection |
+| `--no-fonts` | Skip the default DejaVu font package |
+
+```bash
+sandbox-agent install desktop --yes
+sandbox-agent install desktop --print-only
+```
+
+Notes:
+
+- Supported on Linux only.
+- The command detects `apt`, `dnf`, or `apk`.
+- If the host is not already running as root, the command requires `sudo`.
+
+## install-agent
+
+Install or reinstall a single agent, or every supported agent with `--all`.
+
+```bash
+sandbox-agent install-agent [<AGENT>] [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--all` | Install every supported agent |
+| `-r, --reinstall` | Force reinstall |
+| `--agent-version <VERSION>` | Override agent package version (conflicts with `--all`) |
+| `--agent-process-version <VERSION>` | Override agent process version (conflicts with `--all`) |
+
+Examples:
+
+```bash
+sandbox-agent install-agent claude --reinstall
+sandbox-agent install-agent --all
+```
+
+### Custom Pi implementation path
+
+If you use a forked/custom `pi` binary with `pi-acp`, you can override what executable gets launched.
+
+#### Option 1: explicit command override (recommended)
+
+Set `PI_ACP_PI_COMMAND` in the environment where `sandbox-agent` runs:
+
+```bash
+PI_ACP_PI_COMMAND=/absolute/path/to/your/pi-fork sandbox-agent server
+```
+
+This is forwarded to `pi-acp`, which uses it instead of looking up `pi` on `PATH`.
+
+#### Option 2: PATH override
+
+Put your custom `pi` first on `PATH` before starting `sandbox-agent`:
+
+```bash
+export PATH="/path/to/custom-pi-dir:$PATH"
+sandbox-agent server
+```
+
+#### Option 3: symlink override
+
+Point `pi` to your custom binary via symlink in a directory that is early on `PATH`:
+
+```bash
+ln -sf /absolute/path/to/your/pi-fork /usr/local/bin/pi
+```
+
+Then start `sandbox-agent` normally.
+
+## opencode (experimental)
+
+Start/reuse daemon and run `opencode attach` against `/opencode`.
+
+```bash
+sandbox-agent opencode [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-H, --host <HOST>` | `127.0.0.1` | Daemon host |
+| `-p, --port <PORT>` | `2468` | Daemon port |
+| `--session-title <TITLE>` | - | Reserved option (currently no-op) |
+| `--yolo` | false | OpenCode attach mode flag |
+
+```bash
+sandbox-agent opencode
+```
+
+## daemon
+
+Manage the background daemon.
+
+### daemon start
+
+```bash
+sandbox-agent daemon start [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-H, --host <HOST>` | `127.0.0.1` | Host |
+| `-p, --port <PORT>` | `2468` | Port |
+| `--upgrade` | false | Use ensure-running + upgrade behavior |
+
+```bash
+sandbox-agent daemon start
+sandbox-agent daemon start --upgrade
+```
+
+### daemon stop
+
+```bash
+sandbox-agent daemon stop [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-H, --host <HOST>` | `127.0.0.1` | Host |
+| `-p, --port <PORT>` | `2468` | Port |
+
+### daemon status
+
+```bash
+sandbox-agent daemon status [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-H, --host <HOST>` | `127.0.0.1` | Host |
+| `-p, --port <PORT>` | `2468` | Port |
+
+## credentials
+
+### credentials extract
+
+```bash
+sandbox-agent credentials extract [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-a, --agent <AGENT>` | Filter by `claude`, `codex`, `opencode`, or `amp` |
+| `-p, --provider <PROVIDER>` | Filter by provider |
+| `-d, --home-dir <DIR>` | Override home dir |
+| `--no-oauth` | Skip OAuth sources |
+| `-r, --reveal` | Show full credential values |
+
+```bash
+sandbox-agent credentials extract --agent claude --reveal
+```
+
+### credentials extract-env
+
+```bash
+sandbox-agent credentials extract-env [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-e, --export` | Prefix output with `export` |
+| `-d, --home-dir <DIR>` | Override home dir |
+| `--no-oauth` | Skip OAuth sources |
+
+```bash
+eval "$(sandbox-agent credentials extract-env --export)"
+```
+
+## api
+
+API subcommands for scripting.
+
+Shared option:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-e, --endpoint <URL>` | `http://127.0.0.1:2468` | Target server |
+
+### api agents
+
+```bash
+sandbox-agent api agents list [--endpoint <URL>]
+sandbox-agent api agents report [--endpoint <URL>]
+sandbox-agent api agents install <AGENT> [--reinstall] [--endpoint <URL>]
+```
+
+#### api agents list
+
+List all agents and their install status.
+
+```bash
+sandbox-agent api agents list
+```
+
+#### api agents report
+
+Emit a JSON report of available models, modes, and thought levels for every agent, grouped by category.
+
+```bash
+sandbox-agent api agents report --endpoint http://127.0.0.1:2468 | jq .
+```
+
+Example output:
+
+```json
+{
+  "generatedAtMs": 1740000000000,
+  "endpoint": "http://127.0.0.1:2468",
+  "agents": [
+    {
+      "id": "claude",
+      "installed": true,
+      "models": {
+        "currentValue": "default",
+        "values": [
+          { "value": "default", "name": "Default" },
+          { "value": "sonnet", "name": "Sonnet" },
+          { "value": "opus", "name": "Opus" },
+          { "value": "haiku", "name": "Haiku" }
+        ]
+      },
+      "modes": {
+        "currentValue": "default",
+        "values": [
+          { "value": "default", "name": "Default" },
+          { "value": "acceptEdits", "name": "Accept Edits" },
+          { "value": "plan", "name": "Plan" },
+          { "value": "dontAsk", "name": "Don't Ask" },
+          { "value": "bypassPermissions", "name": "Bypass Permissions" }
+        ]
+      },
+      "thoughtLevels": { "values": [] }
+    }
+  ]
+}
+```
+
+See individual agent pages (e.g. [Claude](/sandbox-agent/docs/agents/claude), [Codex](/sandbox-agent/docs/agents/codex)) for supported models, modes, and thought levels.
+
+#### api agents install
+
+```bash
+sandbox-agent api agents install codex --reinstall
+```
