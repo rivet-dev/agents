@@ -6,6 +6,7 @@
 		"check-types": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@aws-sdk/client-lambda-microvms": "^3.1169.0",
 		"@daytonaio/sdk": "^0.216.0",
 		"@earendil-works/chord": "1.5.0",
 		"@earendil-works/pi-ai": "1.5.0",

@@ -1,6 +1,6 @@
 ---
 title: "Give an Agent a Sandbox"
-description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, Docker, or a sandbox provider you write."
+description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, AWS Lambda MicroVMs, Docker, or a sandbox provider you write."
 ---
 
 An agent doesn't need a sandbox. Without one, its file tools work on files in the Actor's own database. Add a sandbox only when the agent needs a shell.
@@ -75,6 +75,7 @@ agentOS needs no provider account. To use E2B or Daytona instead, see
 | <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer">E2B</a> | `e2b` | Paused | Deleted |
 | <a href="https://daytona.io" target="_blank" rel="noopener noreferrer">Daytona</a> | `@daytonaio/sdk` | Stopped | Deleted |
 | <a href="https://freestyle.sh" target="_blank" rel="noopener noreferrer">Freestyle</a> | `freestyle` | Paused | Deleted |
+| <a href="https://docs.aws.amazon.com/lambda/latest/dg/microvms.html" target="_blank" rel="noopener noreferrer">AWS Lambda MicroVMs</a> | `@aws-sdk/client-lambda-microvms` | Suspended | Terminated |
 | <a href="https://docs.docker.com" target="_blank" rel="noopener noreferrer">Docker</a> | None. Uses the `docker` CLI. | Stopped | Removed |
 
 Provider credentials stay on your worker and never enter the sandbox.
@@ -140,6 +141,53 @@ npm add @rivet-dev/sandbox-adapter freestyle
 | `cwd` | Working directory inside the VM. Created when the Actor connects. Defaults to `/workspace`. |
 
 A Freestyle VM has no network access until a `firewall` rule allows it. Commands run as `root` through Python 3, so the image must include it. Every `freestyle/ubuntu*` snapshot does.
+
+### AWS Lambda MicroVMs
+
+```sh
+npm add @rivet-dev/sandbox-adapter @aws-sdk/client-lambda-microvms
+```
+
+<CodeSnippet file="examples/docs/sandboxes/lambda-microvms.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `create` | Options for `RunMicrovm`, or a function that receives the Actor context and returns them. `imageIdentifier`, the image's ARN, is required. Options you leave out default to the `HTTP_INGRESS` connector, the 8 hour maximum lifetime, and an idle policy that suspends the MicroVM after 15 idle minutes and resumes it on the next request. |
+| `client` | A `LambdaMicrovmsClient`. Defaults to `new LambdaMicrovmsClient()`, which reads the Region and credentials from the environment. |
+| `port` | Port that Sandbox Agent listens on inside the MicroVM. Defaults to `8080`. |
+| `cwd` | Working directory inside the MicroVM. Created when the Actor connects. Defaults to `/workspace`. |
+| `readyTimeoutMs` | How long a connect waits for Sandbox Agent to answer after a start or resume. Defaults to 2 minutes. |
+
+Lambda MicroVMs has no API for running commands, so the image runs [Sandbox Agent](https://sandboxagent.dev) and the provider sends commands and file operations to it through the MicroVM's HTTPS endpoint. Each request carries a MicroVM auth token for that one port, so Sandbox Agent itself runs without a token. Build the image from this Dockerfile:
+
+```dockerfile
+FROM public.ecr.aws/lambda/microvms:al2023-minimal
+COPY sandbox-agent /usr/local/bin/sandbox-agent
+RUN chmod 755 /usr/local/bin/sandbox-agent
+CMD ["/usr/local/bin/sandbox-agent", "server", "--no-token", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+Zip it with the Sandbox Agent binary, upload the zip to S3, and create the image. MicroVMs run on ARM64 unless the image sets another architecture, so download the `aarch64` binary. The build role must trust `lambda.amazonaws.com` and allow `s3:GetObject` on the zip and writing CloudWatch Logs. See <a href="https://docs.aws.amazon.com/lambda/latest/dg/microvms-images.html" target="_blank" rel="noopener noreferrer">Creating MicroVM images</a>.
+
+```sh
+curl -fsSL -o sandbox-agent \
+  https://releases.rivet.dev/sandbox-agent/latest/binaries/sandbox-agent-aarch64-unknown-linux-musl
+chmod 755 sandbox-agent
+zip sandbox-agent.zip Dockerfile sandbox-agent
+aws s3 cp sandbox-agent.zip s3://my-bucket/sandbox-agent.zip
+
+aws lambda-microvms create-microvm-image \
+  --name sandbox-agent \
+  --code-artifact uri=s3://my-bucket/sandbox-agent.zip \
+  --base-image-arn arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1 \
+  --build-role-arn arn:aws:iam::123456789012:role/microvm-build
+```
+
+The build takes a few minutes. Pass the `imageArn` it returns as `imageIdentifier`. Add the tools your agent's commands need, such as `git` or `node`, to the same image.
+
+- **Permissions.** Your worker's AWS credentials need `lambda:RunMicrovm`, `lambda:GetMicrovm`, `lambda:SuspendMicrovm`, `lambda:ResumeMicrovm`, `lambda:TerminateMicrovm`, and `lambda:CreateMicrovmAuthToken`.
+- **Lifetime.** A MicroVM lives at most 8 hours, counting the time it spends suspended. After that the Actor gets a new MicroVM the next time a tool needs one, and the old files are lost.
+- **Output.** Output streams while a command runs. A kill or timeout ends the command and its child processes. A process that detaches from it, such as one started with `(command &)`, keeps running.
 
 ### Docker
 
