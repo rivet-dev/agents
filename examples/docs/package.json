@@ -24,6 +24,7 @@
 		"discord-interactions": "^4.4.0",
 		"e2b": "^2.51.0",
 		"freestyle": "^0.2.16",
+		"google-auth-library": "^11.3.4",
 		"hono": "^4.13.12",
 		"react": "^19.3.0",
 		"rivetkit": "^3.0.0"
