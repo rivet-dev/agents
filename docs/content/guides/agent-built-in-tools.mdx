@@ -3,7 +3,7 @@ title: "Give an Agent File and Shell Tools"
 description: "Pi's file and shell tools, where they run with and without a sandbox, and how to choose them."
 ---
 
-Built-in tools are Pi's own file and shell tools. The `CodingTools` extension from `@earendil-works/pi-durable/tools` installs all four:
+Built-in tools are Pi's own file and shell tools. An agent with a sandbox gets all four:
 
 | Tool | What it does |
 | --- | --- |
@@ -14,7 +14,7 @@ Built-in tools are Pi's own file and shell tools. The `CodingTools` extension fr
 
 ## Where they run
 
-The `sandbox` option decides where the tools run. They never touch your worker's file system or shell. With a sandbox, all four tools run there. Without one, the file tools work on files in the Actor's own SQLite database and `bash` returns an error. See [Without a sandbox](/agents/docs#without-a-sandbox).
+The `sandbox` option decides where the tools run. They never touch your worker's file system or shell. With a sandbox, all four tools run there. Without one, the file tools work on files in the Actor's own SQLite database and there is no shell. See [Without a sandbox](/agents/docs#without-a-sandbox).
 
 <div style="overflow-x:auto">
 <svg viewBox="0 0 640 220" role="img" aria-label="Without a sandbox, the agent Actor's read, write, and edit tools work on files in the Actor's SQLite database. With a sandbox, read, write, edit, and bash run in the sandbox." style="width:100%;min-width:520px;max-width:640px;height:auto;display:block;margin:2.5rem auto;font-family:system-ui,sans-serif">
@@ -40,7 +40,7 @@ The `sandbox` option decides where the tools run. They never touch your worker's
 </svg>
 </div>
 
-Without a sandbox, there is nothing to set up. The files are saved with the conversation and survive sleep and crashes. This agent has no sandbox, so it installs the file tools without `bash`:
+Without a sandbox, there is nothing to set up. The files are saved with the conversation and survive sleep and crashes. This agent has no sandbox, so `codingTools` installs the file tools without `bash`:
 
 <CodeGroup>
 <CodeSnippet file="examples/docs/built-in-tools/server.ts" title="server.ts" />
@@ -51,7 +51,7 @@ The second prompt edits the file that the first prompt wrote. To run commands, g
 
 ## Choose tools
 
-Each tool also has its own factory: `createReadTool`, `createWriteTool`, `createEditTool`, and `createBashTool`. Install only the tools you want in your own extension. This reviewer can read files and run tests, but it has no `write` or `edit` tool:
+Set `codingTools` to the tools the agent may use, or to `false` for none. This reviewer can read files and run tests, but it has no `write` or `edit` tool:
 
 <CodeSnippet file="examples/docs/built-in-tools/reviewer.ts" title="server.ts" />
 

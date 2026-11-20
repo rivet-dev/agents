@@ -108,7 +108,7 @@ The `prompt` action waits for the run to finish and returns `{ status, text }`. 
 
 <Step title="Add a sandbox (optional)">
 
-To let the agent run commands, give it a sandbox and Pi's `CodingTools`, which add `bash`:
+To let the agent run commands, give it a sandbox. A sandbox brings Pi's coding tools, `read`, `write`, `edit`, and `bash`, which run in it:
 
 ```sh
 npm add @rivet-dev/sandbox-adapter
@@ -159,7 +159,7 @@ An agent needs no sandbox. Without one, Pi's `read`, `write`, and `edit` tools w
 
 - **Nothing to set up.** The files are saved with the conversation and survive sleep, crashes, and upgrades.
 - **Large files are cheap.** A read of a few lines loads only those lines from the database.
-- **No shell.** `bash` returns an error. To run commands, add a [sandbox](/guides/agent-sandboxes).
+- **No shell.** There is no `bash`. To run commands, add a [sandbox](/guides/agent-sandboxes).
 
 ## Use pi-ai
 
@@ -184,7 +184,7 @@ Model names such as `anthropic/claude-opus-5-5` come from pi-ai's model catalog.
 
 ## Tools and tasks
 
-The `CodingTools` extension adds `read`, `write`, `edit`, and `bash`, which run in the [sandbox](/guides/agent-sandboxes):
+With a [sandbox](/guides/agent-sandboxes), the agent gets Pi's coding tools, `read`, `write`, `edit`, and `bash`, which run in the sandbox. Set `codingTools` to a list, such as `["read", "bash"]`, to install only those tools, or to `false` to install none:
 
 <CodeSnippet file="examples/docs/pi/server.ts" title="server.ts" />
 
@@ -684,9 +684,15 @@ The `pi()` function accepts every [`actor()`](/actors/docs/actor-configuration) 
 | `apiKeys` | API keys by provider. See [Keys in code](#keys-in-code). |
 | `providers` | Providers Pi does not know. See [Custom providers](#custom-providers). |
 | `credentials` | Logins your app stores. See [Run Agents on Your Users' Subscriptions](/guides/user-subscriptions). |
-| `sandbox` | Where `CodingTools` run. Without one, files live in the Actor's database. See [Providers](/guides/agent-sandboxes#providers) for each provider's options. |
+| `sandbox` | Where the coding tools run. Without one, files live in the Actor's database. See [Providers](/guides/agent-sandboxes#providers) for each provider's options. |
+| `codingTools` | Pi's `read`, `write`, `edit`, and `bash`. On with a `sandbox`, off without one. `true`, `false`, or a list of the tools to install. |
+| `instructions` | Starting instructions of new conversations, after the extension sections. |
+| `cwd` | Starting working directory of new conversations. |
+| `maxTurns` | The most tool rounds one run takes. |
+| `compaction` | When Pi compacts a conversation, the same as `settings.compaction`. |
+| `toolSearch` | `true` installs Pi's tool search, so the model finds deferred tools by name. |
 | `documents` | Documents clients may read. |
-| `settings` | Pi Durable settings, such as `retry` and `compaction`. |
+| `settings` | Pi Durable settings, such as `retry`. |
 | `onAnswer` | Runs for every final answer. See [Deliver answers](#deliver-answers). |
 
 Other options, such as `thinkingLevel` and `env`, pass through to Pi Durable. By default, `actionTimeout` is ten minutes and `sleepGracePeriod` is 15 minutes. A `ConversationBusy` error reaches clients as a `UserError`, and so does `pi_schema_too_new` when the actor's data has a newer Pi Durable schema than the code. Other Pi Durable errors reach clients as internal errors.
