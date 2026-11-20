@@ -514,8 +514,14 @@ async function createModels(
 		? new SourceCredentialStore(options.credentials(c))
 		: emptyCredentialStore;
 	return createActorModelRuntime(
-		{ providers: options.providers, apiKeys: options.apiKeys },
+		{
+			providers: options.providers,
+			apiKeys: options.apiKeys,
+			scopedModels: options.scopedModels,
+			model: options.model,
+		},
 		credentials,
+		c.actorId,
 	);
 }
 
