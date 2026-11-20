@@ -1,0 +1,177 @@
+---
+title: "Migrate from Cloudflare Sandbox"
+description: "Move a Cloudflare Sandbox SDK app to a Rivet Actor that owns one sandbox on E2B, Daytona, Freestyle, agentOS, or Docker."
+---
+
+import ExampleLinkBar from "@/components/docs/ExampleLinkBar.astro";
+
+<ExampleLinkBar href="https://github.com/rivet-dev/agents/tree/main/examples/docs/migrate-cloudflare-sandbox" />
+
+<Diagram
+  id="migrate-cloudflare-sandbox"
+  label="Your app calls actions on the sandbox Actor for a key, such as user-123. The Actor calls create or connect on the sandbox adapter, then runs exec and file operations on the sandbox it gets back. The adapter talks to the chosen provider: E2B, Daytona, Freestyle, agentOS, or Docker. The Actor stores the sandbox id in SQLite. The numbers show the order of the calls. There is one Actor and one sandbox per key."
+  stackLabel="One per key"
+  nodes={[
+    { id: "app", x: 20, y: 175, w: 160, title: "Your app", subtitle: "`getOrCreate([key])`" },
+    { id: "actor", x: 260, y: 175, w: 190, product: "actors", stack: true, title: "`sandbox` Actor", subtitle: "stores the sandbox id" },
+    { id: "adapter", x: 520, y: 175, w: 150, title: "`sandbox-adapter`", subtitle: "`exec`, files" },
+    { id: "providers", kind: "boundary", x: 740, y: 15, w: 190, h: 380, title: "Providers" },
+    { id: "e2b", x: 760, y: 50, h: 50, title: "E2B" },
+    { id: "daytona", x: 760, y: 120, h: 50, title: "Daytona" },
+    { id: "freestyle", x: 760, y: 190, h: 50, title: "Freestyle" },
+    { id: "agentos", x: 760, y: 260, h: 50, product: "agentos", title: "agentOS" },
+    { id: "docker", x: 760, y: 330, h: 50, title: "Docker" },
+  ]}
+  edges={[
+    { from: "app", to: "actor", label: "actions", step: 1 },
+    { from: "actor", to: "adapter", label: "`connect`, `exec`", step: 2 },
+    { from: "adapter", to: "providers", label: "provider API", step: 3 },
+  ]}
+/>
+
+In Cloudflare, `getSandbox()` returns a Durable Object that owns one container. In Rivet, a Rivet Actor owns one sandbox through [`@rivet-dev/sandbox-adapter`](/agents/docs/sandbox-adapter). The Actor's [key](/actors/docs/keys) gives the sandbox a stable identity, its actions replace the SDK methods, and the sandbox runs on a provider of your choice. Provider credentials stay on your worker. A secret reaches the sandbox only when you pass it to a command.
+
+## How concepts map
+
+| Cloudflare Sandbox | Rivet | Notes |
+| --- | --- | --- |
+| `getSandbox(env.Sandbox, id)` | `client.sandbox.getOrCreate([id])` | The same [key](/actors/docs/keys) always reaches the same Actor and sandbox. |
+| Sandbox Durable Object | A Rivet Actor that stores the sandbox id in [SQLite](/actors/docs/sqlite) | You write the actions, so you choose what callers can do. |
+| Container image and `Dockerfile` | The provider's image or template | E2B templates, Daytona images, Freestyle snapshots, a Docker `image`, or agentOS `software`. |
+| `exec()` | `sandbox.exec(command, { cwd })` | Returns `exitCode`, `stdout`, and `stderr`. |
+| `execStream()`, `streamProcessLogs()` | `exec` with `onData`, sent as [events](/actors/docs/events) | Clients receive output while the command runs. |
+| `startProcess()`, `killProcess()`, `listProcesses()` | `exec` that is not awaited, with an `AbortSignal` | `c.keepAwake` holds the Actor awake while the process runs. |
+| `writeFile()`, `readFile()`, `mkdir()`, `exists()` | Methods of the same name on `Sandbox` | `readdir` lists a directory. Writes take a string. |
+| `deleteFile()`, `renameFile()`, `moveFile()` | `rm` and `mv` through `exec` | |
+| `gitCheckout()` | `git clone` through `exec` | The image must include `git`. |
+| `createCodeContext()`, `runCode()` | Write a file and run it with `exec` | Each run is a new process. |
+| `createSession()`, `setEnvVars()` | The `cwd` and `env` options of `exec` | Variables reach only the one command. |
+| `exposePort()`, preview URLs | The provider's port URL | E2B `getHost`, Daytona `getPreviewLink`, Docker `dockerPortAddress`. Freestyle and agentOS have none. |
+| `sleepAfter` | `options.sleepTimeout` and `provider.suspend` in `onSleep` | See [Lifecycle](/actors/docs/lifecycle). |
+| `keepAlive`, `setKeepAlive()` | `c.keepAwake(promise)` | Keeps the Actor awake while that work runs. |
+| `destroy()` | `c.destroy()` and `provider.destroy` in `onDestroy` | Deletes the Actor and its sandbox. |
+
+## Choose a provider
+
+Every provider returns the same `SandboxProvider`, so the rest of your code does not change when you switch. This guide uses E2B. See [Providers](/agents/docs/sandboxes#providers) for the options of each one.
+
+```sh
+npm add rivetkit @rivet-dev/sandbox-adapter e2b
+```
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="provider" />
+
+For local development without an account, swap in `dockerProvider()` from `@rivet-dev/sandbox-adapter/docker`. Use Docker only for local development.
+
+## Get a sandbox by id
+
+`getSandbox(env.Sandbox, "user-123")` becomes a handle to the Actor with the key `["user-123"]`. As in Cloudflare, nothing starts until the first call that needs the sandbox.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/client.ts" title="client.ts" region="handle" />
+
+Name keys the way you named sandbox ids: per user for a long-lived workspace, or per task for a fresh one.
+
+## Define the sandbox Actor
+
+The Actor stores one thing durably: the sandbox id, in SQLite. The connected `Sandbox` object exists only in memory, in `c.vars`, so the Actor opens it again after every wake.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="definition" />
+
+`openSandbox` connects to the stored sandbox, or creates one when none exists or the provider no longer has it. Actions run concurrently, so every caller shares one in-flight open instead of creating two sandboxes.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="open" />
+
+## Run commands
+
+`exec` runs one command and waits for it to end. A non-zero exit code is a normal result, not an error. Passing `c.abortSignal` stops the command if the Actor shuts down.
+
+The action takes a timeout per call and must finish within the Actor's `actionTimeout`, which defaults to 60 seconds. For longer commands, raise both. The example sets `actionTimeout` to 15 minutes in the Actor's options.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="exec" />
+
+<Note>
+Daytona cannot stop a running command. Aborting on Daytona ends the wait, but the command keeps running in the sandbox until it exits or reaches its timeout. Daytona also returns all output at once when the command ends, so it does not stream.
+</Note>
+
+## Stream output
+
+Cloudflare's `execStream` returns a stream that you parse with `parseSSEStream`. Here, `onData` receives output as it arrives, and the Actor broadcasts each chunk as an event to every connected client. Each event carries the id the caller passed, so output from concurrent commands stays apart.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="stream" />
+
+Clients connect to receive the events:
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/client.ts" title="client.ts" region="stream" />
+
+## Run background processes
+
+The adapter has no separate process API, so `startProcess` becomes an `exec` that the action does not wait for. An `AbortController` per process replaces `killProcess`, and `c.keepAwake` holds the Actor awake until the process ends.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="process" />
+
+The list of running processes lives in memory. If the Actor restarts, its processes are stopped with it, so start them again from your app or from `onWake`. On Daytona, `killProcess` and a restart end only the wait. The process keeps running in the sandbox.
+
+## Read and write files
+
+`writeFile`, `readFile`, `mkdir`, and `exists` keep their names. All paths are absolute paths inside the sandbox, so resolve relative paths against `sandbox.cwd`. Deleting and moving files are shell commands.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="files" />
+
+## Check out a Git repository
+
+`gitCheckout` becomes `git clone` through `exec`. The token comes from your worker's environment and goes in a `-c` setting, so git does not save it in the clone's `.git/config`. It is still visible inside the sandbox while the clone runs, to anything that can read that command's environment.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="git" />
+
+## Run code
+
+Cloudflare's code interpreter keeps variables between `runCode` calls in a context. Here, each snippet is a file that `exec` runs in a new process.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="code" />
+
+To keep values between runs, write them to a file in the sandbox, or use your provider's interpreter SDK.
+
+## Expose a port
+
+E2B and Daytona give a sandbox port its own URL through their SDKs: E2B's `getHost` and Daytona's `getPreviewLink`. The adapter does not wrap them, so call the provider's SDK with the stored sandbox id. For local development, Docker's `dockerPortAddress` returns a `127.0.0.1` address, but only for ports listed in the provider's `ports` option when the container was created. The adapter has no port helper for Freestyle or agentOS.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="preview" />
+
+Unlike a Cloudflare preview URL, there is no `proxyToSandbox` step in your Worker. Check your provider's access controls before you expose a port, since its URL may be public.
+
+## Sleep and destroy
+
+Cloudflare stops an idle container after `sleepAfter`. A Rivet Actor sleeps after `options.sleepTimeout`, and `onSleep` suspends the sandbox through the provider. Destroying the Actor deletes the sandbox in `onDestroy`.
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="lifecycle" />
+
+<CodeSnippet file="examples/docs/migrate-cloudflare-sandbox/server.ts" title="server.ts" region="destroy" />
+
+What happens to the sandbox while the Actor sleeps depends on the provider:
+
+| Provider | While the Actor sleeps | When the Actor is destroyed |
+| --- | --- | --- |
+| E2B | Paused | Deleted |
+| Daytona | Stopped | Deleted |
+| Freestyle | Paused | Deleted |
+| agentOS | Sleeps when idle, and keeps its files | Left in place |
+| Docker | Stopped | Removed |
+
+## Differences to plan for
+
+- **Files survive sleep.** A Cloudflare sandbox loses its files when its container sleeps. Every provider above keeps them while the Actor sleeps. If a provider no longer has the sandbox, `openSandbox` creates a new, empty one.
+- **No shell sessions.** Each `exec` starts a new shell, so `cd` and `export` do not carry over. Pass `cwd` and `env` on every command instead of `createSession`.
+- **Daytona cannot stop or stream commands.** Aborting or killing a command on Daytona ends only the wait, and its output arrives once the command ends. Use E2B, Freestyle, agentOS, or Docker when you need to stop commands or stream output.
+- **Writes are text only.** `writeFile` takes a string. For binary files, write base64 and decode it with `exec`.
+- **No port readiness helper.** There is no `waitForPort`. Poll the port with `exec`, for example with `curl`, until it answers.
+- **Provider features stay in the provider's SDK.** Terminals, snapshots, and file watching have no adapter API. Call the provider directly with the stored sandbox id, as the preview URL example does. E2B, for example, has `pty`, `createSnapshot`, and `files.watchDir`.
+- **No bucket mounts.** There is no `mountBucket`. Download objects with `exec`, or read them from your Actor and write them into the sandbox.
+- **Resources come from the provider.** Instance types, CPU, memory, and disk are set in the provider's create options, not in Rivet.
+- **Your worker hosts the Actor.** The Actor runs wherever you run RivetKit, on [Rivet Cloud](https://dashboard.rivet.dev) or your own infrastructure. It does not need to run on Cloudflare.
+
+## Next steps
+
+- [Sandbox Adapter](/agents/docs/sandbox-adapter): every `Sandbox` operation and the lifecycle calls.
+- [Sandboxes](/agents/docs/sandboxes): give a Pi agent a sandbox, and the options of each provider.
+- [Claude Code](/guides/run-claude-code): run a coding agent in a sandbox, one session per Rivet Actor.
+- [Sandbox Agent](/sandbox-agent/docs): drive coding agents in a sandbox through one HTTP API.

@@ -173,6 +173,15 @@
 					"href": "/guides/connect-discord"
 				}
 			]
+		},
+		{
+			"title": "Migrations",
+			"pages": [
+				{
+					"title": "From Cloudflare Sandbox",
+					"href": "/guides/migrate-cloudflare-sandbox"
+				}
+			]
 		}
 	]
 }
