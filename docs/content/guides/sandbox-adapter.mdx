@@ -1,25 +1,26 @@
 ---
 title: "Use a Sandbox from Any Actor"
-description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, or Docker from any Rivet Actor, without the agent harness."
+description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, boxd, or Docker from any Rivet Actor, without the agent harness."
 ---
 
 <Diagram
   id="sandbox-adapter"
-  label="Any Rivet Actor calls create or connect on a SandboxProvider from the sandbox adapter, then calls exec and the file operations on the Sandbox it gets back. The adapter talks to the chosen provider: agentOS, E2B, Daytona, Freestyle, or Docker. The Actor stores the sandbox id so it can connect again after it sleeps. There is one sandbox per Actor."
+  label="Any Rivet Actor calls create or connect on a SandboxProvider from the sandbox adapter, then calls exec and the file operations on the Sandbox it gets back. The adapter talks to the chosen provider: agentOS, E2B, Daytona, Freestyle, boxd, or Docker. The Actor stores the sandbox id so it can connect again after it sleeps. There is one sandbox per Actor."
   stackLabel="One sandbox per Actor"
   nodes={[
-    { id: "actor", x: 20, y: 175, w: 200, product: "actors", stack: true, title: "Any Rivet Actor", subtitle: "stores the sandbox id" },
-    { id: "adapter", x: 390, y: 175, w: 180, title: "`sandbox-adapter`", subtitle: "`SandboxProvider`, `Sandbox`" },
-    { id: "providers", kind: "boundary", x: 700, y: 15, w: 210, h: 380, title: "Providers" },
+    { id: "actor", x: 20, y: 210, w: 200, product: "actors", stack: true, title: "Any Rivet Actor", subtitle: "stores the sandbox id" },
+    { id: "adapter", x: 390, y: 210, w: 180, title: "`sandbox-adapter`", subtitle: "`SandboxProvider`, `Sandbox`" },
+    { id: "providers", kind: "boundary", x: 700, y: 15, w: 210, h: 450, title: "Providers" },
     { id: "agentos", x: 720, y: 50, h: 50, product: "agentos", title: "agentOS" },
     { id: "e2b", x: 720, y: 120, h: 50, title: "E2B" },
     { id: "daytona", x: 720, y: 190, h: 50, title: "Daytona" },
     { id: "freestyle", x: 720, y: 260, h: 50, title: "Freestyle" },
-    { id: "docker", x: 720, y: 330, h: 50, title: "Docker" },
+    { id: "boxd", x: 720, y: 330, h: 50, title: "boxd" },
+    { id: "docker", x: 720, y: 400, h: 50, title: "Docker" },
   ]}
   edges={[
     { from: "actor", to: "adapter", fromOffset: -12, toOffset: -12, label: "`create`, `connect`", step: 1 },
-    { from: "actor", to: "adapter", fromOffset: 12, toOffset: 12, label: "`exec`, files", labelAt: [311, 235], step: 2 },
+    { from: "actor", to: "adapter", fromOffset: 12, toOffset: 12, label: "`exec`, files", labelAt: [311, 270], step: 2 },
     { from: "adapter", to: "providers", label: "provider API" },
   ]}
 />
@@ -50,6 +51,7 @@ Every provider returns the same `SandboxProvider`, so you change one import and 
 | E2B | `e2bProvider()` | `@rivet-dev/sandbox-adapter/e2b` | `e2b` | `E2B_API_KEY` |
 | Daytona | `daytonaProvider()` | `@rivet-dev/sandbox-adapter/daytona` | `@daytonaio/sdk` | `DAYTONA_API_KEY` |
 | Freestyle | `freestyleProvider({ create })` | `@rivet-dev/sandbox-adapter/freestyle` | `freestyle` | `FREESTYLE_API_KEY` |
+| boxd | `boxdProvider()` | `@rivet-dev/sandbox-adapter/boxd` | `@boxd-sh/sdk` | `BOXD_API_KEY` |
 | Docker | `dockerProvider()` | `@rivet-dev/sandbox-adapter/docker` | Nothing | None |
 
 ## Manage the lifecycle
