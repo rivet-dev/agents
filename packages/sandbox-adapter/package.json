@@ -16,6 +16,7 @@
 		"daytona",
 		"freestyle",
 		"docker",
+		"agent37",
 		"agent",
 		"ai",
 		"rivet",
@@ -53,6 +54,10 @@
 		"./freestyle": {
 			"types": "./dist/freestyle.d.ts",
 			"default": "./dist/freestyle.js"
+		},
+		"./agent37": {
+			"types": "./dist/agent37.d.ts",
+			"default": "./dist/agent37.js"
 		},
 		"./pi": {
 			"types": "./dist/pi/index.d.ts",
