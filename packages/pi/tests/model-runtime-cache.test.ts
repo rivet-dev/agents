@@ -107,6 +107,19 @@ describe("model runtime per actor", () => {
 		expect(create).toHaveBeenCalledTimes(3);
 	});
 
+	test("the oldest actor is evicted past the limit and built again", async () => {
+		const create = vi.spyOn(ModelRuntime, "create");
+		const wake = (actorId: string) =>
+			createActorModelRuntime({ providers }, store("k").credentials, actorId);
+		await wake("evict-oldest");
+		for (let i = 0; i < 256; i++) await wake(`evict-${i}`);
+		const built = create.mock.calls.length;
+		await wake("evict-255");
+		expect(create).toHaveBeenCalledTimes(built);
+		await wake("evict-oldest");
+		expect(create).toHaveBeenCalledTimes(built + 1);
+	});
+
 	test("without an actor id nothing is cached", async () => {
 		const create = vi.spyOn(ModelRuntime, "create");
 		for (let wake = 0; wake < 3; wake++) {
