@@ -18,6 +18,15 @@ Update this file continuously during the migration.
 
 ## Entries
 
+- Date: 2026-10-18
+- Area: High-level SDK authentication
+- Issue: Adapters can advertise authentication IDs outside the SDK's legacy list, and custom gateway methods may depend on initialization capabilities.
+- Impact: Applications cannot authenticate those adapters through the high-level SDK.
+- Proposed direction: Add optional initialization capabilities and an asynchronous method selector, retaining legacy automatic selection when no selector is supplied.
+- Decision: Explicit selection errors propagate and close the failed connection; returning undefined skips authentication without fallback.
+- Status: in_progress
+- Links: https://github.com/rivet-dev/agents/issues/313
+
 - Date: 2026-02-10
 - Area: Agent process availability
 - Issue: Amp does not have a confirmed official ACP agent process in current ACP docs/research.

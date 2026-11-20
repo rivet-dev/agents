@@ -11,7 +11,7 @@ function candidateInstallDirs(dataHome: string): string[] {
   return dirs;
 }
 
-export function prepareMockAgentDataHome(dataHome: string): Record<string, string> {
+export function prepareMockAgentDataHome(dataHome: string, authentication?: { methodId: string; gateway?: boolean; reject?: boolean }): Record<string, string> {
   const runtimeEnv: Record<string, string> = {};
   if (process.platform === "darwin") {
     runtimeEnv.HOME = dataHome;
@@ -31,6 +31,8 @@ const { createInterface } = require("node:readline");
 let nextSession = 0;
 let nextPermission = 0;
 const pendingPermissions = new Map();
+const authentication = ${JSON.stringify(authentication ?? null)};
+let authenticated = !authentication;
 
 function emit(value) {
   process.stdout.write(JSON.stringify(value) + "\n");
@@ -173,6 +175,11 @@ rl.on("line", (line) => {
       id: msg.id,
       result: {
         protocolVersion: 1,
+        ...(authentication ? {
+          authMethods: !authentication.gateway || msg.params?.clientCapabilities?.auth?._meta?.gateway === true
+            ? [{ id: authentication.methodId, name: "Test authentication" }]
+            : [],
+        } : {}),
         capabilities: {},
         serverInfo: {
           name: "mock-acp-agent",
@@ -183,7 +190,22 @@ rl.on("line", (line) => {
     return;
   }
 
+  if (method === "authenticate") {
+    if (authentication && (authentication.reject || msg.params?.methodId !== authentication.methodId ||
+        (authentication.gateway && msg.params?._meta?.gateway?.headers?.Authorization !== "Bearer test-gateway-token"))) {
+      emit({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Test authentication rejected" } });
+      return;
+    }
+    authenticated = true;
+    emit({ jsonrpc: "2.0", id: msg.id, result: {} });
+    return;
+  }
+
   if (method === "session/new") {
+    if (!authenticated) {
+      emit({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Authentication required" } });
+      return;
+    }
     nextSession += 1;
     emit({
       jsonrpc: "2.0",
