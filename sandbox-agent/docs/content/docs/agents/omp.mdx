@@ -1,0 +1,30 @@
+---
+title: "oh-my-pi"
+description: "Use oh-my-pi (omp) as a sandbox agent."
+---
+
+## Usage
+
+```typescript
+const session = await client.createSession({
+  agent: "omp",
+});
+```
+
+`sandbox-agent install-agent omp` downloads the `omp` release binary from [GitHub](https://github.com/can1357/oh-my-pi/releases) (pin one with `--agent-version`) and runs it with `omp acp`, its native ACP mode. No adapter package is needed.
+
+## Capabilities
+
+| Category | Values |
+|----------|--------|
+| **Models** | Every model omp can use with its configured providers, reported by the agent |
+| **Modes** | `default`, `plan` |
+| **Thought levels** | Reported by the agent for the selected model |
+
+## Credentials
+
+omp reads its usual provider environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and others) and `~/.omp/agent/models.yml`.
+
+## Permissions
+
+omp asks the client before shell commands, file deletion and moves. For unattended sandboxes, set `tools.approvalMode: yolo` in `~/.omp/agent/config.yml`.

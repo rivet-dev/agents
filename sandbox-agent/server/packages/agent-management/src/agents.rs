@@ -26,6 +26,7 @@ pub enum AgentId {
     Amp,
     Pi,
     Cursor,
+    Omp,
     Mock,
 }
 
@@ -38,6 +39,7 @@ impl AgentId {
             AgentId::Amp => "amp",
             AgentId::Pi => "pi",
             AgentId::Cursor => "cursor",
+            AgentId::Omp => "omp",
             AgentId::Mock => "mock",
         }
     }
@@ -50,6 +52,7 @@ impl AgentId {
             AgentId::Amp => "amp",
             AgentId::Pi => "pi",
             AgentId::Cursor => "cursor-agent",
+            AgentId::Omp => "omp",
             AgentId::Mock => "mock",
         }
     }
@@ -62,6 +65,7 @@ impl AgentId {
             "amp" => Some(AgentId::Amp),
             "pi" => Some(AgentId::Pi),
             "cursor" => Some(AgentId::Cursor),
+            "omp" => Some(AgentId::Omp),
             "mock" => Some(AgentId::Mock),
             _ => None,
         }
@@ -75,6 +79,7 @@ impl AgentId {
             AgentId::Amp,
             AgentId::Pi,
             AgentId::Cursor,
+            AgentId::Omp,
             AgentId::Mock,
         ]
     }
@@ -87,6 +92,7 @@ impl AgentId {
             AgentId::Amp => Some("amp-acp"),
             AgentId::Pi => Some("pi-acp"),
             AgentId::Cursor => Some("cursor-agent-acp"),
+            AgentId::Omp => None,
             AgentId::Mock => None,
         }
     }
@@ -99,12 +105,16 @@ impl AgentId {
             AgentId::Amp => Some("amp-acp"),
             AgentId::Pi => Some("pi-acp"),
             AgentId::Cursor => Some("cursor-agent-acp"),
+            AgentId::Omp => None,
             AgentId::Mock => None,
         }
     }
 
     fn native_required(self) -> bool {
-        matches!(self, AgentId::Claude | AgentId::Codex | AgentId::Opencode)
+        matches!(
+            self,
+            AgentId::Claude | AgentId::Codex | AgentId::Opencode | AgentId::Omp
+        )
     }
 
     fn unstable_enabled(self) -> bool {
@@ -533,6 +543,7 @@ impl AgentManager {
                 install_opencode(&path, self.platform, options.version.as_deref())?
             }
             AgentId::Amp => install_amp(&path, self.platform, options.version.as_deref())?,
+            AgentId::Omp => install_omp(&path, self.platform, options.version.as_deref())?,
             AgentId::Pi | AgentId::Cursor => {
                 return Ok(None);
             }
@@ -823,7 +834,7 @@ impl AgentManager {
     ) -> Result<InstalledArtifact, AgentError> {
         let started = Instant::now();
         let artifact = match agent {
-            AgentId::Opencode => {
+            AgentId::Opencode | AgentId::Omp => {
                 let launcher = self.agent_process_path(agent);
                 let native = self.resolve_binary(agent)?;
                 write_exec_agent_process_launcher(
@@ -1334,6 +1345,43 @@ fn install_claude(
         write_ms = elapsed_ms(write_started),
         total_ms = elapsed_ms(started),
         "agent_manager.install_claude: completed"
+    );
+    Ok(())
+}
+
+fn install_omp(path: &Path, platform: Platform, version: Option<&str>) -> Result<(), AgentError> {
+    let started = Instant::now();
+    let asset = match platform {
+        Platform::LinuxX64 => "omp-linux-x64",
+        Platform::LinuxX64Musl => "omp-linux-musl-x64",
+        Platform::LinuxArm64 => "omp-linux-arm64",
+        Platform::MacosArm64 => "omp-darwin-arm64",
+        Platform::MacosX64 => "omp-darwin-x64",
+        Platform::WindowsX64 => "omp-windows-x64.exe",
+        Platform::WindowsArm64 => "omp-windows-arm64.exe",
+    };
+    // Release tags are `v<semver>`; accept the version with or without the prefix.
+    let url = match version {
+        Some(version) => Url::parse(&format!(
+            "https://github.com/can1357/oh-my-pi/releases/download/v{}/{asset}",
+            version.trim_start_matches('v')
+        ))?,
+        None => Url::parse(&format!(
+            "https://github.com/can1357/oh-my-pi/releases/latest/download/{asset}"
+        ))?,
+    };
+    let download_started = Instant::now();
+    let bytes = download_bytes(&url)?;
+    let download_ms = elapsed_ms(download_started);
+    let write_started = Instant::now();
+    write_executable(path, &bytes)?;
+    tracing::info!(
+        url = %url,
+        bytes = bytes.len(),
+        download_ms = download_ms,
+        write_ms = elapsed_ms(write_started),
+        total_ms = elapsed_ms(started),
+        "agent_manager.install_omp: completed"
     );
     Ok(())
 }

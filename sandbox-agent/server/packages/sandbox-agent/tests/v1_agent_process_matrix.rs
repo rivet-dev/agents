@@ -116,7 +116,7 @@ fn parse_json(bytes: &[u8]) -> Value {
 #[cfg(unix)]
 #[tokio::test]
 async fn agent_process_matrix_smoke_and_jsonrpc_conformance() {
-    let native_agents = ["claude", "codex", "opencode"];
+    let native_agents = ["claude", "codex", "opencode", "omp"];
     let agent_process_only_agents = ["pi", "cursor"];
     let agents: Vec<&str> = native_agents
         .iter()
