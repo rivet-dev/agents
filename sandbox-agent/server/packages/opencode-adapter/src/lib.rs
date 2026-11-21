@@ -3221,8 +3221,11 @@ fn provider_payload(state: &Arc<AdapterState>) -> Value {
     let claude_sonnet = model_entry(
         "sonnet", "Sonnet", "Claude", false, false, true, true, 200_000, 8_192,
     );
+    let claude_opus = model_entry(
+        "opus", "Opus", "Claude", false, false, true, true, 200_000, 4_096,
+    );
     let codex_default = model_entry(
-        "gpt-5", "GPT-5", "Codex", true, true, true, true, 200_000, 16_384,
+        "gpt-4o", "GPT-4o", "Codex", true, true, true, true, 128_000, 16_384,
     );
 
     json!({
@@ -3247,20 +3250,21 @@ fn provider_payload(state: &Arc<AdapterState>) -> Value {
                 "models": {
                     "default": claude_default,
                     "sonnet": claude_sonnet,
+                    "opus": claude_opus,
                 },
             },
             {
                 "id": "codex",
                 "name": "Codex",
                 "env": [],
-                "models": { "gpt-5": codex_default },
+                "models": { "gpt-4o": codex_default },
             }
         ],
         "default": {
             "mock": "mock",
             "amp": "smart",
-            "claude": "default",
-            "codex": "gpt-5",
+            "claude": "opus",
+            "codex": "gpt-4o",
         },
         "connected": ["mock", "amp", "claude", "codex"],
     })
@@ -3553,8 +3557,8 @@ fn default_model_for_provider(provider_id: &str) -> Option<&'static str> {
     match provider_id {
         "mock" => Some("mock"),
         "amp" => Some("smart"),
-        "claude" => Some("default"),
-        "codex" => Some("gpt-5"),
+        "claude" => Some("opus"),
+        "codex" => Some("gpt-4o"),
         _ => None,
     }
 }
@@ -3577,8 +3581,8 @@ fn default_for_agent(agent: &str) -> Option<(&'static str, &'static str)> {
     match agent {
         "mock" => Some(("mock", "mock")),
         "amp" => Some(("amp", "smart")),
-        "claude" => Some(("claude", "default")),
-        "codex" => Some(("codex", "gpt-5")),
+        "claude" => Some(("claude", "opus")),
+        "codex" => Some(("codex", "gpt-4o")),
         _ => None,
     }
 }
