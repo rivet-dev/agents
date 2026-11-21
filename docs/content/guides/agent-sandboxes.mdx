@@ -1,6 +1,6 @@
 ---
 title: "Give an Agent a Sandbox"
-description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, Docker, or a sandbox provider you write."
+description: "Run an agent without a sandbox, or give it a shell in agentOS, E2B, Daytona, Freestyle, kosa8, Docker, or a sandbox provider you write."
 ---
 
 An agent doesn't need a sandbox. Without one, its file tools work on files in the Actor's own database. Add a sandbox only when the agent needs a shell.
@@ -75,6 +75,7 @@ agentOS needs no provider account. To use E2B or Daytona instead, see
 | <a href="https://e2b.dev" target="_blank" rel="noopener noreferrer">E2B</a> | `e2b` | Paused | Deleted |
 | <a href="https://daytona.io" target="_blank" rel="noopener noreferrer">Daytona</a> | `@daytonaio/sdk` | Stopped | Deleted |
 | <a href="https://freestyle.sh" target="_blank" rel="noopener noreferrer">Freestyle</a> | `freestyle` | Paused | Deleted |
+| <a href="https://kosa8.com" target="_blank" rel="noopener noreferrer">kosa8</a> | None. Uses the REST API. | Asleep, with its memory saved | Deleted |
 | <a href="https://docs.docker.com" target="_blank" rel="noopener noreferrer">Docker</a> | None. Uses the `docker` CLI. | Stopped | Removed |
 
 Provider credentials stay on your worker and never enter the sandbox.
@@ -140,6 +141,23 @@ npm add @rivet-dev/sandbox-adapter freestyle
 | `cwd` | Working directory inside the VM. Created when the Actor connects. Defaults to `/workspace`. |
 
 A Freestyle VM has no network access until a `firewall` rule allows it. Commands run as `root` through Python 3, so the image must include it. Every `freestyle/ubuntu*` snapshot does.
+
+### kosa8
+
+```sh
+npm add @rivet-dev/sandbox-adapter
+```
+
+<CodeSnippet file="examples/docs/sandboxes/kosa8.ts" title="server.ts" />
+
+| Option | Description |
+| --- | --- |
+| `create` | Options for kosa8's `POST /v1/sandboxes`, such as `image`, `size`, `region`, `ttl_s`, `env`, or a function that receives the Actor context and returns them. Defaults to the organization's default template. |
+| `apiKey` | Defaults to `KOSA8_API_KEY`. |
+| `baseUrl` | Defaults to `KOSA8_API_URL`, then `https://api.kosa8.com`. Set it for a self-hosted kosa8. |
+| `cwd` | Working directory inside the sandbox. Created when the Actor connects. Defaults to `/workspace`. |
+
+A kosa8 sandbox is a microVM with its own kernel. While the Actor sleeps, the sandbox sleeps with its memory and processes saved, and the next command wakes it in place. The provider calls kosa8's REST API with `fetch`, so it needs no SDK. Commands run through `/bin/sh` and need `/proc` for abort and timeout to stop what a command started.
 
 ### Docker
 

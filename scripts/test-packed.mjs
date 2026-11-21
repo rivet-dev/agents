@@ -107,6 +107,7 @@ for (const entry of [
 	"e2b.js",
 	"daytona.js",
 	"freestyle.js",
+	"kosa8.js",
 ]) {
 	if (!adapterFiles.includes(entry))
 		throw new Error(`packed sandbox adapter is missing dist/${entry}`);
@@ -119,6 +120,9 @@ const script = [
 	'if (durable.piDurable !== pi.pi) throw new Error("@rivet-dev/pi/durable does not export piDurable() as pi()");',
 	'const adapter = await import("@rivet-dev/sandbox-adapter");',
 	'if (typeof adapter.runRemoteProcess !== "function") throw new Error("@rivet-dev/sandbox-adapter does not export runRemoteProcess()");',
+	// kosa8 needs no SDK, so its entrypoint can be imported here.
+	'const kosa8 = await import("@rivet-dev/sandbox-adapter/kosa8");',
+	'if (typeof kosa8.kosa8Provider !== "function") throw new Error("@rivet-dev/sandbox-adapter/kosa8 does not export kosa8Provider()");',
 ].join("\n");
 await execFileAsync(process.execPath, ["--input-type=module", "-e", script], {
 	cwd: fixture,

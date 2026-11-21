@@ -15,6 +15,7 @@
 		"e2b",
 		"daytona",
 		"freestyle",
+		"kosa8",
 		"docker",
 		"agent",
 		"ai",
@@ -53,6 +54,10 @@
 		"./freestyle": {
 			"types": "./dist/freestyle.d.ts",
 			"default": "./dist/freestyle.js"
+		},
+		"./kosa8": {
+			"types": "./dist/kosa8.d.ts",
+			"default": "./dist/kosa8.js"
 		},
 		"./pi": {
 			"types": "./dist/pi/index.d.ts",
