@@ -16,6 +16,11 @@ on:
         description: 'Reuse artifacts from this version (skips building)'
         required: false
         type: string
+      exclude_sandbox_agent:
+        description: 'Release only packages/ (skips building and publishing Sandbox Agent)'
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -43,6 +48,7 @@ jobs:
           fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@stable
+        if: ${{ !inputs.exclude_sandbox_agent }}
 
       - uses: actions/setup-node@v4
         with:
@@ -68,7 +74,9 @@ jobs:
           # Install dependencies. The root workspace holds the release script;
           # Sandbox Agent keeps its own workspace in sandbox-agent/.
           pnpm install --no-frozen-lockfile
-          pnpm --dir sandbox-agent install --no-frozen-lockfile
+          if [ "${{ inputs.exclude_sandbox_agent }}" != "true" ]; then
+            pnpm --dir sandbox-agent install --no-frozen-lockfile
+          fi
 
           # Install tsx globally
           npm install -g tsx
@@ -84,12 +92,16 @@ jobs:
             CMD="$CMD --reuse-engine-version \"${{ inputs.reuse_engine_version }}\""
           fi
 
+          if [ "${{ inputs.exclude_sandbox_agent }}" = "true" ]; then
+            CMD="$CMD --exclude-sandbox-agent"
+          fi
+
           eval "$CMD"
 
   binaries:
     name: "Build & Upload Binaries"
     needs: [setup]
-    if: ${{ !inputs.reuse_engine_version }}
+    if: ${{ !inputs.reuse_engine_version && !inputs.exclude_sandbox_agent }}
     strategy:
       fail-fast: false
       matrix:
@@ -177,7 +189,7 @@ jobs:
   docker:
     name: "Build & Push Docker Images"
     needs: [setup]
-    if: ${{ !inputs.reuse_engine_version }}
+    if: ${{ !inputs.reuse_engine_version && !inputs.exclude_sandbox_agent }}
     strategy:
       fail-fast: false
       matrix:
@@ -241,6 +253,7 @@ jobs:
           fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@stable
+        if: ${{ !inputs.exclude_sandbox_agent }}
 
       - uses: actions/setup-node@v6
         with:
@@ -251,6 +264,7 @@ jobs:
       - run: corepack enable
 
       - uses: ./.github/actions/docker-setup
+        if: ${{ !inputs.exclude_sandbox_agent }}
         continue-on-error: true
         with:
           docker_username: ${{ secrets.DOCKER_CI_USERNAME }}
@@ -267,7 +281,9 @@ jobs:
           # Install dependencies. The root workspace holds the release script;
           # Sandbox Agent keeps its own workspace in sandbox-agent/.
           pnpm install --no-frozen-lockfile
-          pnpm --dir sandbox-agent install --no-frozen-lockfile
+          if [ "${{ inputs.exclude_sandbox_agent }}" != "true" ]; then
+            pnpm --dir sandbox-agent install --no-frozen-lockfile
+          fi
 
           # Install tsx globally
           npm install -g tsx
@@ -281,6 +297,10 @@ jobs:
 
           if [ -n "${{ inputs.reuse_engine_version }}" ]; then
             CMD="$CMD --reuse-engine-version \"${{ inputs.reuse_engine_version }}\""
+          fi
+
+          if [ "${{ inputs.exclude_sandbox_agent }}" = "true" ]; then
+            CMD="$CMD --exclude-sandbox-agent"
           fi
 
           eval "$CMD"

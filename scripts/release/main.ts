@@ -45,6 +45,11 @@ export interface ReleaseOpts {
 	commit: string;
 	/** Optional version to reuse artifacts and Docker images from instead of building. */
 	reuseEngineVersion?: string;
+	/**
+	 * Release only the packages in `packages/`. Sandbox Agent keeps its last
+	 * version: no binaries, Docker images, crates, or Sandbox Agent npm packages.
+	 */
+	excludeSandboxAgent?: boolean;
 }
 
 async function getAllGitVersions(): Promise<string[]> {
@@ -216,6 +221,11 @@ async function checkRootPackages(opts: ReleaseOpts) {
 
 async function runLocalChecks(opts: ReleaseOpts) {
 	console.log("Running local checks...");
+	if (opts.excludeSandboxAgent) {
+		await checkRootPackages(opts);
+		console.log("✅ All local checks passed");
+		return;
+	}
 
 	// Cargo check
 	console.log("Running cargo check...");
@@ -257,6 +267,11 @@ async function runLocalChecks(opts: ReleaseOpts) {
 
 async function runCiChecks(opts: ReleaseOpts) {
 	console.log("Running CI checks...");
+	if (opts.excludeSandboxAgent) {
+		await checkRootPackages(opts);
+		console.log("✅ All CI checks passed");
+		return;
+	}
 
 	// TypeScript type check
 	console.log("Running TypeScript type check...");
@@ -339,6 +354,15 @@ const STEPS = [
 
 const PHASES = ["setup-local", "setup-ci", "complete-ci"] as const;
 
+/** Steps that build or publish Sandbox Agent. A release with `--exclude-sandbox-agent` skips them. */
+const SANDBOX_AGENT_STEPS: ReadonlySet<string> = new Set([
+	"build-js-artifacts",
+	"publish-crates",
+	"publish-npm-cli",
+	"tag-docker",
+	"promote-artifacts",
+]);
+
 type Step = (typeof STEPS)[number];
 type Phase = (typeof PHASES)[number];
 
@@ -398,6 +422,10 @@ async function main() {
 			"--reuse-engine-version <version-or-commit>",
 			"Reuse artifacts and Docker images from a previous version (e.g., 0.1.0) or git revision (e.g., bb7f292)",
 		)
+		.option(
+			"--exclude-sandbox-agent",
+			"Release only the packages in packages/, without building or publishing Sandbox Agent",
+		)
 		.option("--latest", "Tag version as the latest version", true)
 		.option("--no-latest", "Do not tag version as the latest version")
 		.option("--no-validate-git", "Skip git validation (for testing)")
@@ -448,8 +476,16 @@ async function main() {
 		}
 	}
 
+	const excludeSandboxAgent = Boolean(opts.excludeSandboxAgent);
+	if (excludeSandboxAgent && opts.reuseEngineVersion) {
+		throw new Error(
+			"--exclude-sandbox-agent releases no Sandbox Agent artifacts, so it cannot reuse them",
+		);
+	}
+
 	// Helper function to check if a step should run
 	const shouldRunStep = (step: Step): boolean => {
+		if (excludeSandboxAgent && SANDBOX_AGENT_STEPS.has(step)) return false;
 		return requestedSteps.has(step);
 	};
 
@@ -504,6 +540,7 @@ async function main() {
 		minorVersionChannel,
 		commit,
 		reuseEngineVersion: opts.reuseEngineVersion,
+		excludeSandboxAgent,
 	};
 
 	if (releaseOpts.commit.length === 40) {
@@ -528,6 +565,9 @@ async function main() {
 			console.log(
 				`  Reusing engine version: ${releaseOpts.reuseEngineVersion}`,
 			);
+		}
+		if (releaseOpts.excludeSandboxAgent) {
+			console.log("  Sandbox Agent: excluded (packages/ only)");
 		}
 
 		// Get current branch
@@ -605,6 +645,9 @@ async function main() {
 		let workflowCmd = `gh workflow run .github/workflows/release.yaml -f version=${releaseOpts.version} -f latest=${latestFlag}`;
 		if (releaseOpts.reuseEngineVersion) {
 			workflowCmd += ` -f reuse_engine_version=${releaseOpts.reuseEngineVersion}`;
+		}
+		if (releaseOpts.excludeSandboxAgent) {
+			workflowCmd += " -f exclude_sandbox_agent=true";
 		}
 		workflowCmd += ` --ref ${branch}`;
 
