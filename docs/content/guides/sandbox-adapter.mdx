@@ -1,6 +1,6 @@
 ---
 title: "Use a Sandbox from Any Actor"
-description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, or Docker from any Rivet Actor, without the agent harness."
+description: "Use one API to create and drive sandboxes on agentOS, E2B, Daytona, Freestyle, Google Cloud Agent Platform, or Docker from any Rivet Actor, without the agent harness."
 ---
 
 <Diagram
@@ -50,6 +50,7 @@ Every provider returns the same `SandboxProvider`, so you change one import and 
 | E2B | `e2bProvider()` | `@rivet-dev/sandbox-adapter/e2b` | `e2b` | `E2B_API_KEY` |
 | Daytona | `daytonaProvider()` | `@rivet-dev/sandbox-adapter/daytona` | `@daytonaio/sdk` | `DAYTONA_API_KEY` |
 | Freestyle | `freestyleProvider({ create })` | `@rivet-dev/sandbox-adapter/freestyle` | `freestyle` | `FREESTYLE_API_KEY` |
+| Google Cloud Agent Platform | `agentPlatformProvider({ template })` | `@rivet-dev/sandbox-adapter/agent-platform` | `google-auth-library` | Application Default Credentials |
 | Docker | `dockerProvider()` | `@rivet-dev/sandbox-adapter/docker` | Nothing | None |
 
 ## Manage the lifecycle
@@ -92,6 +93,7 @@ Some providers report output differently:
 
 - **Daytona** returns stdout and stderr together in `stdout`, leaves `stderr` empty, and calls `onData` once when the command ends.
 - **E2B and Daytona** return empty `stdout` and `stderr` after a timeout. On E2B, `onData` has already received the output.
+- **Google Cloud Agent Platform** calls `onData` once when the command ends, with stdout and then stderr. A command that times out returns no output. Aborting does not stop the command.
 
 ## Use files
 
