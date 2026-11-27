@@ -1,12 +1,10 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createRegistry } from "@earendil-works/pi-durable";
 import { pi } from "@rivet-dev/pi";
 import { setup } from "rivetkit";
 import { Chambers } from "./chambers";
 
 const agent = pi({
 	model: "anthropic/claude-opus-5-5",
-	registry: createRegistry(),
 	documents: [Chambers],
 	actions: {
 		solveChamber: async (c, chamber: string) => {
