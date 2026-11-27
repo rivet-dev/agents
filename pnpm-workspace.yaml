@@ -14,3 +14,9 @@ allowBuilds:
   esbuild: true
   lefthook: true
   protobufjs: false
+
+# pnpm 11 guesses libc from an optional package's name when its lockfile entry
+# has none, so on glibc it skips `@rivetkit/engine-cli-linux-x64-musl`. That
+# binary is static musl and runs on glibc, so accept musl packages too.
+supportedArchitectures:
+  libc: [current, musl]
