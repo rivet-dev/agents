@@ -320,7 +320,7 @@ A tool can wait for something outside the agent, such as a CI build. It returns 
 <CodeSnippet file="examples/docs/pi/webhook-signal.ts" title="server.ts" />
 
 - `c.pi.signal` returns `delivered` once the value is stored. A webhook sent again gets `duplicate` or `closed`, which are final. Answer them with a success status.
-- If the action fails, send the webhook again. The retry wakes the agent, and the run finishes with the first value.
+- If the action fails, send the webhook again. If the signal was stored before the failure, the run resumes by itself and the retry gets `duplicate` or `closed`. Otherwise the retry delivers it.
 - Nothing checks who sends a signal. Verify the webhook's signature before you call the action.
 - Add `cancel(c, args, api, context)` to a tool to clean up when a parked call is aborted, such as by cancelling the build.
 - See <a href="https://github.com/earendil-works/pi/blob/main/packages/durable/README.md#tools-that-park" target="_blank" rel="noopener noreferrer">tools that park</a> for sleeps with a deadline and waits on other tasks.

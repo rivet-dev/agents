@@ -607,11 +607,12 @@ describe("pi drain and upgrades", () => {
 		await conn.harness.root();
 
 		await client.drainer.getOrCreate(key).destroySelf();
-		// RivetKit 2.x runs onDestroy first; 3.0 disconnects before shutdown starts. Either way the hook runs, and c.pi never fails with another error. The hook records what c.pi gave in this process.
+		// RivetKit 2.x runs onDestroy first; 3.0 disconnects before shutdown starts, and the destroy can close Pi before the hook's body runs. Either way the hook runs, and c.pi never fails with another error. The hook records what c.pi gave in this process.
 		await vi.waitFor(() =>
 			expect([
 				"open",
 				"Pi Durable is closed because the actor is stopping.",
+				"Pi Durable is closed because the actor was destroyed.",
 			]).toContain(disconnectOutcomes.get(JSON.stringify(key))),
 		);
 		await conn.dispose();

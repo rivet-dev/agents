@@ -149,6 +149,8 @@ interface OpenHarness {
 	resumeDue: () => void;
 	/** Resolves once the wake for the work a call started is written. */
 	settleWake: () => Promise<void>;
+	/** Arms a recovery wake for a call that can start work. Returns the function that ends the hold. */
+	holdWake: () => Promise<() => void>;
 	stopWake: () => void;
 }
 
@@ -249,23 +251,28 @@ export async function withHarness<T>(
 	c: PiContext,
 	options: ResolvedPiOptions,
 	run: (harness: Harness, context: Context, waiting: Waiting) => Promise<T>,
+	{ startsWork = false }: { startsWork?: boolean } = {},
 ): Promise<T> {
 	const runtime = piRuntime(c);
 	if (runtime.status !== "open") throw piClosed(runtime.status);
 	const harness = await ensureHarness(c, options);
 	const release = countCall(runtime);
+	const unhold = startsWork ? await holdWake(runtime) : () => {};
 	try {
 		const context = withCallerSpan(c.actorId, BACKGROUND_CONTEXT);
 		const result = await run(harness, context, (wait) => {
+			unhold();
 			release();
 			return wait();
 		});
+		unhold();
 		await settleWake(runtime);
 		return result;
 	} catch (error) {
 		await recoverHarness(runtime.actor ?? c, runtime, options);
 		throw toClientError(error);
 	} finally {
+		unhold();
 		release();
 	}
 }
@@ -277,6 +284,17 @@ export async function withHarness<T>(
 async function settleWake(runtime: PiRuntime): Promise<void> {
 	const open = await runtime.harness?.catch(() => undefined);
 	await open?.settleWake();
+}
+
+/**
+ * Arms a recovery wake before a call that can start work, as Pi Durable's
+ * host contract asks. RivetKit resolves `c.schedule.at` before the alarm
+ * reaches the control plane, so a wake armed only after the call can be lost
+ * with the process. Armed first, it has the call's whole duration to arrive.
+ */
+async function holdWake(runtime: PiRuntime): Promise<() => void> {
+	const open = await runtime.harness?.catch(() => undefined);
+	return open ? open.holdWake() : () => {};
 }
 
 /**
@@ -327,14 +345,18 @@ export async function withPiAccess<T>(
 		return body();
 	}
 	const release = countCall(runtime);
+	// The body may start work through `c.pi`, such as a signal.
+	const unhold = await holdWake(runtime);
 	try {
 		const result = await body();
+		unhold();
 		await settleWake(runtime);
 		return result;
 	} catch (error) {
 		await recoverHarness(runtime.actor ?? c, runtime, options);
 		throw toClientError(error);
 	} finally {
+		unhold();
 		release();
 	}
 }
@@ -431,6 +453,7 @@ async function openHarness(
 		onWakeChange: wake.subscribe,
 		resumeDue: wake.resumeDue,
 		settleWake: wake.settle,
+		holdWake: wake.hold,
 		stopWake: wake.stop,
 	};
 }
@@ -608,6 +631,10 @@ function reportBlockedTasks(c: PiContext, inspection: HarnessInspection): void {
  * Pi runs a sleep only once its time has passed, and reports a wake only when
  * the value changes. So a wake that fires early, even by a millisecond,
  * re-reads the value and schedules again.
+ *
+ * A call that can start work holds the wake as if work were active, from
+ * before it runs until it returns, so the recovery wake is already armed when
+ * its work starts. An idle actor pays one arm and one clear per such call.
  */
 function wakeActor(
 	c: PiContext,
@@ -618,6 +645,7 @@ function wakeActor(
 	subscribe: (listener: () => void) => () => void;
 	resumeDue: () => void;
 	settle: () => Promise<void>;
+	hold: () => Promise<() => void>;
 	stop: () => void;
 } {
 	const listeners = new Set<() => void>();
@@ -630,6 +658,8 @@ function wakeActor(
 	let failedAt: number | undefined;
 	let timer: { at: number; handle: ReturnType<typeof setTimeout> } | undefined;
 	let stopped = false;
+	/** Calls between `hold` and its release. */
+	let holds = 0;
 
 	const stayAwake = () => {
 		if (release) return;
@@ -684,7 +714,8 @@ function wakeActor(
 	const apply = () => {
 		if (stopped) return;
 		const { active, at } = latest;
-		const heartbeat = active ? Date.now() + RECOVERY_WAKE_MS : undefined;
+		const busy = active || holds > 0;
+		const heartbeat = busy ? Date.now() + RECOVERY_WAKE_MS : undefined;
 		const target =
 			heartbeat === undefined || at === undefined
 				? (heartbeat ?? at)
@@ -702,11 +733,11 @@ function wakeActor(
 		}
 		clearTimer();
 		// While work runs, an earlier wake still ahead is enough: it fires, and `resumeDue` arms the next one.
-		const kept = active
+		const kept = busy
 			? armed && armed.at <= target && armed.at > Date.now()
 			: armed?.at === target;
 		if (!kept) rearm(target);
-		if (active) return;
+		if (busy) return;
 		// The actor may sleep only once its wake is written.
 		stayAwake();
 		const written = armed;
@@ -754,6 +785,18 @@ function wakeActor(
 			latest = harness.wake();
 			apply();
 			await armed?.id;
+		},
+		hold: async () => {
+			if (stopped || !harness) return () => {};
+			holds += 1;
+			apply();
+			await armed?.id;
+			let held = true;
+			return () => {
+				if (!held) return;
+				held = false;
+				holds -= 1;
+			};
 		},
 		stop: () => {
 			c.abortSignal.removeEventListener("abort", stop);

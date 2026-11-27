@@ -123,6 +123,11 @@ export function createPiActions(options: ResolvedPiOptions) {
 		c: PiContext,
 		body: (harness: Harness, context: Context, waiting: Waiting) => Promise<T>,
 	) => withHarness(c, options, body);
+	/** For actions that can start work, which Pi Durable asks a host to arm a wake before. */
+	const runWork = <T>(
+		c: PiContext,
+		body: (harness: Harness, context: Context, waiting: Waiting) => Promise<T>,
+	) => withHarness(c, options, body, { startsWork: true });
 	const agentChange = (change: PiAgentChange | undefined) =>
 		change === undefined ? undefined : resolveAgentChange(options, change);
 
@@ -215,7 +220,7 @@ export function createPiActions(options: ResolvedPiOptions) {
 			getTask: (c: PiContext, id: TaskId) =>
 				run(c, (harness, context) => harness.getTask(id, context)),
 			abortTask: (c: PiContext, id: TaskId) =>
-				run(c, async (harness, context) => {
+				runWork(c, async (harness, context) => {
 					await requireTask(harness, id, context);
 					return harness.abortTask(id, context);
 				}),
@@ -310,7 +315,7 @@ export function createPiActions(options: ResolvedPiOptions) {
 				conversationId: ConversationId,
 				draft: SubmissionDraft,
 			) =>
-				run(c, async (harness, context) =>
+				runWork(c, async (harness, context) =>
 					(
 						await (
 							await requireConversation(harness, conversationId, context)
@@ -318,7 +323,7 @@ export function createPiActions(options: ResolvedPiOptions) {
 					).status(context),
 				),
 			reset: (c: PiContext, conversationId: ConversationId, handoff?: string) =>
-				run(c, async (harness, context) =>
+				runWork(c, async (harness, context) =>
 					(await requireConversation(harness, conversationId, context)).reset(
 						handoff,
 						context,
@@ -329,7 +334,7 @@ export function createPiActions(options: ResolvedPiOptions) {
 				conversationId: ConversationId,
 				instructions?: string,
 			) =>
-				run(c, async (harness, context) =>
+				runWork(c, async (harness, context) =>
 					(await requireConversation(harness, conversationId, context)).compact(
 						instructions,
 						context,
@@ -380,7 +385,7 @@ export function createPiActions(options: ResolvedPiOptions) {
 				conversationId: ConversationId,
 				abortOptions?: ConversationAbortOptions,
 			) =>
-				run(c, async (harness, context) =>
+				runWork(c, async (harness, context) =>
 					(await requireConversation(harness, conversationId, context)).abort(
 						context,
 						abortOptions,
@@ -431,7 +436,7 @@ export function createPiActions(options: ResolvedPiOptions) {
 			content: UserInput,
 			promptOptions?: PiPromptOptions,
 		) =>
-			run(c, async (harness, context, waiting): Promise<PiPromptResult> => {
+			runWork(c, async (harness, context, waiting): Promise<PiPromptResult> => {
 				const { conversation, submission } = await submitInput(
 					harness,
 					content,
@@ -472,7 +477,7 @@ export function createPiActions(options: ResolvedPiOptions) {
 			content: UserInput,
 			submitOptions?: PiPromptOptions,
 		) =>
-			run(c, async (harness, context): Promise<PiSubmitResult> => {
+			runWork(c, async (harness, context): Promise<PiSubmitResult> => {
 				const { submission } = await submitInput(
 					harness,
 					content,
