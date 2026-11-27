@@ -109,12 +109,29 @@ export interface PiOptions extends PiModelOptions {
 	onReport?: HarnessOptions["onReport"];
 	/** The starting thinking level of every new conversation. */
 	thinkingLevel?: ModelThinkingLevel;
+	/** The starting instructions of every new conversation, rendered after the extension sections. */
+	instructions?: string;
+	/** The starting working directory of every new conversation. */
+	cwd?: string;
+	/** The most tool rounds one run of a new conversation takes. */
+	maxTurns?: number;
+	/** Automatic compaction, the same as `settings.compaction`. */
+	compaction?: HarnessSettings["compaction"];
 	/**
 	 * Runs the tools of Pi's `CodingTools` extension in a sandbox. Used only
 	 * when `env` is omitted. Without a sandbox, files live in the actor's
 	 * database and there is no shell.
 	 */
 	sandbox?: SandboxProvider;
+	/**
+	 * Pi's file and shell tools: `read`, `write`, `edit`, and `bash`. On by
+	 * default with a `sandbox`, off without one. A list installs only those
+	 * tools, such as `["read", "bash"]`. Not installed again when `registry`
+	 * already has them.
+	 */
+	codingTools?: boolean | readonly CodingToolName[];
+	/** Installs Pi's tool search, which lets the model find deferred tools by name. */
+	toolSearch?: boolean;
 	/** App documents that clients may read by `kind` with `harness.snapshot`. */
 	documents?: readonly ConversationDocToken<any>[];
 	/**
@@ -125,6 +142,9 @@ export interface PiOptions extends PiModelOptions {
 	 */
 	onAnswer?: PiOnAnswer;
 }
+
+/** A tool of Pi's `CodingTools` extension. */
+export type CodingToolName = "read" | "write" | "edit" | "bash";
 
 /** `PiOptions` as `pi()` resolved them: the registry includes the app's `tools` and `hooks`. */
 export type ResolvedPiOptions = PiOptions & {
@@ -552,8 +572,9 @@ export function parseModelRef(name: string): ModelRef {
 }
 
 /**
- * `model` and `thinkingLevel` start every new conversation: root, created, and
- * forked. A fork already has its parent's agent, so it keeps it. The app's own
+ * `model`, `thinkingLevel`, `instructions`, `cwd`, and `maxTurns` start every
+ * new conversation: root, created, and forked. A fork already has its parent's
+ * agent, so it keeps each one its parent set. The app's own
  * `conversationCreated` runs after this.
  */
 function startingAgent(
@@ -561,15 +582,24 @@ function startingAgent(
 ): HarnessOptions["conversationCreated"] {
 	const model =
 		options.model === undefined ? undefined : parseModelRef(options.model);
-	const thinkingLevel = options.thinkingLevel;
+	const { thinkingLevel, instructions, cwd, maxTurns } = options;
 	const created = options.conversationCreated;
-	if (model === undefined && thinkingLevel === undefined) return created;
+	if (
+		[model, thinkingLevel, instructions, cwd, maxTurns].every(
+			(value) => value === undefined,
+		)
+	) {
+		return created;
+	}
 	return async (tx, conversation) => {
 		const agent = await tx.doc(AgentDoc, conversation.id);
 		await configure(tx, conversation.id, {
 			model: agent.model === undefined ? model : undefined,
 			thinkingLevel:
 				agent.thinkingLevel === undefined ? thinkingLevel : undefined,
+			instructions: agent.instructions === undefined ? instructions : undefined,
+			cwd: agent.cwd === undefined ? cwd : undefined,
+			maxTurns: agent.maxTurns === undefined ? maxTurns : undefined,
 		});
 		await created?.(tx, conversation);
 	};
