@@ -1,5 +1,4 @@
-import type { Context } from "@earendil-works/chord";
-import { withTelemetry } from "@earendil-works/chord/context";
+import { type Context, withTelemetry } from "@earendil-works/chord/context";
 import type {
 	Api,
 	AssistantMessage,

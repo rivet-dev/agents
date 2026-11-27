@@ -1,6 +1,6 @@
-import type { Context } from "@earendil-works/chord";
 import {
 	BACKGROUND_CONTEXT,
+	type Context,
 	withContextValue,
 } from "@earendil-works/chord/context";
 import type { Models, ModelThinkingLevel } from "@earendil-works/pi-ai";

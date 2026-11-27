@@ -1,5 +1,5 @@
-import type { Context, JsonValue } from "@earendil-works/chord";
-import { createContextKey } from "@earendil-works/chord/context";
+import { type Context, createContextKey } from "@earendil-works/chord/context";
+import type { JsonValue } from "@earendil-works/chord/json";
 import {
 	type AnyTask,
 	type CompactionHooks,
@@ -12,6 +12,7 @@ import {
 	type ToolExecutionApi,
 	type ToolExecutionResult,
 	type ToolHooks,
+	type ToolPark,
 	type ToolRegistration,
 	ToolTask,
 } from "@earendil-works/pi-durable";
@@ -37,19 +38,33 @@ type ToolArgs<TParameters extends object> = Parameters<
 /**
  * A tool defined like an action: Pi Durable's `ToolRegistration` without
  * `name`, which is its key in `tools`, and with the actor's context as the
- * first argument of `execute`. `args` are typed from `parameters`.
+ * first argument of `execute` and `cancel`. `args` are typed from
+ * `parameters`. `execute` may park the call (`ToolPark`) instead of returning
+ * a result.
  */
 export type PiTool<
 	TContext,
 	TParameters extends object = any,
 	TDetails extends JsonValue = JsonValue,
-> = Omit<ToolRegistration<TParameters, TDetails>, "name" | "execute"> & {
+> = Omit<
+	ToolRegistration<TParameters, TDetails>,
+	"name" | "execute" | "cancel"
+> & {
 	execute(
 		c: TContext,
 		args: ToolArgs<TParameters>,
 		api: ToolExecutionApi<TDetails>,
 		context: Context,
-	): ToolExecutionResult<TDetails> | Promise<ToolExecutionResult<TDetails>>;
+	):
+		| ToolExecutionResult<TDetails>
+		| ToolPark
+		| Promise<ToolExecutionResult<TDetails> | ToolPark>;
+	cancel?(
+		c: TContext,
+		args: ToolArgs<TParameters>,
+		api: ToolExecutionApi<TDetails>,
+		context: Context,
+	): Promise<void>;
 };
 
 type AllHooks = GenerationHooks & ToolHooks & CompactionHooks;
@@ -103,12 +118,16 @@ export function actorExtension(
 	return defineExtension({
 		name: ACTOR_EXTENSION,
 		tools: toolNames.map((name) => {
-			const { execute, ...tool } = tools[name] as PiTool<PiContext>;
+			const { execute, cancel, ...tool } = tools[name] as PiTool<PiContext>;
 			return {
 				...tool,
 				name,
 				execute: async (args, api, context) =>
 					execute(actorOf(context), args, api, context),
+				...(cancel && {
+					cancel: (args, api, context) =>
+						cancel(actorOf(context), args, api, context),
+				}),
 			};
 		}),
 		hooks: [...handlers].map(
