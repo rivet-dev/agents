@@ -313,6 +313,18 @@ Define tools in `tools` and hooks in `hooks`, keyed by name, the way you define 
 - `c` has no connection. Tools and hooks run in the background, also after a wake and in conversations a tool creates.
 - They are installed as the extension `rivet-pi-actor`, which conversations that use the default extensions get. You can still pass a `registry` for other extensions.
 
+### Wait for a webhook
+
+A tool can wait for something outside the agent, such as a CI build. It returns `{ kind: "sleep", signals }` instead of a result, which parks the call. A parked call holds no process, so the agent can sleep. When the webhook arrives, an action calls `c.pi.signal`. That wakes the agent, and Pi runs the tool again, which reads the value with `api.readSignal`:
+
+<CodeSnippet file="examples/docs/pi/webhook-signal.ts" title="server.ts" />
+
+- `c.pi.signal` returns `delivered` once the value is stored. A webhook sent again gets `duplicate` or `closed`, which are final. Answer them with a success status.
+- If the action fails, send the webhook again. The retry wakes the agent, and the run finishes with the first value.
+- Nothing checks who sends a signal. Verify the webhook's signature before you call the action.
+- Add `cancel(c, args, api, context)` to a tool to clean up when a parked call is aborted, such as by cancelling the build.
+- See <a href="https://github.com/earendil-works/pi/blob/main/packages/durable/README.md#tools-that-park" target="_blank" rel="noopener noreferrer">tools that park</a> for sleeps with a deadline and waits on other tasks.
+
 ### Keep app state in a document
 
 A <a href="https://github.com/earendil-works/pi/blob/main/packages/durable/README.md#your-own-state" target="_blank" rel="noopener noreferrer">document</a> is typed state saved with the conversation. Change it inside `c.pi.commit`, and read it with `c.pi.snapshot`:

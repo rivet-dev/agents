@@ -1,10 +1,11 @@
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { ConversationId, SubmissionId } from "@earendil-works/pi-durable";
 import { setupTest } from "rivetkit/test";
 import { expect, test, vi } from "vitest";
 import { crashAgent } from "./helpers/crash-agent.js";
+import { killWithEngine } from "./helpers/kill-with-engine.js";
 
 const CHILD_SCRIPT = fileURLToPath(
 	new URL("./helpers/crash-child.ts", import.meta.url),
@@ -46,33 +47,6 @@ async function startThenCrash(key: string): Promise<Started> {
 	} finally {
 		if (child.pid !== undefined) await killWithEngine(child.pid);
 	}
-}
-
-/**
- * Kills the child and the engine it started, and waits until the engine is
- * gone. The engine runs in its own process group, and if it is still up,
- * `setupTest` reuses it while it shuts down.
- */
-async function killWithEngine(pid: number): Promise<void> {
-	const children = spawnSync("pgrep", ["-P", String(pid)], { encoding: "utf8" })
-		.stdout.split("\n")
-		.filter(Boolean)
-		.map(Number);
-	for (const target of [-pid, ...children]) {
-		try {
-			process.kill(target, "SIGKILL");
-		} catch {
-			// It already exited.
-		}
-	}
-	await vi.waitFor(
-		() => {
-			for (const engine of children) {
-				expect(() => process.kill(engine, 0)).toThrow();
-			}
-		},
-		{ timeout: 10_000, interval: 50 },
-	);
 }
 
 test("an actor killed during a run resumes it by itself with no call, then stays asleep", async (c) => {
