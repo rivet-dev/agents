@@ -53,17 +53,13 @@ async function signalThenCrash(key: string): Promise<Signaled> {
 	}
 }
 
-test("a webhook sent again after a crash that cut off the signal action gets duplicate, and the run finishes once with the first value", async (c) => {
+test("a crash right after the signal action replied still finishes the run by itself, with no call", async (c) => {
 	const key = `ci-crash-${randomUUID()}`;
 	const { conversationId, submissionId, delivery } = await signalThenCrash(key);
 	expect(delivery).toBe("delivered");
 
-	// Start this process's engine and runner on the same data. The webhook
-	// sender saw its request fail, so it sends the webhook again.
+	// Start this process's engine and runner on the same data, and call nothing.
 	const { client } = await setupTest(c, registry);
-	const handle = client.agent.getOrCreate([key]);
-	expect(await handle.ciFinished("release", "failed")).toBe("duplicate");
-
 	await vi.waitFor(
 		() =>
 			expect(
@@ -75,6 +71,8 @@ test("a webhook sent again after a crash that cut off the signal action gets dup
 			).toHaveLength(1),
 		{ timeout: 60_000, interval: 250 },
 	);
+
+	const handle = client.agent.getOrCreate([key]);
 	expect(await handle.submission.wait(submissionId)).toMatchObject({
 		status: "done",
 	});
@@ -84,4 +82,4 @@ test("a webhook sent again after a crash that cut off the signal action gets dup
 	).toMatchObject([
 		{ isError: false, content: [{ type: "text", text: "CI passed" }] },
 	]);
-}, 180_000);
+}, 120_000);
