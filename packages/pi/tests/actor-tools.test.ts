@@ -4,6 +4,7 @@ import {
 	type ConversationId,
 	createRegistry,
 	defineExtension,
+	defineSignal,
 	defineTool,
 } from "@earendil-works/pi-durable";
 import { num, obj, str } from "@earendil-works/pi-schema";
@@ -37,6 +38,13 @@ function aborted(signal: AbortSignal | undefined): Promise<void> {
 }
 
 const mock = createMockModel();
+
+/** An approval nobody sends in this file, so a tool that sleeps on it stays parked. */
+const Approval = defineSignal({
+	name: "test.approval",
+	version: 1,
+	schema: obj({}),
+});
 
 /** Another actor, which the agent's tools call through `c.client()`. */
 const ledger = actor({
@@ -120,6 +128,20 @@ const agent = pi({
 				return { output: [{ type: "text", text: "refunded slowly" }] };
 			},
 		},
+		hold_refund: {
+			description: "Holds a refund until someone approves it",
+			parameters: obj({ orderId: str() }),
+			replay: "safe",
+			async execute() {
+				return { kind: "sleep", signals: [Approval.key("approved")] };
+			},
+			async cancel(c, args) {
+				await c
+					.client<any>()
+					.ledger.getOrCreate(c.key)
+					.record(`released ${args.orderId}`);
+			},
+		},
 		delegate: {
 			description: "Hands a task to a subagent in its own conversation",
 			parameters: obj({ task: str() }),
@@ -200,6 +222,11 @@ beforeAll(() => {
 		"subagent: refund order 9",
 		toolCall("refund", { orderId: "9", amount: 2 }),
 		fauxAssistantMessage("refunded order 9"),
+	);
+	mock.reply(
+		"hold order 13",
+		toolCall("hold_refund", { orderId: "13" }),
+		fauxAssistantMessage("held order 13"),
 	);
 	mock.reply(
 		"look it up",
@@ -339,6 +366,32 @@ describe("tools defined like actions", () => {
 		expect(await client.ledger.getOrCreate(key).entries()).toEqual([
 			"refund 9 2",
 		]);
+	});
+
+	test("aborting a run whose tool is parked runs the tool's cancel with the actor's context", async (c) => {
+		const { client } = await setupTest(c, registry);
+		const key = ["held", randomUUID()];
+		const handle = client.agent.getOrCreate(key);
+		const root = await handle.harness.root();
+		const submission = await handle.conversation.submit(root.id, {
+			type: "input",
+			content: "hold order 13",
+		});
+		await vi.waitFor(async () => {
+			const { tasks } = await handle.harness.inspect();
+			expect(tasks.map((task) => task.state.kind)).toContain("sleeping");
+		});
+
+		await handle.conversation.abort(root.id);
+
+		expect(await handle.submission.wait(submission.id)).toMatchObject({
+			status: "unanswered",
+		});
+		await vi.waitFor(async () =>
+			expect(await client.ledger.getOrCreate(key).entries()).toEqual([
+				"released 13",
+			]),
+		);
 	});
 
 	test("tools from the app's registry still run", async (c) => {
