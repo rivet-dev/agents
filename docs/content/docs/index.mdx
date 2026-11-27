@@ -148,7 +148,7 @@ npm add @rivet-dev/sandbox-adapter
 - **Lightweight.** A running Actor adds about 72 KB of memory on top of the agent's conversations, and a sleeping agent uses none. Give every user, task, or thread its own agent.
 - **Wakes in milliseconds.** A sleeping agent wakes on its next prompt in about 12 ms, instead of the seconds it takes to boot a container.
 - **Realtime and multiplayer.** Clients connect over WebSockets and stream events as the agent works. Many users can watch and steer the same conversation.
-- **One primitive for your backend.** Agents are Actors, like the rest of your Rivet app, so they call other agents and Actors directly and use the same schedules, queues, and workflows.
+- **One primitive for your backend.** Agents are Actors, like the rest of your Rivet app, so they call other agents and Actors directly and use the same schedules and workflows.
 - **Swappable sandboxes.** A sandbox crash does not lose the conversation, and a tool call adds about 10 ms in the same datacenter.
 
 ## Without a sandbox
@@ -188,7 +188,7 @@ The `CodingTools` extension adds `read`, `write`, `edit`, and `bash`, which run 
 
 <CodeSnippet file="examples/docs/pi/server.ts" title="server.ts" />
 
-Your own tools and tasks run in your backend. For multi-step work with side effects, launch a task from the tool:
+Your own tools and tasks run in your backend. Define tools in the `tools` option of `pi()`. See [Give an Agent Your Own Tools](/guides/agent-custom-tools). For multi-step work with side effects, launch a task from the tool:
 
 <CodeSnippet file="examples/docs/pi/tasks.ts" title="server.ts" />
 
@@ -298,7 +298,7 @@ To read older entries, pass `before` to `conversation.entries(id, { maxEntryId: 
 
 ## Your own actions and `c.pi`
 
-Your own actions, lifecycle hooks, `run`, `onRequest`, `onWebSocket`, `onBeforeActionResponse`, and `onAnswer` get Pi Durable's `Harness` as `c.pi`. In `onSleep` and `onDestroy`, it's set only if Pi is already open. A `workflow()` body gets its own `ctx`, which has no `c.pi`. This action reports what the agent has spent on model calls:
+Your own actions, `onWake`, `onConnect`, `onDisconnect`, `onRequest`, `onWebSocket`, `onBeforeActionResponse`, and `onAnswer` get Pi Durable's `Harness` as `c.pi`. In `onSleep` and `onDestroy`, it's set only if Pi is already open. Hooks that run before Pi opens, such as `onCreate` and `onBeforeConnect`, have no `c.pi`. A `workflow()` body gets its own `ctx`, which has no `c.pi`. This action reports what the agent has spent on model calls:
 
 <CodeSnippet file="examples/docs/pi/cost.ts" title="server.ts" />
 
@@ -312,6 +312,8 @@ Define tools in `tools` and hooks in `hooks`, keyed by name, the way you define 
 - Every Pi Durable hook works, with `c` first, such as `beforeTool(c, call, api, context)` and `onYield(c, answer, api, context)`.
 - `c` has no connection. Tools and hooks run in the background, also after a wake and in conversations a tool creates.
 - They are installed as the extension `rivet-pi-actor`, which conversations that use the default extensions get. You can still pass a `registry` for other extensions.
+
+See [Give an Agent Your Own Tools](/guides/agent-custom-tools) for tool parameters, results, errors, and replay.
 
 ### Wait for a webhook
 
@@ -424,7 +426,7 @@ During a retry or poll wait, the Actor also sleeps, and a scheduled wake resumes
 | | Conversations | Sandbox |
 | --- | --- | --- |
 | Sleep | Every step so far. | Reconnected on first use. |
-| Crash | Every step saved before the crash. A run in progress resumes on wake from the step it reached. | Reconnected on first use. |
+| Crash | Every step saved before the crash. A run in progress resumes by itself from the step it reached. See [Resuming a run](#resuming-a-run). | Reconnected on first use. |
 | Upgrade | Every step so far. A run in progress gets time to finish first. See [Upgrades](#upgrades). | Reconnected on first use. |
 | Destroy | Deleted. | Deleted. |
 
@@ -511,11 +513,11 @@ After a crash or a cut-off upgrade, the agent reads the saved steps on wake and 
 
 Streamed output is saved in batches, about once a second. A crash can lose about the last second of a partial answer or of a tool's running output. Finished messages and tool results are saved before the run continues.
 
-Nothing runs while a crashed Actor is down. The run resumes when the Actor starts again. A client that is still connected gets a fresh view of the conversation.
+A crashed run resumes by itself. While a run is active, the Actor keeps a scheduled wake no more than 15 seconds ahead. If the process dies, the wake starts the Actor again and the run continues, with no client call. A client that is still connected gets a fresh view of the conversation.
 
 ### Upgrades
 
-When you ship new code, running work gets up to `sleepGracePeriod` (15 minutes by default) to finish before the Actor restarts on the new version. See [Versions](/docs/versions). Work still running when the grace period ends resumes on wake, after your `onWake` runs.
+When you ship new code, running work gets up to `sleepGracePeriod` (15 minutes by default) to finish before the Actor restarts on the new version. See [Versions](/docs/versions). Work still running when the grace period ends resumes by itself on the new version, after your `onWake` runs.
 
 A client waiting on `prompt` gets an error if the Actor stops first. It can send the prompt again with the same `requestId` to get the first prompt's result instead of a second run.
 
@@ -604,7 +606,7 @@ The agent loop runs in an Actor on your backend, and the commands the model choo
 - **A cut-off model request is sent again from the start.**
 - **No image reads, and no binary writes** in a sandbox.
 - **Waits cap at ten minutes.** For longer jobs, use `conversation.submit` and stream.
-- **No `db` option.** Keep your data in `state`, documents, or another Actor.
+- **No `db` option.** `pi()` owns the Actor's database. Create your own tables in `c.db` from `onWake`, as in [Tools and hooks with the Actor's context](#tools-and-hooks-with-the-actors-context), or keep data in documents or another Actor.
 - **No built-in approval flow.** See [Human in the Loop](/guides/agent-human-in-the-loop).
 - **Roll forward only.** See [Upgrades](#upgrades).
 - **Node.js 22.19 or later.**

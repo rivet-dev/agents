@@ -48,6 +48,17 @@ Both `defineTool` and `defineExtension` come from `@earendil-works/pi-durable`. 
 - A thrown error, like the 404 in `fetchOrder`, becomes an error result. The model reads the message and can try something else.
 - The `context.abortSignal` aborts when the run is cancelled or the Actor stops, so a Stop from the client also cancels the request. Until the tool returns, the Actor can't sleep, and an upgrade waits for it.
 
+## Use the Actor's context
+
+To use the agent's key, database, `c.pi`, or other Actors from a tool, define the tool in the `tools` option of `pi()`, the way you define an action:
+
+<CodeSnippet file="examples/docs/pi/actor-tools.ts" title="server.ts" />
+
+- The key in `tools` is the tool's name. The other fields, such as `description`, `parameters`, and `replay`, are the same as in `defineTool`.
+- `execute(c, args, api, context)` gets the Actor's context as `c`, typed from the Actor's config, such as its `vars`. `args` are typed from `parameters`.
+- `c` has no connection. The tool runs in the background, also after a wake.
+- Hooks in `hooks` get `c` first the same way, such as `beforeTool(c, call)`. See [Tools and hooks with the Actor's context](/agents/docs#tools-and-hooks-with-the-actors-context).
+
 ## After a crash
 
 If the Actor restarts while a tool runs, the agent runs that tool again on wake only if the tool sets `replay: "safe"`. The `get_order` tool only reads, so it sets it. See [Resuming a run](/agents/docs#resuming-a-run) for every case.
