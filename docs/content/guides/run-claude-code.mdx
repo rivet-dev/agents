@@ -85,9 +85,9 @@ The E2B key never enters the sandbox. The Anthropic key reaches only the Claude 
 
 Each session is a `claudeSession` Actor, keyed by your session id:
 
-<CodeSnippet file="examples/docs/run-claude-code/session.ts" title="session.ts" highlight="state" />
+<CodeSnippet file="examples/docs/run-claude-code/session.ts" title="session.ts" highlight="db" />
 
-- `state` is saved with the Actor, so it survives sleep, crashes, and upgrades. It holds the transcript, the session's sandbox id, and the id Claude Code gave its own session, which is different from your session id.
+- `db` is the Actor's own SQLite database, so its tables survive sleep, crashes, and upgrades. The `session` row holds the session's sandbox id and the id Claude Code gave its own session, which is different from your session id. The `transcript` table holds each prompt and answer.
 - `output` is the event that carries Claude Code's JSON events to every connected client.
 - `running` lives in `vars`, which are not saved. It stops a second prompt from starting a second Claude Code in the same sandbox while the first one works.
 - `actionTimeout` raises RivetKit's 60-second limit on an action, because one coding task can take many minutes.
@@ -164,5 +164,5 @@ The first prompt takes longer because it creates the sandbox and installs Claude
 
 - [Sandboxes](/guides/agent-sandboxes): every provider and what each does while the Actor sleeps.
 - [Sandbox Adapter](/guides/sandbox-adapter): the `create`, `connect`, and `exec` API this guide uses.
-- [Events](/actors/docs/events) and [State](/actors/docs/state): how the Actor broadcasts output and keeps the session.
+- [Events](/actors/docs/events) and [SQLite](/actors/docs/sqlite): how the Actor broadcasts output and keeps the session.
 - <a href="https://code.claude.com/docs/en/headless" target="_blank" rel="noopener noreferrer">Claude Code non-interactive mode</a>: every option `claude -p` accepts.

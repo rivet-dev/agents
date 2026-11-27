@@ -95,7 +95,7 @@ The reviewer takes the report as a message and returns before reviewing it:
 
 - `requestReview` submits the report to the reviewer's conversation and returns, so the orchestrator never waits for the review. The request is saved before the action returns. See [Agent-to-Agent Messages](/guides/agent-to-agent).
 - The reviewer runs on a different model family than the orchestrator, so it doesn't share the same blind spots.
-- Its `onAnswer` saves the review in the reviewer's state, and `getReview` returns it to your app.
+- Its `onAnswer` saves the review in the reviewer's database, and `getReview` returns it to your app. `onWake` creates the `review` table next to Pi Durable's own tables.
 
 </Step>
 

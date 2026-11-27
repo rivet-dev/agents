@@ -3,6 +3,7 @@ import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { pi } from "@rivet-dev/pi";
 import { e2bProvider } from "@rivet-dev/sandbox-adapter/e2b";
 import { type Registry, setup, workflow } from "@rivet-dev/workflows";
+import { db } from "rivetkit/db";
 
 const extensions = createRegistry();
 extensions.install(CodingTools);
@@ -16,7 +17,11 @@ const agent = pi({
 type Agents = Registry<{ agent: typeof agent }>;
 
 const flakyTest = workflow({
-	state: { report: null as string | null },
+	db: db({
+		onMigrate: async (db) => {
+			await db.execute("CREATE TABLE IF NOT EXISTS report (id INTEGER PRIMARY KEY CHECK (id = 1), text TEXT)");
+		},
+	}),
 	run: async (ctx) => {
 		await ctx.step({
 			name: "first-run",
@@ -40,12 +45,16 @@ const flakyTest = workflow({
 				const result = await fixer.prompt("Run the suite again. Which failures happened both times?", {
 					requestId: `${step.actorId}:second-run`,
 				});
-				step.state.report = result.status === "done" ? (result.text ?? null) : `Unanswered: ${result.reason}`;
+				const report = result.status === "done" ? (result.text ?? null) : `Unanswered: ${result.reason}`;
+				await step.db.execute("INSERT OR REPLACE INTO report (id, text) VALUES (1, ?)", report);
 			},
 		});
 	},
 	actions: {
-		getReport: (c) => c.state.report,
+		getReport: async (c) => {
+			const [report] = await c.db.execute<{ text: string | null }>("SELECT text FROM report WHERE id = 1");
+			return report?.text ?? null;
+		},
 	},
 });
 

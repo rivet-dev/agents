@@ -63,7 +63,10 @@ export const agent = pi({
 	// on this machine. In production, switch to a hosted sandbox provider such as Daytona
 	// or E2B, and set RIVET_PUBLIC_ENDPOINT to an address the sandbox can reach.
 	sandbox: withCallbackScript(dockerProvider({ image: "sandbox-code-mode" })),
-	state: { notes: [] as string[] },
+	// The notes table, in the agent's database next to Pi Durable's.
+	onWake: async (c) => {
+		await c.db.execute("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)");
+	},
 	events: {
 		progress: event<string>(),
 	},
@@ -73,11 +76,17 @@ export const agent = pi({
 			c.broadcast("progress", requireText(message));
 			return null;
 		},
-		saveNote: (c, text: unknown) => {
-			c.state.notes.push(requireText(text));
-			return { saved: c.state.notes.length };
+		saveNote: async (c, text: unknown) => {
+			const [{ saved }] = await c.db.execute<{ saved: number }>(
+				"INSERT INTO notes (text) VALUES (?) RETURNING (SELECT COUNT(*) FROM notes) AS saved",
+				requireText(text),
+			);
+			return { saved };
 		},
-		listNotes: (c) => c.state.notes,
+		listNotes: async (c) => {
+			const notes = await c.db.execute<{ text: string }>("SELECT text FROM notes ORDER BY id");
+			return notes.map((note) => note.text);
+		},
 		// In a real app, this queries your metrics database with your keys.
 		getReadings: (_c, sensor: unknown, cursor: unknown) => readingsPage(sensor, cursor),
 	},

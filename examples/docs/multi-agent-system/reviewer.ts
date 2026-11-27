@@ -20,11 +20,14 @@ extensions.install(
 export const reviewer = pi({
 	model: "openai/gpt-5.5",
 	registry: extensions,
-	state: { review: null as string | null },
 	// docs:start review
+	// The reviewer's own table, in its database next to Pi Durable's.
+	onWake: async (c) => {
+		await c.db.execute("CREATE TABLE IF NOT EXISTS review (id INTEGER PRIMARY KEY CHECK (id = 1), text TEXT)");
+	},
 	// Saves each review so your app can read it.
-	onAnswer: (c, answer) => {
-		c.state.review = answer.text ?? null;
+	onAnswer: async (c, answer) => {
+		await c.db.execute("INSERT OR REPLACE INTO review (id, text) VALUES (1, ?)", answer.text ?? null);
 	},
 	actions: {
 		// Saves the request and returns without waiting for the review.
@@ -35,7 +38,10 @@ export const reviewer = pi({
 				BACKGROUND_CONTEXT,
 			);
 		},
-		getReview: (c) => c.state.review,
+		getReview: async (c) => {
+			const [review] = await c.db.execute<{ text: string | null }>("SELECT text FROM review WHERE id = 1");
+			return review?.text ?? null;
+		},
 	},
 	// docs:end review
 });
