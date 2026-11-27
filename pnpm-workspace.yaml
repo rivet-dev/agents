@@ -7,7 +7,10 @@ packages:
   - scripts/release
   - scripts/pipboy
 
-onlyBuiltDependencies:
-  - '@biomejs/biome'
-  - esbuild
-  - lefthook
+allowBuilds:
+  '@google/genai': false
+  better-sqlite3: false
+  cbor-extract: false
+  esbuild: true
+  lefthook: true
+  protobufjs: false

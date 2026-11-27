@@ -46,7 +46,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       - run: corepack enable
 
@@ -68,7 +68,9 @@ jobs:
           # Install dependencies. The root workspace holds the release script;
           # Sandbox Agent keeps its own workspace in sandbox-agent/.
           pnpm install --no-frozen-lockfile
-          pnpm --dir sandbox-agent install --no-frozen-lockfile
+          # corepack picks pnpm from the current directory's packageManager,
+          # so run Sandbox Agent's install from inside it.
+          (cd sandbox-agent && pnpm install --no-frozen-lockfile)
 
           # Install tsx globally
           npm install -g tsx
@@ -267,7 +269,9 @@ jobs:
           # Install dependencies. The root workspace holds the release script;
           # Sandbox Agent keeps its own workspace in sandbox-agent/.
           pnpm install --no-frozen-lockfile
-          pnpm --dir sandbox-agent install --no-frozen-lockfile
+          # corepack picks pnpm from the current directory's packageManager,
+          # so run Sandbox Agent's install from inside it.
+          (cd sandbox-agent && pnpm install --no-frozen-lockfile)
 
           # Install tsx globally
           npm install -g tsx
