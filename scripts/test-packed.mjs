@@ -61,9 +61,17 @@ await writeFile(
 		},
 	}),
 );
+// The check only imports JS, so it skips install scripts, which a `strict-allow-scripts`
+// policy would otherwise reject.
 await execFileAsync(
 	"npm",
-	["install", "--no-audit", "--no-fund", "--loglevel=error"],
+	[
+		"install",
+		"--ignore-scripts",
+		"--no-audit",
+		"--no-fund",
+		"--loglevel=error",
+	],
 	{ cwd: fixture },
 );
 
