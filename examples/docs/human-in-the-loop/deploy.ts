@@ -2,6 +2,7 @@ import { obj, opt, str } from "@earendil-works/pi-schema";
 import { defineTool } from "@earendil-works/pi-durable";
 import { actor, type Registry } from "rivetkit";
 import { createClient } from "rivetkit/client";
+import { db } from "rivetkit/db";
 
 export const deploy = defineTool({
 	name: "deploy",
@@ -24,19 +25,29 @@ export const deploy = defineTool({
 	},
 });
 
+// One per approval, keyed by its id.
 export const approval = actor({
-	state: { version: "", approved: false },
+	db: db({
+		onMigrate: async (db) => {
+			await db.execute(
+				"CREATE TABLE IF NOT EXISTS approval (id INTEGER PRIMARY KEY CHECK (id = 1), version TEXT NOT NULL, approved INTEGER NOT NULL)",
+			);
+			await db.execute("INSERT OR IGNORE INTO approval (id, version, approved) VALUES (1, '', 0)");
+		},
+	}),
 	actions: {
-		request: (c, version: string) => {
-			c.state.version = version;
+		request: async (c, version: string) => {
+			await c.db.execute("UPDATE approval SET version = ? WHERE id = 1", version);
 		},
-		approve: (c) => {
-			c.state.approved = true;
+		approve: async (c) => {
+			await c.db.execute("UPDATE approval SET approved = 1 WHERE id = 1");
 		},
-		consume: (c, version: string) => {
-			const approved = c.state.approved && c.state.version === version;
-			c.state.approved = false;
-			return approved;
+		// Any call uses up the approval, so it can never deploy twice.
+		consume: async (c, version: string) => {
+			const [used] = await c.db.execute<{ version: string }>(
+				"UPDATE approval SET approved = 0 WHERE id = 1 AND approved = 1 RETURNING version",
+			);
+			return used?.version === version;
 		},
 	},
 });
